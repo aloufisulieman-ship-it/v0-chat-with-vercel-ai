@@ -1,0 +1,73 @@
+import { Ban, FileWarning, Clock, CheckCircle2 } from "lucide-react"
+import { AppShell } from "@/components/app-shell"
+import { KpiCard } from "@/components/kpi-card"
+import { DataTable, type Column } from "@/components/data-table"
+import { StatusBadge } from "@/components/status-badge"
+import { RecordDialog, type FieldDef } from "@/components/record-dialog"
+import { DeleteButton } from "@/components/delete-button"
+import { requireUser } from "@/lib/session"
+import { getViolations, createViolation, deleteViolation } from "@/app/actions/hse"
+import { violationStatusOptions } from "@/lib/labels"
+
+type Violation = Awaited<ReturnType<typeof getViolations>>[number]
+
+const fields: FieldDef[] = [
+  { name: "employeeName", label: "اسم الموظف", required: true, placeholder: "الاسم الكامل للمخالف" },
+  { name: "employeeNo", label: "الرقم الوظيفي", placeholder: "مثال: 1024" },
+  { name: "companyName", label: "اسم الشركة", placeholder: "اسم الشركة" },
+  { name: "documentNo", label: "رقم الوثيقة", defaultValue: "MHS-IMS-PR-HSE-647" },
+  { name: "violationDate", label: "التاريخ", type: "date" },
+  { name: "violationTime", label: "الوقت", placeholder: "مثال: 10:30 صباحاً" },
+  { name: "place", label: "المكان", placeholder: "موقع المخالفة" },
+  { name: "status", label: "الحالة", type: "select", options: violationStatusOptions },
+  { name: "description", label: "وصف المخالفة", type: "textarea", required: true },
+  { name: "witnesses", label: "الشهود", type: "textarea" },
+  { name: "evidences", label: "الأدلة", type: "textarea" },
+  { name: "proposedAction", label: "الإجراء التأديبي المقترح", type: "textarea" },
+]
+
+export default async function ViolationsPage() {
+  const user = await requireUser()
+  const violations = await getViolations()
+
+  const open = violations.filter((v) => v.status === "open" || v.status === "in_progress").length
+  const closed = violations.filter((v) => v.status === "closed").length
+
+  const columns: Column<Violation>[] = [
+    { key: "employeeName", header: "الموظف", render: (r) => <span className="font-medium text-foreground">{r.employeeName}</span> },
+    { key: "employeeNo", header: "الرقم الوظيفي", render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.employeeNo || "-"}</span> },
+    { key: "description", header: "وصف المخالفة", render: (r) => <span className="text-muted-foreground line-clamp-1 max-w-xs">{r.description || "-"}</span> },
+    { key: "place", header: "المكان", render: (r) => <span className="text-muted-foreground">{r.place || "-"}</span> },
+    { key: "violationDate", header: "التاريخ", render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.violationDate ?? "-"}</span> },
+    { key: "status", header: "الحالة", render: (r) => <StatusBadge status={r.status ?? "open"} /> },
+    { key: "actions", header: "", className: "text-left", render: (r) => <DeleteButton id={r.id} action={deleteViolation} /> },
+  ]
+
+  return (
+    <AppShell
+      title="إدارة المخالفات"
+      subtitle="تسجيل ومتابعة المخالفات وفق النموذج الرسمي (MHS-IMS-PR-HSE-647)"
+      user={user}
+      action={
+        <RecordDialog
+          title="تسجيل مخالفة جديدة"
+          description="سجّل تفاصيل المخالفة حسب النموذج الرسمي للشركة."
+          triggerLabel="تسجيل مخالفة جديدة"
+          fields={fields}
+          action={createViolation}
+        />
+      }
+    >
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <KpiCard label="إجمالي المخالفات" value={violations.length} icon={FileWarning} tone="blue" />
+        <KpiCard label="مفتوحة / قيد المعالجة" value={open} icon={Clock} tone="accent" />
+        <KpiCard label="مغلقة" value={closed} icon={CheckCircle2} tone="primary" />
+      </div>
+
+      <div className="mt-6">
+        <h2 className="mb-3 text-lg font-semibold text-foreground">سجل المخالفات</h2>
+        <DataTable columns={columns} rows={violations} emptyMessage="لا توجد مخالفات مسجلة. سجّل مخالفة جديدة للبدء." />
+      </div>
+    </AppShell>
+  )
+}

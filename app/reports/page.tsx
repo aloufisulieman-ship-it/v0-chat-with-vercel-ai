@@ -1,22 +1,13 @@
-import {
-  AlertTriangle,
-  ShieldCheck,
-  ClipboardCheck,
-  CheckSquare,
-  ShieldAlert,
-  CalendarDays,
-  FileSignature,
-} from "lucide-react"
+import { BarChart3, TrendingUp, ShieldCheck, Activity, ClipboardCheck } from "lucide-react"
 import { AppShell } from "@/components/app-shell"
-import { KpiCard } from "@/components/kpi-card"
 import { Card } from "@/components/ui/card"
+import { KpiCard } from "@/components/kpi-card"
 import { IncidentTrendChart, IncidentTypeChart, SeverityChart } from "@/components/dashboard-charts"
-import { StatusBadge, SeverityBadge } from "@/components/status-badge"
 import { requireUser } from "@/lib/session"
 import { getDashboardData } from "@/app/actions/hse"
 import { incidentTypeLabels } from "@/lib/labels"
 
-export default async function DashboardPage() {
+export default async function ReportsPage() {
   const user = await requireUser()
   const { incidents, inspections, permits, risks, actions } = await getDashboardData()
 
@@ -65,27 +56,24 @@ export default async function DashboardPage() {
     fill: sevFill[s],
   }))
 
-  const priorityActions = [...actions]
-    .filter((a) => a.status !== "closed")
-    .sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? ""))
-    .slice(0, 5)
-
   return (
-    <AppShell title="لوحة التحكم" subtitle="نظرة عامة على أداء الصحة والسلامة والبيئة" user={user}>
+    <AppShell
+      title="التقارير والتحليلات"
+      subtitle="تقارير الأداء والمؤشرات الإحصائية لاتخاذ القرار"
+      user={user}
+    >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="إجمالي الحوادث المسجلة" value={incidents.length} icon={AlertTriangle} tone="destructive" />
-        <KpiCard label="الحوادث المفتوحة" value={openIncidents} icon={ShieldAlert} tone="accent" />
+        <KpiCard label="الحوادث المفتوحة" value={openIncidents} icon={Activity} tone="destructive" />
+        <KpiCard label="الإجراءات المفتوحة" value={openActions} icon={TrendingUp} tone="accent" />
         <KpiCard label="متوسط التزام التفتيش" value={avgCompliance} unit="%" icon={ClipboardCheck} tone="blue" />
         <KpiCard label="التصاريح النشطة" value={activePermits} icon={ShieldCheck} tone="primary" />
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
+      <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <MiniStat label="إجمالي الحوادث" value={incidents.length} />
         <MiniStat label="ملاحظات وشيكة" value={nearMisses} />
-        <MiniStat label="الإجراءات المفتوحة" value={openActions} />
         <MiniStat label="مخاطر عالية" value={highRisks} />
-        <MiniStat label="عمليات التفتيش" value={inspections.length} />
         <MiniStat label="سجل المخاطر" value={risks.length} />
-        <MiniStat label="إجمالي التصاريح" value={permits.length} />
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -95,54 +83,17 @@ export default async function DashboardPage() {
         <SeverityChart data={severityData} />
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="mt-4 grid grid-cols-1 gap-4">
         <IncidentTypeChart data={typeData} />
-        <Card className="p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-base font-semibold text-foreground">الإجراءات التصحيحية ذات الأولوية</h3>
-            <CheckSquare className="size-5 text-muted-foreground" />
-          </div>
-          {priorityActions.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">لا توجد إجراءات مفتوحة حالياً</p>
-          ) : (
-            <ul className="flex flex-col divide-y divide-border">
-              {priorityActions.map((a) => (
-                <li key={a.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex flex-col gap-1">
-                    <span className="text-sm font-medium text-foreground">{a.title}</span>
-                    <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>{a.assignedTo || "غير مُسند"}</span>
-                      {a.dueDate && (
-                        <span className="flex items-center gap-1">
-                          <CalendarDays className="size-3" />
-                          <span dir="ltr">{a.dueDate}</span>
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <SeverityBadge severity={a.priority ?? "medium"} />
-                    <StatusBadge status={a.status ?? "open"} />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
       </div>
 
-      <Card className="mt-6 flex flex-col items-start gap-2 p-5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <FileSignature className="size-5" />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-foreground">مرحباً {user.name}</p>
-            <p className="text-xs text-muted-foreground">
-              جميع بياناتك تُحفظ تلقائياً في قاعدة بيانات آمنة وخاصة بحسابك.
-            </p>
-          </div>
+      <Card className="mt-6 flex items-center gap-3 p-5">
+        <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <BarChart3 className="size-5" />
         </div>
+        <p className="text-sm text-muted-foreground text-pretty">
+          تُحسب جميع المؤشرات والرسوم البيانية تلقائياً من بياناتك الفعلية المسجّلة في النظام، وتتحدّث فور إضافة أي سجل جديد.
+        </p>
       </Card>
     </AppShell>
   )
