@@ -4,11 +4,13 @@ import { useRef, useState, useTransition } from "react"
 import { ImagePlus, Trash2, Loader2, PenLine, FileImage } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { SignaturePad } from "@/components/signature-pad"
+import { RoleSignatures } from "@/components/role-signatures"
 import {
   uploadAttachment,
   deleteAttachment,
   type AttachmentRow,
 } from "@/app/actions/attachments"
+import { type SignatureRole } from "@/lib/signature-roles"
 import { toast } from "@/hooks/use-toast"
 
 export function fileUrl(pathname: string) {
@@ -19,10 +21,12 @@ export function AttachmentsManager({
   module,
   recordId,
   initial,
+  signatureRoles,
 }: {
   module: string
   recordId: number
   initial: AttachmentRow[]
+  signatureRoles?: SignatureRole[]
 }) {
   const [items, setItems] = useState<AttachmentRow[]>(initial)
   const [isPending, startTransition] = useTransition()
@@ -32,6 +36,7 @@ export function AttachmentsManager({
 
   const photos = items.filter((i) => i.kind === "photo")
   const signatures = items.filter((i) => i.kind === "signature")
+  const useRoles = !!signatureRoles && signatureRoles.length > 0
 
   async function uploadOne(file: File, kind: "photo" | "signature") {
     const fd = new FormData()
@@ -166,7 +171,19 @@ export function AttachmentsManager({
         )}
       </section>
 
-      {/* Signatures */}
+      {/* Role-named official signatures (violations, incidents, ...) */}
+      {useRoles && (
+        <RoleSignatures
+          module={module}
+          recordId={recordId}
+          roles={signatureRoles!}
+          items={items}
+          onChange={setItems}
+        />
+      )}
+
+      {/* Free-form signatures (modules without role config) */}
+      {!useRoles && (
       <section className="flex flex-col gap-3">
         <h4 className="flex items-center gap-2 text-sm font-semibold text-foreground">
           <PenLine className="size-4 text-muted-foreground" />
@@ -203,6 +220,7 @@ export function AttachmentsManager({
 
         <SignaturePad onSave={handleSignature} saving={savingSig} />
       </section>
+      )}
     </div>
   )
 }

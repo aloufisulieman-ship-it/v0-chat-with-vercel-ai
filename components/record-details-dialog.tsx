@@ -14,6 +14,7 @@ import {
 import { AttachmentsManager, fileUrl } from "@/components/attachments-manager"
 import { getAttachments, type AttachmentRow } from "@/app/actions/attachments"
 import { downloadElementPdf } from "@/lib/pdf"
+import { signatureRoles as signatureRolesConfig, labelForSignatureKind } from "@/lib/signature-roles"
 import { toast } from "@/hooks/use-toast"
 
 export type DetailField = { label: string; value: string }
@@ -56,6 +57,7 @@ export function RecordDetailsDialog({
   const [attachments, setAttachments] = useState<AttachmentRow[]>(initialAttachments)
   const [busy, setBusy] = useState<"pdf" | "email" | null>(null)
   const reportRef = useRef<HTMLDivElement | null>(null)
+  const moduleRoles = signatureRolesConfig[module]
 
   // Refresh attachments when opening so PDF/email reflect the latest uploads.
   async function handleOpenChange(next: boolean) {
@@ -73,10 +75,15 @@ export function RecordDetailsDialog({
   // Builds an off-screen printable report with embedded (data-url) images.
   async function buildReportElement(): Promise<HTMLElement> {
     const photos = attachments.filter((a) => a.kind === "photo")
-    const signatures = attachments.filter((a) => a.kind === "signature")
+    const signatures = attachments.filter((a) => a.kind === "signature" || a.kind.startsWith("signature:"))
 
     const photoData = await Promise.all(photos.map((p) => toDataUrl(fileUrl(p.pathname))))
-    const sigData = await Promise.all(signatures.map((s) => toDataUrl(fileUrl(s.pathname))))
+    const sigData = await Promise.all(
+      signatures.map(async (s) => ({
+        data: await toDataUrl(fileUrl(s.pathname)),
+        label: s.kind === "signature" ? "توقيع" : labelForSignatureKind(module, s.kind),
+      })),
+    )
 
     const container = document.createElement("div")
     container.dir = "rtl"
@@ -103,10 +110,10 @@ export function RecordDetailsDialog({
       .join("")
 
     const sigHtml = sigData
-      .filter(Boolean)
+      .filter((s) => s.data)
       .map(
-        (d) =>
-          `<div style="display:inline-block;width:46%;margin:1%;border:1px solid #e2e8f0;border-radius:6px;padding:8px;text-align:center;background:#fff;"><img src="${d}" style="max-height:90px;max-width:100%;" /></div>`,
+        (s) =>
+          `<div style="display:inline-block;width:46%;margin:1%;border:1px solid #e2e8f0;border-radius:6px;padding:8px;text-align:center;background:#fff;vertical-align:top;"><img src="${s.data}" style="max-height:90px;max-width:100%;" /><div style="margin-top:6px;font-size:12px;font-weight:600;color:#334155;border-top:1px solid #e2e8f0;padding-top:6px;">${escapeHtml(s.label)}</div></div>`,
       )
       .join("")
 
@@ -177,7 +184,7 @@ export function RecordDetailsDialog({
         ...lines,
         "",
         `عدد الصور المرفقة: ${attachments.filter((a) => a.kind === "photo").length}`,
-        `عدد التواقيع: ${attachments.filter((a) => a.kind === "signature").length}`,
+        `عدد التواقيع: ${attachments.filter((a) => a.kind === "signature" || a.kind.startsWith("signature:")).length}`,
         "",
         "ملاحظة: تم تنزيل ملف PDF الكامل (يحتوي الصور والتواقيع) على جهازك — يرجى إرفاقه بهذه الرسالة.",
       ]
@@ -246,7 +253,12 @@ export function RecordDetailsDialog({
           </dl>
         </div>
 
-        <AttachmentsManager module={module} recordId={recordId} initial={attachments} />
+        <AttachmentsManager
+          module={module}
+          recordId={recordId}
+          initial={attachments}
+          signatureRoles={moduleRoles}
+        />
       </DialogContent>
     </Dialog>
   )
