@@ -1,7 +1,7 @@
 "use client"
 
 import jsPDF from "jspdf"
-import html2canvas from "html2canvas"
+import html2canvas from "html2canvas-pro"
 
 // Renders a DOM element into a (possibly multi-page) A4 PDF and returns the jsPDF instance.
 export async function elementToPdf(el: HTMLElement): Promise<jsPDF> {
