@@ -4,10 +4,11 @@ import { KpiCard } from "@/components/kpi-card"
 import { DataTable, type Column } from "@/components/data-table"
 import { StatusBadge } from "@/components/status-badge"
 import { RecordDialog, type FieldDef } from "@/components/record-dialog"
+import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { requireUser } from "@/lib/session"
 import { getAudits, createAudit, deleteAudit } from "@/app/actions/hse"
-import { inspectionStatusOptions } from "@/lib/labels"
+import { inspectionStatusOptions, statusLabels } from "@/lib/labels"
 import { cn } from "@/lib/utils"
 
 type AuditItem = Awaited<ReturnType<typeof getAudits>>[number]
@@ -48,7 +49,31 @@ export default async function AuditsPage() {
     { key: "score", header: "النتيجة", render: (r) => <ScoreBar score={r.score ?? 0} /> },
     { key: "status", header: "الحالة", render: (r) => <StatusBadge status={r.status ?? "scheduled"} /> },
     { key: "auditDate", header: "التاريخ", render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.auditDate ?? "-"}</span> },
-    { key: "actions", header: "", className: "text-left", render: (r) => <DeleteButton id={r.id} action={deleteAudit} /> },
+    {
+      key: "actions",
+      header: "",
+      className: "text-left",
+      render: (r) => (
+        <div className="flex items-center justify-end gap-1">
+          <RecordDetailsDialog
+            module="audits"
+            recordId={r.id}
+            title={r.title}
+            subtitle="تقرير تدقيق"
+            fields={[
+              { label: "عنوان التدقيق", value: r.title },
+              { label: "المعيار", value: r.standard || "-" },
+              { label: "المدقق", value: r.auditor || "-" },
+              { label: "النتيجة", value: `${r.score ?? 0}%` },
+              { label: "الحالة", value: statusLabels[r.status ?? ""] ?? "-" },
+              { label: "تاريخ التدقيق", value: r.auditDate ?? "-" },
+            ]}
+            initialAttachments={[]}
+          />
+          <DeleteButton id={r.id} action={deleteAudit} />
+        </div>
+      ),
+    },
   ]
 
   return (

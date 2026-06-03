@@ -4,10 +4,11 @@ import { KpiCard } from "@/components/kpi-card"
 import { DataTable, type Column } from "@/components/data-table"
 import { StatusBadge } from "@/components/status-badge"
 import { RecordDialog, type FieldDef } from "@/components/record-dialog"
+import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { requireUser } from "@/lib/session"
 import { getPermits, createPermit, deletePermit } from "@/app/actions/hse"
-import { permitTypeLabels, permitTypeOptions, permitStatusOptions } from "@/lib/labels"
+import { permitTypeLabels, permitTypeOptions, permitStatusOptions, statusLabels } from "@/lib/labels"
 
 type Permit = Awaited<ReturnType<typeof getPermits>>[number]
 
@@ -37,7 +38,32 @@ export default async function PermitsPage() {
     { key: "validFrom", header: "من", render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.validFrom ?? "-"}</span> },
     { key: "validTo", header: "إلى", render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.validTo ?? "-"}</span> },
     { key: "status", header: "الحالة", render: (r) => <StatusBadge status={r.status ?? "pending"} /> },
-    { key: "actions", header: "", className: "text-left", render: (r) => <DeleteButton id={r.id} action={deletePermit} /> },
+    {
+      key: "actions",
+      header: "",
+      className: "text-left",
+      render: (r) => (
+        <div className="flex items-center justify-end gap-1">
+          <RecordDetailsDialog
+            module="permits"
+            recordId={r.id}
+            title={r.title}
+            subtitle="تصريح عمل"
+            fields={[
+              { label: "عنوان التصريح", value: r.title },
+              { label: "النوع", value: permitTypeLabels[r.type ?? ""] ?? "-" },
+              { label: "الموقع", value: r.location || "-" },
+              { label: "مقدّم الطلب", value: r.requestedBy || "-" },
+              { label: "ساري من", value: r.validFrom ?? "-" },
+              { label: "ساري إلى", value: r.validTo ?? "-" },
+              { label: "الحالة", value: statusLabels[r.status ?? ""] ?? "-" },
+            ]}
+            initialAttachments={[]}
+          />
+          <DeleteButton id={r.id} action={deletePermit} />
+        </div>
+      ),
+    },
   ]
 
   return (

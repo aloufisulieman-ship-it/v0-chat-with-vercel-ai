@@ -4,10 +4,11 @@ import { KpiCard } from "@/components/kpi-card"
 import { DataTable, type Column } from "@/components/data-table"
 import { StatusBadge } from "@/components/status-badge"
 import { RecordDialog, type FieldDef } from "@/components/record-dialog"
+import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { requireUser } from "@/lib/session"
 import { getTrainings, createTraining, deleteTraining } from "@/app/actions/hse"
-import { inspectionStatusOptions } from "@/lib/labels"
+import { inspectionStatusOptions, statusLabels } from "@/lib/labels"
 
 type Training = Awaited<ReturnType<typeof getTrainings>>[number]
 
@@ -33,7 +34,30 @@ export default async function TrainingPage() {
     { key: "attendees", header: "الحضور", className: "text-center" },
     { key: "status", header: "الحالة", render: (r) => <StatusBadge status={r.status ?? "scheduled"} /> },
     { key: "trainingDate", header: "التاريخ", render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.trainingDate ?? "-"}</span> },
-    { key: "actions", header: "", className: "text-left", render: (r) => <DeleteButton id={r.id} action={deleteTraining} /> },
+    {
+      key: "actions",
+      header: "",
+      className: "text-left",
+      render: (r) => (
+        <div className="flex items-center justify-end gap-1">
+          <RecordDetailsDialog
+            module="training"
+            recordId={r.id}
+            title={r.title}
+            subtitle="سجل تدريب"
+            fields={[
+              { label: "اسم الدورة", value: r.title },
+              { label: "المدرب", value: r.trainer || "-" },
+              { label: "عدد الحضور", value: String(r.attendees ?? 0) },
+              { label: "الحالة", value: statusLabels[r.status ?? ""] ?? "-" },
+              { label: "تاريخ الدورة", value: r.trainingDate ?? "-" },
+            ]}
+            initialAttachments={[]}
+          />
+          <DeleteButton id={r.id} action={deleteTraining} />
+        </div>
+      ),
+    },
   ]
 
   return (

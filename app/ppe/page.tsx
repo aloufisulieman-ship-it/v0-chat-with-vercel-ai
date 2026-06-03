@@ -3,6 +3,7 @@ import { AppShell } from "@/components/app-shell"
 import { KpiCard } from "@/components/kpi-card"
 import { DataTable, type Column } from "@/components/data-table"
 import { RecordDialog, type FieldDef } from "@/components/record-dialog"
+import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { requireUser } from "@/lib/session"
 import { getPpe, createPpe, deletePpe } from "@/app/actions/hse"
@@ -47,7 +48,31 @@ export default async function PPEPage() {
     { key: "minLevel", header: "الحد الأدنى", className: "text-center" },
     { key: "assigned", header: "المصروف", className: "text-center" },
     { key: "stat", header: "الحالة", render: (r) => <StockBadge low={isLow(r)} /> },
-    { key: "actions", header: "", className: "text-left", render: (r) => <DeleteButton id={r.id} action={deletePpe} /> },
+    {
+      key: "actions",
+      header: "",
+      className: "text-left",
+      render: (r) => (
+        <div className="flex items-center justify-end gap-1">
+          <RecordDetailsDialog
+            module="ppe"
+            recordId={r.id}
+            title={r.name}
+            subtitle="صنف معدات وقاية"
+            fields={[
+              { label: "اسم المعدة", value: r.name },
+              { label: "التصنيف", value: r.category || "-" },
+              { label: "الكمية في المخزون", value: String(r.inStock ?? 0) },
+              { label: "الحد الأدنى", value: String(r.minLevel ?? 0) },
+              { label: "المصروف للموظفين", value: String(r.assigned ?? 0) },
+              { label: "الحالة", value: isLow(r) ? "مخزون منخفض" : "متوفر" },
+            ]}
+            initialAttachments={[]}
+          />
+          <DeleteButton id={r.id} action={deletePpe} />
+        </div>
+      ),
+    },
   ]
 
   return (

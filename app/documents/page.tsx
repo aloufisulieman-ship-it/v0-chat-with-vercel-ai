@@ -4,9 +4,11 @@ import { KpiCard } from "@/components/kpi-card"
 import { DataTable, type Column } from "@/components/data-table"
 import { StatusBadge } from "@/components/status-badge"
 import { RecordDialog, type FieldDef } from "@/components/record-dialog"
+import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { requireUser } from "@/lib/session"
 import { getDocuments, createDocument, deleteDocument } from "@/app/actions/hse"
+import { statusLabels } from "@/lib/labels"
 
 type DocItem = Awaited<ReturnType<typeof getDocuments>>[number]
 
@@ -49,7 +51,31 @@ export default async function DocumentsPage() {
     { key: "owner", header: "الجهة المالكة", render: (r) => <span className="text-muted-foreground">{r.owner || "-"}</span> },
     { key: "reviewDate", header: "تاريخ المراجعة", render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.reviewDate ?? "-"}</span> },
     { key: "status", header: "الحالة", render: (r) => <StatusBadge status={r.status ?? "active"} /> },
-    { key: "actions", header: "", className: "text-left", render: (r) => <DeleteButton id={r.id} action={deleteDocument} /> },
+    {
+      key: "actions",
+      header: "",
+      className: "text-left",
+      render: (r) => (
+        <div className="flex items-center justify-end gap-1">
+          <RecordDetailsDialog
+            module="documents"
+            recordId={r.id}
+            title={r.title}
+            subtitle="مستند"
+            fields={[
+              { label: "اسم المستند", value: r.title },
+              { label: "التصنيف", value: r.category || "-" },
+              { label: "الإصدار", value: r.version || "-" },
+              { label: "الجهة المالكة", value: r.owner || "-" },
+              { label: "تاريخ المراجعة", value: r.reviewDate ?? "-" },
+              { label: "الحالة", value: statusLabels[r.status ?? ""] ?? "-" },
+            ]}
+            initialAttachments={[]}
+          />
+          <DeleteButton id={r.id} action={deleteDocument} />
+        </div>
+      ),
+    },
   ]
 
   return (

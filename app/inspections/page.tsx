@@ -4,10 +4,11 @@ import { KpiCard } from "@/components/kpi-card"
 import { DataTable, type Column } from "@/components/data-table"
 import { StatusBadge } from "@/components/status-badge"
 import { RecordDialog, type FieldDef } from "@/components/record-dialog"
+import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { requireUser } from "@/lib/session"
 import { getInspections, createInspection, deleteInspection } from "@/app/actions/hse"
-import { inspectionStatusOptions } from "@/lib/labels"
+import { inspectionStatusOptions, statusLabels } from "@/lib/labels"
 import { cn } from "@/lib/utils"
 
 type Inspection = Awaited<ReturnType<typeof getInspections>>[number]
@@ -50,7 +51,32 @@ export default async function InspectionsPage() {
     { key: "findings", header: "ملاحظات", className: "text-center" },
     { key: "status", header: "الحالة", render: (r) => <StatusBadge status={r.status ?? "scheduled"} /> },
     { key: "inspectionDate", header: "التاريخ", render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.inspectionDate ?? "-"}</span> },
-    { key: "actions", header: "", className: "text-left", render: (r) => <DeleteButton id={r.id} action={deleteInspection} /> },
+    {
+      key: "actions",
+      header: "",
+      className: "text-left",
+      render: (r) => (
+        <div className="flex items-center justify-end gap-1">
+          <RecordDetailsDialog
+            module="inspections"
+            recordId={r.id}
+            title={r.title}
+            subtitle="تقرير تفتيش"
+            fields={[
+              { label: "نوع التفتيش", value: r.title },
+              { label: "المنطقة", value: r.area || "-" },
+              { label: "المفتش", value: r.inspector || "-" },
+              { label: "نسبة الالتزام", value: `${r.compliance ?? 0}%` },
+              { label: "عدد الملاحظات", value: String(r.findings ?? 0) },
+              { label: "الحالة", value: statusLabels[r.status ?? ""] ?? "-" },
+              { label: "تاريخ التفتيش", value: r.inspectionDate ?? "-" },
+            ]}
+            initialAttachments={[]}
+          />
+          <DeleteButton id={r.id} action={deleteInspection} />
+        </div>
+      ),
+    },
   ]
 
   return (

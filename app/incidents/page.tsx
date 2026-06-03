@@ -4,10 +4,11 @@ import { KpiCard } from "@/components/kpi-card"
 import { DataTable, type Column } from "@/components/data-table"
 import { StatusBadge, SeverityBadge } from "@/components/status-badge"
 import { RecordDialog, type FieldDef } from "@/components/record-dialog"
+import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { requireUser } from "@/lib/session"
 import { getIncidents, createIncident, deleteIncident } from "@/app/actions/hse"
-import { incidentTypeLabels } from "@/lib/labels"
+import { incidentTypeLabels, severityLabels, statusLabels } from "@/lib/labels"
 import { severityOptions, statusOptions, incidentTypeOptions } from "@/lib/labels"
 
 type Incident = Awaited<ReturnType<typeof getIncidents>>[number]
@@ -39,7 +40,33 @@ export default async function IncidentsPage() {
     { key: "severity", header: "الخطورة", render: (r) => <SeverityBadge severity={r.severity ?? "low"} /> },
     { key: "status", header: "الحالة", render: (r) => <StatusBadge status={r.status ?? "open"} /> },
     { key: "incidentDate", header: "التاريخ", render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.incidentDate ?? "-"}</span> },
-    { key: "actions", header: "", className: "text-left", render: (r) => <DeleteButton id={r.id} action={deleteIncident} /> },
+    {
+      key: "actions",
+      header: "",
+      className: "text-left",
+      render: (r) => (
+        <div className="flex items-center justify-end gap-1">
+          <RecordDetailsDialog
+            module="incidents"
+            recordId={r.id}
+            title={r.title}
+            subtitle="تقرير حادثة"
+            fields={[
+              { label: "وصف الحادثة", value: r.title },
+              { label: "النوع", value: incidentTypeLabels[r.type ?? ""] ?? "-" },
+              { label: "الموقع", value: r.location || "-" },
+              { label: "المُبلِّغ", value: r.reportedBy || "-" },
+              { label: "الخطورة", value: severityLabels[r.severity ?? ""] ?? "-" },
+              { label: "الحالة", value: statusLabels[r.status ?? ""] ?? "-" },
+              { label: "تاريخ الحادثة", value: r.incidentDate ?? "-" },
+              { label: "تفاصيل إضافية", value: r.description || "-" },
+            ]}
+            initialAttachments={[]}
+          />
+          <DeleteButton id={r.id} action={deleteIncident} />
+        </div>
+      ),
+    },
   ]
 
   return (

@@ -186,6 +186,20 @@ export const violation = pgTable("violation", {
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
+export const attachment = pgTable("attachment", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  module: text("module").notNull(),
+  recordId: integer("recordId").notNull(),
+  kind: text("kind").notNull().default("photo"),
+  pathname: text("pathname").notNull(),
+  url: text("url").notNull().default(""),
+  filename: text("filename").notNull().default(""),
+  contentType: text("contentType").notNull().default(""),
+  size: integer("size").notNull().default(0),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
 export const document = pgTable("document", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),

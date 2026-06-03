@@ -4,10 +4,11 @@ import { KpiCard } from "@/components/kpi-card"
 import { DataTable, type Column } from "@/components/data-table"
 import { StatusBadge, SeverityBadge } from "@/components/status-badge"
 import { RecordDialog, type FieldDef } from "@/components/record-dialog"
+import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { requireUser } from "@/lib/session"
 import { getActions, createAction, deleteAction } from "@/app/actions/hse"
-import { statusOptions, severityOptions } from "@/lib/labels"
+import { statusOptions, severityOptions, severityLabels, statusLabels } from "@/lib/labels"
 
 type ActionItem = Awaited<ReturnType<typeof getActions>>[number]
 
@@ -35,7 +36,31 @@ export default async function ActionsPage() {
     { key: "priority", header: "الأولوية", render: (r) => <SeverityBadge severity={r.priority ?? "medium"} /> },
     { key: "dueDate", header: "الاستحقاق", render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.dueDate ?? "-"}</span> },
     { key: "status", header: "الحالة", render: (r) => <StatusBadge status={r.status ?? "open"} /> },
-    { key: "actions", header: "", className: "text-left", render: (r) => <DeleteButton id={r.id} action={deleteAction} /> },
+    {
+      key: "actions",
+      header: "",
+      className: "text-left",
+      render: (r) => (
+        <div className="flex items-center justify-end gap-1">
+          <RecordDetailsDialog
+            module="actions"
+            recordId={r.id}
+            title={r.title}
+            subtitle="إجراء تصحيحي"
+            fields={[
+              { label: "وصف الإجراء", value: r.title },
+              { label: "المصدر", value: r.source || "-" },
+              { label: "المسؤول", value: r.assignedTo || "-" },
+              { label: "الأولوية", value: severityLabels[r.priority ?? ""] ?? "-" },
+              { label: "تاريخ الاستحقاق", value: r.dueDate ?? "-" },
+              { label: "الحالة", value: statusLabels[r.status ?? ""] ?? "-" },
+            ]}
+            initialAttachments={[]}
+          />
+          <DeleteButton id={r.id} action={deleteAction} />
+        </div>
+      ),
+    },
   ]
 
   return (

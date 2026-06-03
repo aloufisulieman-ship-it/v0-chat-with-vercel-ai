@@ -4,11 +4,12 @@ import { KpiCard } from "@/components/kpi-card"
 import { DataTable, type Column } from "@/components/data-table"
 import { StatusBadge, SeverityBadge } from "@/components/status-badge"
 import { RecordDialog, type FieldDef } from "@/components/record-dialog"
+import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { RiskMatrix } from "@/components/risk-matrix"
 import { requireUser } from "@/lib/session"
 import { getRisks, createRisk, deleteRisk } from "@/app/actions/hse"
-import { statusOptions, riskLevel } from "@/lib/labels"
+import { statusOptions, riskLevel, statusLabels } from "@/lib/labels"
 
 type RiskItem = Awaited<ReturnType<typeof getRisks>>[number]
 
@@ -42,7 +43,34 @@ export default async function RisksPage() {
     { key: "controls", header: "إجراءات التحكم", render: (r) => <span className="text-muted-foreground">{r.controls || "-"}</span> },
     { key: "owner", header: "المسؤول", render: (r) => <span className="text-muted-foreground">{r.owner || "-"}</span> },
     { key: "status", header: "الحالة", render: (r) => <StatusBadge status={r.status ?? "open"} /> },
-    { key: "actions", header: "", className: "text-left", render: (r) => <DeleteButton id={r.id} action={deleteRisk} /> },
+    {
+      key: "actions",
+      header: "",
+      className: "text-left",
+      render: (r) => (
+        <div className="flex items-center justify-end gap-1">
+          <RecordDetailsDialog
+            module="risks"
+            recordId={r.id}
+            title={r.hazard}
+            subtitle="تقييم خطر"
+            fields={[
+              { label: "الخطر", value: r.hazard },
+              { label: "النشاط", value: r.activity || "-" },
+              { label: "الاحتمالية", value: String(r.likelihood ?? 1) },
+              { label: "الشدة", value: String(r.consequence ?? 1) },
+              { label: "درجة المخاطرة", value: String(r.score) },
+              { label: "المستوى", value: riskLevel(r.score).label },
+              { label: "إجراءات التحكم", value: r.controls || "-" },
+              { label: "المسؤول", value: r.owner || "-" },
+              { label: "الحالة", value: statusLabels[r.status ?? ""] ?? "-" },
+            ]}
+            initialAttachments={[]}
+          />
+          <DeleteButton id={r.id} action={deleteRisk} />
+        </div>
+      ),
+    },
   ]
 
   return (

@@ -4,10 +4,11 @@ import { KpiCard } from "@/components/kpi-card"
 import { DataTable, type Column } from "@/components/data-table"
 import { StatusBadge } from "@/components/status-badge"
 import { RecordDialog, type FieldDef } from "@/components/record-dialog"
+import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { requireUser } from "@/lib/session"
 import { getViolations, createViolation, deleteViolation } from "@/app/actions/hse"
-import { violationStatusOptions } from "@/lib/labels"
+import { violationStatusOptions, statusLabels } from "@/lib/labels"
 
 type Violation = Awaited<ReturnType<typeof getViolations>>[number]
 
@@ -40,7 +41,38 @@ export default async function ViolationsPage() {
     { key: "place", header: "المكان", render: (r) => <span className="text-muted-foreground">{r.place || "-"}</span> },
     { key: "violationDate", header: "التاريخ", render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.violationDate ?? "-"}</span> },
     { key: "status", header: "الحالة", render: (r) => <StatusBadge status={r.status ?? "open"} /> },
-    { key: "actions", header: "", className: "text-left", render: (r) => <DeleteButton id={r.id} action={deleteViolation} /> },
+    {
+      key: "actions",
+      header: "",
+      className: "text-left",
+      render: (r) => (
+        <div className="flex items-center justify-end gap-1">
+          <RecordDetailsDialog
+            module="violations"
+            recordId={r.id}
+            title={`مخالفة: ${r.employeeName}`}
+            subtitle="نموذج مخالفة رسمي"
+            documentNo={r.documentNo ?? "MHS-IMS-PR-HSE-647"}
+            fields={[
+              { label: "اسم الموظف", value: r.employeeName },
+              { label: "الرقم الوظيفي", value: r.employeeNo || "-" },
+              { label: "اسم الشركة", value: r.companyName || "-" },
+              { label: "رقم الوثيقة", value: r.documentNo || "-" },
+              { label: "التاريخ", value: r.violationDate ?? "-" },
+              { label: "الوقت", value: r.violationTime || "-" },
+              { label: "المكان", value: r.place || "-" },
+              { label: "وصف المخالفة", value: r.description || "-" },
+              { label: "الشهود", value: r.witnesses || "-" },
+              { label: "الأدلة", value: r.evidences || "-" },
+              { label: "الإجراء التأديبي المقترح", value: r.proposedAction || "-" },
+              { label: "الحالة", value: statusLabels[r.status ?? ""] ?? "-" },
+            ]}
+            initialAttachments={[]}
+          />
+          <DeleteButton id={r.id} action={deleteViolation} />
+        </div>
+      ),
+    },
   ]
 
   return (
