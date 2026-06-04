@@ -23,20 +23,22 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { authClient } from "@/lib/auth-client"
+import { canView, type SectionKey } from "@/lib/permissions"
 
-const nav = [
+// section: when set, the item is gated by the user's view permission for that section.
+const nav: { href: string; label: string; icon: typeof LayoutDashboard; section?: SectionKey }[] = [
   { href: "/", label: "لوحة التحكم", icon: LayoutDashboard },
-  { href: "/incidents", label: "الحوادث", icon: AlertTriangle },
-  { href: "/inspections", label: "التفتيش", icon: ClipboardCheck },
-  { href: "/risks", label: "تقييم المخاطر", icon: ShieldAlert },
-  { href: "/permits", label: "تصاريح العمل", icon: FileSignature },
-  { href: "/training", label: "التدريب", icon: GraduationCap },
-  { href: "/ppe", label: "معدات الوقاية", icon: HardHat },
-  { href: "/violations", label: "المخالفات", icon: Ban },
-  { href: "/actions", label: "الإجراءات التصحيحية", icon: CheckSquare },
-  { href: "/audits", label: "التدقيق", icon: ClipboardList },
-  { href: "/documents", label: "الوثائق", icon: FolderKanban },
-  { href: "/reports", label: "التقارير", icon: BarChart3 },
+  { href: "/incidents", label: "الحوادث", icon: AlertTriangle, section: "incidents" },
+  { href: "/inspections", label: "التفتيش", icon: ClipboardCheck, section: "inspections" },
+  { href: "/risks", label: "تقييم المخاطر", icon: ShieldAlert, section: "risks" },
+  { href: "/permits", label: "تصاريح العمل", icon: FileSignature, section: "permits" },
+  { href: "/training", label: "التدريب", icon: GraduationCap, section: "training" },
+  { href: "/ppe", label: "معدات الوقاية", icon: HardHat, section: "ppe" },
+  { href: "/violations", label: "المخالفات", icon: Ban, section: "violations" },
+  { href: "/actions", label: "الإجراءات التصحيحية", icon: CheckSquare, section: "actions" },
+  { href: "/audits", label: "التدقيق", icon: ClipboardList, section: "audits" },
+  { href: "/documents", label: "الوثائق", icon: FolderKanban, section: "documents" },
+  { href: "/reports", label: "التقارير", icon: BarChart3, section: "reports" },
   { href: "/settings", label: "الإعدادات", icon: Settings },
 ]
 
@@ -53,12 +55,14 @@ export function AppSidebar({
 }: {
   open: boolean
   onClose: () => void
-  user: { name: string; email: string; role?: string }
+  user: { name: string; email: string; role?: string; permissions?: string }
 }) {
   const pathname = usePathname()
   const router = useRouter()
 
-  const items = user?.role === "admin" ? [...nav, { href: "/users", label: "إدارة المستخدمين", icon: Users }] : nav
+  const visible = nav.filter((item) => !item.section || canView(user?.role, user?.permissions, item.section))
+  const items =
+    user?.role === "admin" ? [...visible, { href: "/users", label: "إدارة المستخدمين", icon: Users }] : visible
 
   async function handleSignOut() {
     await authClient.signOut()

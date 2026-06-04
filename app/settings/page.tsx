@@ -1,9 +1,10 @@
 import Link from "next/link"
-import { Building2, Users, ShieldCheck, ArrowLeft, UserCircle } from "lucide-react"
+import { Building2, Users, ShieldCheck, ArrowLeft, UserCircle, KeyRound } from "lucide-react"
 import { AppShell } from "@/components/app-shell"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { CompanyForm } from "@/components/company-form"
+import { ChangePasswordForm } from "@/components/change-password-form"
 import { requireUser } from "@/lib/session"
 import { getCompany } from "@/app/actions/hse"
 import { getUsers } from "@/app/actions/users"
@@ -49,6 +50,16 @@ export default async function SettingsPage() {
           </div>
           <div className="mt-auto rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground text-pretty">
             لتغيير دورك أو إدارة المستخدمين الآخرين، استخدم صفحة إدارة المستخدمين (متاحة لمدير النظام فقط).
+          </div>
+        </Card>
+
+        <Card className="p-6 lg:col-span-2">
+          <div className="mb-4 flex items-center gap-2">
+            <KeyRound className="size-5 text-primary" />
+            <h3 className="text-base font-semibold text-foreground">تغيير كلمة المرور</h3>
+          </div>
+          <div className="max-w-md">
+            <ChangePasswordForm />
           </div>
         </Card>
 

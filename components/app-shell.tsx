@@ -14,7 +14,7 @@ export function AppShell({
   title: string
   subtitle?: string
   action?: ReactNode
-  user: { name: string; email: string; role?: string }
+  user: { name: string; email: string; role?: string; permissions?: string }
   children: ReactNode
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)

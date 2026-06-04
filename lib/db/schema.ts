@@ -9,6 +9,8 @@ export const user = pgTable("user", {
   image: text("image"),
   role: text("role").notNull().default("user"),
   status: text("status").notNull().default("pending"),
+  // JSON string of per-section permissions: { [section]: { view, edit } }
+  permissions: text("permissions").notNull().default(""),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })

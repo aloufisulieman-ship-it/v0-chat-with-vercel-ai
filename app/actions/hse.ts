@@ -18,6 +18,7 @@ import {
 import { and, desc, eq } from "drizzle-orm"
 import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
+import { requireEditUserId } from "@/lib/session"
 
 async function getUserId() {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -72,7 +73,7 @@ export async function getIncidents() {
   return db.select().from(incident).where(eq(incident.userId, userId)).orderBy(desc(incident.createdAt))
 }
 export async function createIncident(formData: FormData) {
-  const userId = await getUserId()
+  const userId = await requireEditUserId("incidents")
   await db.insert(incident).values({
     userId,
     title: str(formData.get("title")),
@@ -88,7 +89,7 @@ export async function createIncident(formData: FormData) {
   revalidatePath("/")
 }
 export async function deleteIncident(id: number) {
-  const userId = await getUserId()
+  const userId = await requireEditUserId("incidents")
   await db.delete(incident).where(and(eq(incident.id, id), eq(incident.userId, userId)))
   revalidatePath("/incidents")
   revalidatePath("/")

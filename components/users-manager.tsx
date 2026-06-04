@@ -1,9 +1,11 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { Check, X, Trash2, ShieldCheck, UserCog } from "lucide-react"
+import { Check, X, Trash2, ShieldCheck, UserCog, UserPlus, SlidersHorizontal, Loader2 } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -11,7 +13,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { approveUser, rejectUser, setUserRole, deleteUser } from "@/app/actions/users"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { PermissionsEditor } from "@/components/permissions-editor"
+import {
+  approveUser,
+  rejectUser,
+  setUserRole,
+  deleteUser,
+  createUser,
+  setUserPermissions,
+} from "@/app/actions/users"
+import { defaultAccess, parsePermissions, type PermissionMap } from "@/lib/permissions"
+import { toast } from "@/hooks/use-toast"
 
 type UserRow = {
   id: string
@@ -19,6 +40,7 @@ type UserRow = {
   email: string
   role: string
   status: string
+  permissions: string
   createdAt: Date
 }
 
@@ -65,6 +87,169 @@ function RoleSelect({
   )
 }
 
+function CreateUserDialog() {
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState("")
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [role, setRole] = useState<"admin" | "manager" | "user">("user")
+  const [perms, setPerms] = useState<PermissionMap>(defaultAccess())
+  const [isPending, startTransition] = useTransition()
+
+  function reset() {
+    setName("")
+    setEmail("")
+    setPassword("")
+    setRole("user")
+    setPerms(defaultAccess())
+  }
+
+  function submit() {
+    startTransition(async () => {
+      const res = await createUser({ name, email, password, role, permissions: perms })
+      if (res.error) {
+        toast({ title: "تعذّر الإنشاء", description: res.error, variant: "destructive" })
+        return
+      }
+      toast({ title: "تم إنشاء المستخدم", description: `${name} يمكنه الآن تسجيل الدخول.` })
+      reset()
+      setOpen(false)
+    })
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o)
+        if (!o) reset()
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button className="gap-2">
+          <UserPlus className="size-4" />
+          إضافة مستخدم
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>إضافة مستخدم جديد</DialogTitle>
+          <DialogDescription>أنشئ حساباً وحدّد دوره وصلاحياته لكل قسم.</DialogDescription>
+        </DialogHeader>
+
+        <div className="flex flex-col gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="cu-name">الاسم</Label>
+            <Input id="cu-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="مثال: محمد أحمد" />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="cu-email">البريد الإلكتروني</Label>
+            <Input
+              id="cu-email"
+              type="email"
+              dir="ltr"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="name@example.com"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="cu-password">كلمة المرور</Label>
+            <Input
+              id="cu-password"
+              type="text"
+              dir="ltr"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="8 أحرف على الأقل"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label>الدور</Label>
+            <Select value={role} onValueChange={(v) => setRole(v as "admin" | "manager" | "user")}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="admin">مدير النظام</SelectItem>
+                <SelectItem value="manager">مدير</SelectItem>
+                <SelectItem value="user">مستخدم</SelectItem>
+              </SelectContent>
+            </Select>
+            {role === "admin" && (
+              <p className="text-xs text-muted-foreground">مدير النظام يملك صلاحية كاملة على جميع الأقسام.</p>
+            )}
+          </div>
+
+          {role !== "admin" && (
+            <div className="grid gap-2">
+              <Label>الصلاحيات لكل قسم</Label>
+              <PermissionsEditor value={perms} onChange={setPerms} />
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)} disabled={isPending}>
+            إلغاء
+          </Button>
+          <Button onClick={submit} disabled={isPending} className="gap-2">
+            {isPending && <Loader2 className="size-4 animate-spin" />}
+            إنشاء الحساب
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function PermissionsDialog({ user }: { user: UserRow }) {
+  const [open, setOpen] = useState(false)
+  const [perms, setPerms] = useState<PermissionMap>(() => parsePermissions(user.permissions))
+  const [isPending, startTransition] = useTransition()
+
+  function save() {
+    startTransition(async () => {
+      await setUserPermissions(user.id, perms)
+      toast({ title: "تم حفظ الصلاحيات", description: `تم تحديث صلاحيات ${user.name}.` })
+      setOpen(false)
+    })
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o)
+        if (o) setPerms(parsePermissions(user.permissions))
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline" className="gap-1.5 bg-transparent">
+          <SlidersHorizontal className="size-4" />
+          الصلاحيات
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>صلاحيات {user.name}</DialogTitle>
+          <DialogDescription>حدّد الأقسام التي يمكن لهذا المستخدم عرضها أو تعديلها.</DialogDescription>
+        </DialogHeader>
+        <PermissionsEditor value={perms} onChange={setPerms} />
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)} disabled={isPending}>
+            إلغاء
+          </Button>
+          <Button onClick={save} disabled={isPending} className="gap-2">
+            {isPending && <Loader2 className="size-4 animate-spin" />}
+            حفظ
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export function UsersManager({ users, currentUserId }: { users: UserRow[]; currentUserId: string }) {
   const [isPending, startTransition] = useTransition()
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -81,6 +266,13 @@ export function UsersManager({ users, currentUserId }: { users: UserRow[]; curre
 
   return (
     <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          {users.length} {users.length === 1 ? "مستخدم" : "مستخدمين"} في النظام
+        </p>
+        <CreateUserDialog />
+      </div>
+
       {pending.length > 0 && (
         <Card className="border-accent/40 bg-accent/5 p-4">
           <p className="text-sm font-medium text-foreground">
@@ -143,6 +335,7 @@ export function UsersManager({ users, currentUserId }: { users: UserRow[]; curre
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1.5">
+                        {!isSelf && u.role !== "admin" && <PermissionsDialog user={u} />}
                         {u.status === "pending" && (
                           <Button
                             size="sm"

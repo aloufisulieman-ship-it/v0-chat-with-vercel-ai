@@ -1,10 +1,17 @@
 "use server"
 
+import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
-import { user as userTable } from "@/lib/db/schema"
+import { user as userTable, account as accountTable } from "@/lib/db/schema"
 import { requireAdmin } from "@/lib/session"
 import { and, desc, eq, ne } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
+import { randomUUID } from "crypto"
+import {
+  serializePermissions,
+  parsePermissions,
+  type PermissionMap,
+} from "@/lib/permissions"
 
 export async function getUsers() {
   await requireAdmin()
@@ -15,10 +22,81 @@ export async function getUsers() {
       email: userTable.email,
       role: userTable.role,
       status: userTable.status,
+      permissions: userTable.permissions,
       createdAt: userTable.createdAt,
     })
     .from(userTable)
     .orderBy(desc(userTable.createdAt))
+}
+
+export async function createUser(input: {
+  name: string
+  email: string
+  password: string
+  role: "admin" | "manager" | "user"
+  permissions: PermissionMap
+}): Promise<{ success?: true; error?: string }> {
+  await requireAdmin()
+
+  const name = input.name.trim()
+  const email = input.email.trim().toLowerCase()
+  if (!name) return { error: "الاسم مطلوب" }
+  if (!email || !email.includes("@")) return { error: "البريد الإلكتروني غير صالح" }
+  if (!input.password || input.password.length < 8) return { error: "كلمة المرور يجب أن تكون 8 أحرف على الأقل" }
+
+  const existing = await db.select({ id: userTable.id }).from(userTable).where(eq(userTable.email, email)).limit(1)
+  if (existing[0]) return { error: "هذا البريد الإلكتروني مستخدم بالفعل" }
+
+  try {
+    const ctx = await auth.$context
+    const hash = await ctx.password.hash(input.password)
+    const created = await ctx.internalAdapter.createUser({ name, email, emailVerified: false })
+    const userId = created.id
+
+    // Admin-created accounts are approved immediately with the chosen role/permissions.
+    await db
+      .update(userTable)
+      .set({
+        name,
+        role: input.role,
+        status: "approved",
+        permissions: serializePermissions(input.permissions),
+        updatedAt: new Date(),
+      })
+      .where(eq(userTable.id, userId))
+
+    // Credential account holding the hashed password (Better Auth email/password format).
+    await db.insert(accountTable).values({
+      id: randomUUID(),
+      accountId: userId,
+      providerId: "credential",
+      userId,
+      password: hash,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+
+    revalidatePath("/users")
+    return { success: true }
+  } catch (e) {
+    console.log("[v0] createUser error:", e instanceof Error ? e.message : String(e))
+    return { error: "تعذّر إنشاء المستخدم. حاول مرة أخرى." }
+  }
+}
+
+export async function setUserPermissions(id: string, permissions: PermissionMap) {
+  await requireAdmin()
+  await db
+    .update(userTable)
+    .set({ permissions: serializePermissions(permissions), updatedAt: new Date() })
+    .where(eq(userTable.id, id))
+  revalidatePath("/users")
+}
+
+export async function getUserPermissions(id: string): Promise<PermissionMap> {
+  await requireAdmin()
+  const rows = await db.select({ permissions: userTable.permissions }).from(userTable).where(eq(userTable.id, id)).limit(1)
+  return parsePermissions(rows[0]?.permissions)
 }
 
 export async function approveUser(id: string) {
@@ -29,7 +107,6 @@ export async function approveUser(id: string) {
 
 export async function rejectUser(id: string) {
   const admin = await requireAdmin()
-  // Cannot reject yourself.
   if (id === admin.id) return
   await db
     .update(userTable)
