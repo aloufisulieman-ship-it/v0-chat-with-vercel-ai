@@ -7,11 +7,7 @@ import { requireAdmin } from "@/lib/session"
 import { and, desc, eq, ne } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { randomUUID } from "crypto"
-import {
-  serializePermissions,
-  parsePermissions,
-  type PermissionMap,
-} from "@/lib/permissions"
+import { serializePermissions } from "@/lib/permissions"
 
 export async function getUsers() {
   await requireAdmin()
@@ -22,6 +18,7 @@ export async function getUsers() {
       email: userTable.email,
       role: userTable.role,
       status: userTable.status,
+      department: userTable.department,
       permissions: userTable.permissions,
       createdAt: userTable.createdAt,
     })
@@ -34,7 +31,8 @@ export async function createUser(input: {
   email: string
   password: string
   role: "admin" | "manager" | "user"
-  permissions: PermissionMap
+  department: string
+  permissions: string[]
 }): Promise<{ success?: true; error?: string }> {
   await requireAdmin()
 
@@ -53,13 +51,14 @@ export async function createUser(input: {
     const created = await ctx.internalAdapter.createUser({ name, email, emailVerified: false })
     const userId = created.id
 
-    // Admin-created accounts are approved immediately with the chosen role/permissions.
+    // Admin-created accounts are approved immediately with the chosen role/department/permissions.
     await db
       .update(userTable)
       .set({
         name,
         role: input.role,
         status: "approved",
+        department: input.department,
         permissions: serializePermissions(input.permissions),
         updatedAt: new Date(),
       })
@@ -84,19 +83,18 @@ export async function createUser(input: {
   }
 }
 
-export async function setUserPermissions(id: string, permissions: PermissionMap) {
+// Update a user's department and module permissions (admin only).
+export async function updateUserPermissions(userId: string, department: string, permissions: string[]) {
   await requireAdmin()
   await db
     .update(userTable)
-    .set({ permissions: serializePermissions(permissions), updatedAt: new Date() })
-    .where(eq(userTable.id, id))
+    .set({
+      department,
+      permissions: serializePermissions(permissions),
+      updatedAt: new Date(),
+    })
+    .where(eq(userTable.id, userId))
   revalidatePath("/users")
-}
-
-export async function getUserPermissions(id: string): Promise<PermissionMap> {
-  await requireAdmin()
-  const rows = await db.select({ permissions: userTable.permissions }).from(userTable).where(eq(userTable.id, id)).limit(1)
-  return parsePermissions(rows[0]?.permissions)
 }
 
 export async function approveUser(id: string) {

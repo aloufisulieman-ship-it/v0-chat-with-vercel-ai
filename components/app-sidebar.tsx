@@ -23,23 +23,23 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { authClient } from "@/lib/auth-client"
-import { canView, type SectionKey } from "@/lib/permissions"
+import { hasModuleAccess, type ModuleKey } from "@/lib/permissions"
 
-// section: when set, the item is gated by the user's view permission for that section.
-const nav: { href: string; label: string; icon: typeof LayoutDashboard; section?: SectionKey }[] = [
-  { href: "/", label: "لوحة التحكم", icon: LayoutDashboard },
-  { href: "/incidents", label: "الحوادث", icon: AlertTriangle, section: "incidents" },
-  { href: "/inspections", label: "التفتيش", icon: ClipboardCheck, section: "inspections" },
-  { href: "/risks", label: "تقييم المخاطر", icon: ShieldAlert, section: "risks" },
-  { href: "/permits", label: "تصاريح العمل", icon: FileSignature, section: "permits" },
-  { href: "/training", label: "التدريب", icon: GraduationCap, section: "training" },
-  { href: "/ppe", label: "معدات الوقاية", icon: HardHat, section: "ppe" },
-  { href: "/violations", label: "المخالفات", icon: Ban, section: "violations" },
-  { href: "/actions", label: "الإجراءات التصحيحية", icon: CheckSquare, section: "actions" },
-  { href: "/audits", label: "التدقيق", icon: ClipboardList, section: "audits" },
-  { href: "/documents", label: "الوثائق", icon: FolderKanban, section: "documents" },
-  { href: "/reports", label: "التقارير", icon: BarChart3, section: "reports" },
-  { href: "/settings", label: "الإعدادات", icon: Settings },
+// module: gates the item by the user's module access. Admins always see everything.
+const nav: { href: string; label: string; icon: typeof LayoutDashboard; module: ModuleKey }[] = [
+  { href: "/", label: "لوحة التحكم", icon: LayoutDashboard, module: "dashboard" },
+  { href: "/incidents", label: "الحوادث", icon: AlertTriangle, module: "incidents" },
+  { href: "/inspections", label: "التفتيش", icon: ClipboardCheck, module: "inspections" },
+  { href: "/risks", label: "تقييم المخاطر", icon: ShieldAlert, module: "risks" },
+  { href: "/permits", label: "تصاريح العمل", icon: FileSignature, module: "permits" },
+  { href: "/training", label: "التدريب", icon: GraduationCap, module: "training" },
+  { href: "/ppe", label: "معدات الوقاية", icon: HardHat, module: "ppe" },
+  { href: "/violations", label: "المخالفات", icon: Ban, module: "violations" },
+  { href: "/actions", label: "الإجراءات التصحيحية", icon: CheckSquare, module: "actions" },
+  { href: "/audits", label: "التدقيق", icon: ClipboardList, module: "audits" },
+  { href: "/documents", label: "الوثائق", icon: FolderKanban, module: "documents" },
+  { href: "/reports", label: "التقارير", icon: BarChart3, module: "reports" },
+  { href: "/settings", label: "الإعدادات", icon: Settings, module: "settings" },
 ]
 
 function initials(name: string) {
@@ -60,7 +60,7 @@ export function AppSidebar({
   const pathname = usePathname()
   const router = useRouter()
 
-  const visible = nav.filter((item) => !item.section || canView(user?.role, user?.permissions, item.section))
+  const visible = nav.filter((item) => hasModuleAccess(user?.role, user?.permissions, item.module))
   const items =
     user?.role === "admin" ? [...visible, { href: "/users", label: "إدارة المستخدمين", icon: Users }] : visible
 

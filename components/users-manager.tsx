@@ -29,9 +29,10 @@ import {
   setUserRole,
   deleteUser,
   createUser,
-  setUserPermissions,
+  updateUserPermissions,
 } from "@/app/actions/users"
-import { defaultAccess, parsePermissions, type PermissionMap } from "@/lib/permissions"
+import { parsePermissions } from "@/lib/permissions"
+import { departmentOptions, departmentLabels, moduleLabels } from "@/lib/labels"
 import { toast } from "@/hooks/use-toast"
 
 type UserRow = {
@@ -40,6 +41,7 @@ type UserRow = {
   email: string
   role: string
   status: string
+  department: string
   permissions: string
   createdAt: Date
 }
@@ -87,13 +89,37 @@ function RoleSelect({
   )
 }
 
+function DepartmentSelect({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (v: string) => void
+}) {
+  return (
+    <Select value={value || undefined} onValueChange={onChange}>
+      <SelectTrigger>
+        <SelectValue placeholder="اختر القسم" />
+      </SelectTrigger>
+      <SelectContent>
+        {departmentOptions.map((d) => (
+          <SelectItem key={d.value} value={d.value}>
+            {d.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
+
 function CreateUserDialog() {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [role, setRole] = useState<"admin" | "manager" | "user">("user")
-  const [perms, setPerms] = useState<PermissionMap>(defaultAccess())
+  const [department, setDepartment] = useState("")
+  const [perms, setPerms] = useState<string[]>([])
   const [isPending, startTransition] = useTransition()
 
   function reset() {
@@ -101,12 +127,13 @@ function CreateUserDialog() {
     setEmail("")
     setPassword("")
     setRole("user")
-    setPerms(defaultAccess())
+    setDepartment("")
+    setPerms([])
   }
 
   function submit() {
     startTransition(async () => {
-      const res = await createUser({ name, email, password, role, permissions: perms })
+      const res = await createUser({ name, email, password, role, department, permissions: perms })
       if (res.error) {
         toast({ title: "تعذّر الإنشاء", description: res.error, variant: "destructive" })
         return
@@ -134,7 +161,7 @@ function CreateUserDialog() {
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>إضافة مستخدم جديد</DialogTitle>
-          <DialogDescription>أنشئ حساباً وحدّد دوره وصلاحياته لكل قسم.</DialogDescription>
+          <DialogDescription>أنشئ حساباً وحدّد قسمه والصفحات المسموح له بالوصول إليها.</DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
@@ -165,6 +192,10 @@ function CreateUserDialog() {
             />
           </div>
           <div className="grid gap-2">
+            <Label>القسم</Label>
+            <DepartmentSelect value={department} onChange={setDepartment} />
+          </div>
+          <div className="grid gap-2">
             <Label>الدور</Label>
             <Select value={role} onValueChange={(v) => setRole(v as "admin" | "manager" | "user")}>
               <SelectTrigger>
@@ -177,13 +208,13 @@ function CreateUserDialog() {
               </SelectContent>
             </Select>
             {role === "admin" && (
-              <p className="text-xs text-muted-foreground">مدير النظام يملك صلاحية كاملة على جميع الأقسام.</p>
+              <p className="text-xs text-muted-foreground">مدير النظام يملك صلاحية كاملة على جميع الصفحات.</p>
             )}
           </div>
 
           {role !== "admin" && (
             <div className="grid gap-2">
-              <Label>الصلاحيات لكل قسم</Label>
+              <Label>الصفحات المسموح بها</Label>
               <PermissionsEditor value={perms} onChange={setPerms} />
             </div>
           )}
@@ -205,12 +236,13 @@ function CreateUserDialog() {
 
 function PermissionsDialog({ user }: { user: UserRow }) {
   const [open, setOpen] = useState(false)
-  const [perms, setPerms] = useState<PermissionMap>(() => parsePermissions(user.permissions))
+  const [department, setDepartment] = useState(user.department || "")
+  const [perms, setPerms] = useState<string[]>(() => parsePermissions(user.permissions))
   const [isPending, startTransition] = useTransition()
 
   function save() {
     startTransition(async () => {
-      await setUserPermissions(user.id, perms)
+      await updateUserPermissions(user.id, department, perms)
       toast({ title: "تم حفظ الصلاحيات", description: `تم تحديث صلاحيات ${user.name}.` })
       setOpen(false)
     })
@@ -221,7 +253,10 @@ function PermissionsDialog({ user }: { user: UserRow }) {
       open={open}
       onOpenChange={(o) => {
         setOpen(o)
-        if (o) setPerms(parsePermissions(user.permissions))
+        if (o) {
+          setDepartment(user.department || "")
+          setPerms(parsePermissions(user.permissions))
+        }
       }}
     >
       <DialogTrigger asChild>
@@ -233,9 +268,18 @@ function PermissionsDialog({ user }: { user: UserRow }) {
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>صلاحيات {user.name}</DialogTitle>
-          <DialogDescription>حدّد الأقسام التي يمكن لهذا المستخدم عرضها أو تعديلها.</DialogDescription>
+          <DialogDescription>حدّد القسم والصفحات التي يمكن لهذا المستخدم الوصول إليها.</DialogDescription>
         </DialogHeader>
-        <PermissionsEditor value={perms} onChange={setPerms} />
+        <div className="flex flex-col gap-4">
+          <div className="grid gap-2">
+            <Label>القسم</Label>
+            <DepartmentSelect value={department} onChange={setDepartment} />
+          </div>
+          <div className="grid gap-2">
+            <Label>الصفحات المسموح بها</Label>
+            <PermissionsEditor value={perms} onChange={setPerms} />
+          </div>
+        </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)} disabled={isPending}>
             إلغاء
@@ -247,6 +291,31 @@ function PermissionsDialog({ user }: { user: UserRow }) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function PermissionsSummary({ user }: { user: UserRow }) {
+  if (user.role === "admin") {
+    return <span className="text-xs font-medium text-primary">كل الصلاحيات</span>
+  }
+  const mods = parsePermissions(user.permissions)
+  if (mods.length === 0) {
+    return <span className="text-xs text-muted-foreground">لا توجد صلاحيات</span>
+  }
+  const shown = mods.slice(0, 3).map((m) => moduleLabels[m] ?? m)
+  return (
+    <div className="flex flex-wrap gap-1">
+      {shown.map((label) => (
+        <span key={label} className="inline-flex rounded-full bg-muted px-2 py-0.5 text-xs text-foreground">
+          {label}
+        </span>
+      ))}
+      {mods.length > 3 && (
+        <span className="inline-flex rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+          +{mods.length - 3}
+        </span>
+      )}
+    </div>
   )
 }
 
@@ -288,8 +357,10 @@ export function UsersManager({ users, currentUserId }: { users: UserRow[]; curre
           <table className="w-full text-right text-sm">
             <thead className="border-b border-border bg-muted/40 text-xs text-muted-foreground">
               <tr>
-                <th className="px-4 py-3 font-medium">المستخدم</th>
-                <th className="px-4 py-3 font-medium">البريد الإلكتروني</th>
+                <th className="px-4 py-3 font-medium">الاسم</th>
+                <th className="px-4 py-3 font-medium">البريد</th>
+                <th className="px-4 py-3 font-medium">القسم</th>
+                <th className="px-4 py-3 font-medium">الصلاحيات</th>
                 <th className="px-4 py-3 font-medium">الحالة</th>
                 <th className="px-4 py-3 font-medium">الدور</th>
                 <th className="px-4 py-3 font-medium text-center">الإجراءات</th>
@@ -310,6 +381,12 @@ export function UsersManager({ users, currentUserId }: { users: UserRow[]; curre
                     </td>
                     <td className="px-4 py-3 text-muted-foreground" dir="ltr">
                       {u.email}
+                    </td>
+                    <td className="px-4 py-3 text-foreground">
+                      {u.department ? departmentLabels[u.department] ?? u.department : "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <PermissionsSummary user={u} />
                     </td>
                     <td className="px-4 py-3">
                       <span

@@ -4,7 +4,7 @@ import { user as userTable } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
-import { canEdit, canView, type SectionKey } from "@/lib/permissions"
+import { hasModuleAccess, type ModuleKey } from "@/lib/permissions"
 
 export type AppUser = {
   id: string
@@ -12,6 +12,7 @@ export type AppUser = {
   email: string
   role: string
   status: string
+  department: string
   permissions: string
 }
 
@@ -21,6 +22,7 @@ const userColumns = {
   email: userTable.email,
   role: userTable.role,
   status: userTable.status,
+  department: userTable.department,
   permissions: userTable.permissions,
 }
 
@@ -47,18 +49,18 @@ export async function requireAdmin(): Promise<AppUser> {
   return u
 }
 
-// Requires the user to be able to VIEW a given section, else sends them home.
-export async function requireView(section: SectionKey): Promise<AppUser> {
+// Requires the user to have access to a given module, else sends them home.
+export async function requireModule(module: ModuleKey): Promise<AppUser> {
   const u = await requireUser()
-  if (!canView(u.role, u.permissions, section)) redirect("/")
+  if (!hasModuleAccess(u.role, u.permissions, module)) redirect("/")
   return u
 }
 
-// Throws when the user cannot EDIT a section. Use inside server actions.
-export async function requireEditUserId(section: SectionKey): Promise<string> {
+// Throws when the user cannot access a module. Use inside server actions.
+export async function requireModuleUserId(module: ModuleKey): Promise<string> {
   const u = await requireUser()
-  if (!canEdit(u.role, u.permissions, section)) {
-    throw new Error("ليس لديك صلاحية التعديل في هذا القسم")
+  if (!hasModuleAccess(u.role, u.permissions, module)) {
+    throw new Error("ليس لديك صلاحية للوصول إلى هذا القسم")
   }
   return u.id
 }

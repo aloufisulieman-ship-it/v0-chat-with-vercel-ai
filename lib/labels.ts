@@ -87,6 +87,39 @@ export const ppeStatusOptions = [
   { value: "low_stock", label: "مخزون منخفض" },
 ]
 
+export const departmentOptions = [
+  { value: "hr", label: "الموارد البشرية" },
+  { value: "workshop", label: "الورشة" },
+  { value: "inspector", label: "مفتش السلامة" },
+  { value: "gm", label: "المدير العام" },
+  { value: "operations", label: "العمليات" },
+]
+export const departmentLabels: Record<string, string> = Object.fromEntries(
+  departmentOptions.map((d) => [d.value, d.label]),
+)
+
+// الصفحات/الوحدات المتاحة للصلاحيات
+export const moduleOptions = [
+  { value: "dashboard", label: "لوحة التحكم" },
+  { value: "incidents", label: "الحوادث" },
+  { value: "inspections", label: "التفتيش" },
+  { value: "risks", label: "تقييم المخاطر" },
+  { value: "permits", label: "تصاريح العمل" },
+  { value: "training", label: "التدريب" },
+  { value: "ppe", label: "معدات الوقاية" },
+  { value: "violations", label: "المخالفات" },
+  { value: "actions", label: "الإجراءات التصحيحية" },
+  { value: "audits", label: "التدقيق" },
+  { value: "documents", label: "الوثائق" },
+  { value: "reports", label: "التقارير" },
+  { value: "settings", label: "الإعدادات" },
+  { value: "users", label: "إدارة المستخدمين" },
+] as const
+export const moduleLabels: Record<string, string> = Object.fromEntries(
+  moduleOptions.map((m) => [m.value, m.label]),
+)
+export type ModuleKey = (typeof moduleOptions)[number]["value"]
+
 export function riskLevel(score: number): { value: string; label: string } {
   if (score >= 15) return { value: "critical", label: "حرج" }
   if (score >= 9) return { value: "high", label: "عالٍ" }
