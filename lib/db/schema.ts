@@ -175,6 +175,7 @@ export const violation = pgTable("violation", {
   companyName: text("companyName").default(""),
   employeeName: text("employeeName").notNull(),
   employeeNo: text("employeeNo").default(""),
+  nationality: text("nationality").default(""),
   violationDate: date("violationDate"),
   violationTime: text("violationTime").default(""),
   place: text("place").default(""),
@@ -183,6 +184,9 @@ export const violation = pgTable("violation", {
   evidences: text("evidences").default(""),
   proposedAction: text("proposedAction").default(""),
   status: text("status").default("open"),
+  editorSignature: text("editor_signature").default(""),
+  violatorSignature: text("violator_signature").default(""),
+  managerSignature: text("manager_signature").default(""),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
