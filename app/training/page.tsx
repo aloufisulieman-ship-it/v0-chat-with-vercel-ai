@@ -6,7 +6,7 @@ import { StatusBadge } from "@/components/status-badge"
 import { RecordDialog, type FieldDef } from "@/components/record-dialog"
 import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
-import { requireUser } from "@/lib/session"
+import { requireModule } from "@/lib/session"
 import { getTrainings, createTraining, deleteTraining } from "@/app/actions/hse"
 import { inspectionStatusOptions, statusLabels } from "@/lib/labels"
 
@@ -21,7 +21,7 @@ const fields: FieldDef[] = [
 ]
 
 export default async function TrainingPage() {
-  const user = await requireUser()
+  const user = await requireModule("training")
   const trainings = await getTrainings()
 
   const totalAttendees = trainings.reduce((a, b) => a + (b.attendees ?? 0), 0)

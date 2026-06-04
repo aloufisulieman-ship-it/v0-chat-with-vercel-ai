@@ -60,7 +60,11 @@ export function AppSidebar({
   const pathname = usePathname()
   const router = useRouter()
 
-  const visible = nav.filter((item) => hasModuleAccess(user?.role, user?.permissions, item.module))
+  // Dashboard and settings are always available so no user gets locked out (settings holds password change).
+  const alwaysOn: ModuleKey[] = ["dashboard", "settings"]
+  const visible = nav.filter(
+    (item) => alwaysOn.includes(item.module) || hasModuleAccess(user?.role, user?.permissions, item.module),
+  )
   const items =
     user?.role === "admin" ? [...visible, { href: "/users", label: "إدارة المستخدمين", icon: Users }] : visible
 

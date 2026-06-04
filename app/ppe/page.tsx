@@ -5,7 +5,7 @@ import { DataTable, type Column } from "@/components/data-table"
 import { RecordDialog, type FieldDef } from "@/components/record-dialog"
 import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
-import { requireUser } from "@/lib/session"
+import { requireModule } from "@/lib/session"
 import { getPpe, createPpe, deletePpe } from "@/app/actions/hse"
 import { cn } from "@/lib/utils"
 
@@ -33,7 +33,7 @@ const fields: FieldDef[] = [
 ]
 
 export default async function PPEPage() {
-  const user = await requireUser()
+  const user = await requireModule("ppe")
   const ppeStock = await getPpe()
 
   const isLow = (p: PPEItem) => (p.inStock ?? 0) < (p.minLevel ?? 0)

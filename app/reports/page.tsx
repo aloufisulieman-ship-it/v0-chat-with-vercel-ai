@@ -3,12 +3,12 @@ import { AppShell } from "@/components/app-shell"
 import { Card } from "@/components/ui/card"
 import { KpiCard } from "@/components/kpi-card"
 import { IncidentTrendChart, IncidentTypeChart, SeverityChart } from "@/components/dashboard-charts"
-import { requireUser } from "@/lib/session"
+import { requireModule } from "@/lib/session"
 import { getDashboardData } from "@/app/actions/hse"
 import { incidentTypeLabels } from "@/lib/labels"
 
 export default async function ReportsPage() {
-  const user = await requireUser()
+  const user = await requireModule("reports")
   const { incidents, inspections, permits, risks, actions } = await getDashboardData()
 
   const openIncidents = incidents.filter((i) => i.status !== "closed").length

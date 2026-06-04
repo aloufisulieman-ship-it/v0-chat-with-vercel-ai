@@ -6,7 +6,7 @@ import { StatusBadge, SeverityBadge } from "@/components/status-badge"
 import { RecordDialog, type FieldDef } from "@/components/record-dialog"
 import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
-import { requireUser } from "@/lib/session"
+import { requireModule } from "@/lib/session"
 import { getIncidents, createIncident, deleteIncident } from "@/app/actions/hse"
 import { incidentTypeLabels, severityLabels, statusLabels } from "@/lib/labels"
 import { severityOptions, statusOptions, incidentTypeOptions } from "@/lib/labels"
@@ -25,7 +25,7 @@ const fields: FieldDef[] = [
 ]
 
 export default async function IncidentsPage() {
-  const user = await requireUser()
+  const user = await requireModule("incidents")
   const incidents = await getIncidents()
 
   const open = incidents.filter((i) => i.status === "open" || i.status === "in_progress").length

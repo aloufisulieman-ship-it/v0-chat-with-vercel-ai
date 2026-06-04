@@ -6,7 +6,7 @@ import { StatusBadge } from "@/components/status-badge"
 import { RecordDialog, type FieldDef } from "@/components/record-dialog"
 import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
-import { requireUser } from "@/lib/session"
+import { requireModule } from "@/lib/session"
 import { getInspections, createInspection, deleteInspection } from "@/app/actions/hse"
 import { inspectionStatusOptions, statusLabels } from "@/lib/labels"
 import { cn } from "@/lib/utils"
@@ -36,7 +36,7 @@ const fields: FieldDef[] = [
 ]
 
 export default async function InspectionsPage() {
-  const user = await requireUser()
+  const user = await requireModule("inspections")
   const inspections = await getInspections()
 
   const avg = inspections.length ? Math.round(inspections.reduce((a, b) => a + (b.compliance ?? 0), 0) / inspections.length) : 0

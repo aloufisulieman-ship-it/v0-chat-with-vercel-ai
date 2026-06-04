@@ -6,7 +6,7 @@ import { StatusBadge } from "@/components/status-badge"
 import { RecordDialog, type FieldDef } from "@/components/record-dialog"
 import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
-import { requireUser } from "@/lib/session"
+import { requireModule } from "@/lib/session"
 import { getPermits, createPermit, deletePermit } from "@/app/actions/hse"
 import { permitTypeLabels, permitTypeOptions, permitStatusOptions, statusLabels } from "@/lib/labels"
 
@@ -23,7 +23,7 @@ const fields: FieldDef[] = [
 ]
 
 export default async function PermitsPage() {
-  const user = await requireUser()
+  const user = await requireModule("permits")
   const permits = await getPermits()
 
   const active = permits.filter((p) => p.status === "active" || p.status === "approved").length

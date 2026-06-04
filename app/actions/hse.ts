@@ -101,7 +101,7 @@ export async function getInspections() {
   return db.select().from(inspection).where(eq(inspection.userId, userId)).orderBy(desc(inspection.createdAt))
 }
 export async function createInspection(formData: FormData) {
-  const userId = await getUserId()
+  const userId = await requireModuleUserId("inspections")
   await db.insert(inspection).values({
     userId,
     title: str(formData.get("title")),
@@ -116,7 +116,7 @@ export async function createInspection(formData: FormData) {
   revalidatePath("/")
 }
 export async function deleteInspection(id: number) {
-  const userId = await getUserId()
+  const userId = await requireModuleUserId("inspections")
   await db.delete(inspection).where(and(eq(inspection.id, id), eq(inspection.userId, userId)))
   revalidatePath("/inspections")
 }
@@ -127,7 +127,7 @@ export async function getPermits() {
   return db.select().from(permit).where(eq(permit.userId, userId)).orderBy(desc(permit.createdAt))
 }
 export async function createPermit(formData: FormData) {
-  const userId = await getUserId()
+  const userId = await requireModuleUserId("permits")
   await db.insert(permit).values({
     userId,
     title: str(formData.get("title")),
@@ -142,7 +142,7 @@ export async function createPermit(formData: FormData) {
   revalidatePath("/")
 }
 export async function deletePermit(id: number) {
-  const userId = await getUserId()
+  const userId = await requireModuleUserId("permits")
   await db.delete(permit).where(and(eq(permit.id, id), eq(permit.userId, userId)))
   revalidatePath("/permits")
 }
@@ -153,7 +153,7 @@ export async function getRisks() {
   return db.select().from(risk).where(eq(risk.userId, userId)).orderBy(desc(risk.createdAt))
 }
 export async function createRisk(formData: FormData) {
-  const userId = await getUserId()
+  const userId = await requireModuleUserId("risks")
   await db.insert(risk).values({
     userId,
     hazard: str(formData.get("hazard")),
@@ -168,7 +168,7 @@ export async function createRisk(formData: FormData) {
   revalidatePath("/")
 }
 export async function deleteRisk(id: number) {
-  const userId = await getUserId()
+  const userId = await requireModuleUserId("risks")
   await db.delete(risk).where(and(eq(risk.id, id), eq(risk.userId, userId)))
   revalidatePath("/risks")
 }
@@ -179,7 +179,7 @@ export async function getTrainings() {
   return db.select().from(training).where(eq(training.userId, userId)).orderBy(desc(training.createdAt))
 }
 export async function createTraining(formData: FormData) {
-  const userId = await getUserId()
+  const userId = await requireModuleUserId("training")
   await db.insert(training).values({
     userId,
     title: str(formData.get("title")),
@@ -191,7 +191,7 @@ export async function createTraining(formData: FormData) {
   revalidatePath("/training")
 }
 export async function deleteTraining(id: number) {
-  const userId = await getUserId()
+  const userId = await requireModuleUserId("training")
   await db.delete(training).where(and(eq(training.id, id), eq(training.userId, userId)))
   revalidatePath("/training")
 }
@@ -202,7 +202,7 @@ export async function getPpe() {
   return db.select().from(ppe).where(eq(ppe.userId, userId)).orderBy(desc(ppe.createdAt))
 }
 export async function createPpe(formData: FormData) {
-  const userId = await getUserId()
+  const userId = await requireModuleUserId("ppe")
   await db.insert(ppe).values({
     userId,
     name: str(formData.get("name")),
@@ -215,7 +215,7 @@ export async function createPpe(formData: FormData) {
   revalidatePath("/ppe")
 }
 export async function deletePpe(id: number) {
-  const userId = await getUserId()
+  const userId = await requireModuleUserId("ppe")
   await db.delete(ppe).where(and(eq(ppe.id, id), eq(ppe.userId, userId)))
   revalidatePath("/ppe")
 }
@@ -226,7 +226,7 @@ export async function getActions() {
   return db.select().from(correctiveAction).where(eq(correctiveAction.userId, userId)).orderBy(desc(correctiveAction.createdAt))
 }
 export async function createAction(formData: FormData) {
-  const userId = await getUserId()
+  const userId = await requireModuleUserId("actions")
   await db.insert(correctiveAction).values({
     userId,
     title: str(formData.get("title")),
@@ -240,7 +240,7 @@ export async function createAction(formData: FormData) {
   revalidatePath("/")
 }
 export async function deleteAction(id: number) {
-  const userId = await getUserId()
+  const userId = await requireModuleUserId("actions")
   await db.delete(correctiveAction).where(and(eq(correctiveAction.id, id), eq(correctiveAction.userId, userId)))
   revalidatePath("/actions")
 }
@@ -251,7 +251,7 @@ export async function getAudits() {
   return db.select().from(audit).where(eq(audit.userId, userId)).orderBy(desc(audit.createdAt))
 }
 export async function createAudit(formData: FormData) {
-  const userId = await getUserId()
+  const userId = await requireModuleUserId("audits")
   await db.insert(audit).values({
     userId,
     title: str(formData.get("title")),
@@ -264,7 +264,7 @@ export async function createAudit(formData: FormData) {
   revalidatePath("/audits")
 }
 export async function deleteAudit(id: number) {
-  const userId = await getUserId()
+  const userId = await requireModuleUserId("audits")
   await db.delete(audit).where(and(eq(audit.id, id), eq(audit.userId, userId)))
   revalidatePath("/audits")
 }
@@ -275,7 +275,7 @@ export async function getDocuments() {
   return db.select().from(document).where(eq(document.userId, userId)).orderBy(desc(document.createdAt))
 }
 export async function createDocument(formData: FormData) {
-  const userId = await getUserId()
+  const userId = await requireModuleUserId("documents")
   await db.insert(document).values({
     userId,
     title: str(formData.get("title")),
@@ -288,7 +288,7 @@ export async function createDocument(formData: FormData) {
   revalidatePath("/documents")
 }
 export async function deleteDocument(id: number) {
-  const userId = await getUserId()
+  const userId = await requireModuleUserId("documents")
   await db.delete(document).where(and(eq(document.id, id), eq(document.userId, userId)))
   revalidatePath("/documents")
 }
@@ -299,7 +299,7 @@ export async function getViolations() {
   return db.select().from(violation).where(eq(violation.userId, userId)).orderBy(desc(violation.createdAt))
 }
 export async function createViolation(formData: FormData) {
-  const userId = await getUserId()
+  const userId = await requireModuleUserId("violations")
   await db.insert(violation).values({
     userId,
     documentNo: str(formData.get("documentNo"), "MHS-IMS-PR-HSE-647"),
@@ -319,7 +319,7 @@ export async function createViolation(formData: FormData) {
   revalidatePath("/")
 }
 export async function deleteViolation(id: number) {
-  const userId = await getUserId()
+  const userId = await requireModuleUserId("violations")
   await db.delete(violation).where(and(eq(violation.id, id), eq(violation.userId, userId)))
   revalidatePath("/violations")
 }

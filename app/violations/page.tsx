@@ -6,7 +6,7 @@ import { StatusBadge } from "@/components/status-badge"
 import { RecordDialog, type FieldDef } from "@/components/record-dialog"
 import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
-import { requireUser } from "@/lib/session"
+import { requireModule } from "@/lib/session"
 import { getViolations, createViolation, deleteViolation } from "@/app/actions/hse"
 import { violationStatusOptions, statusLabels } from "@/lib/labels"
 
@@ -28,7 +28,7 @@ const fields: FieldDef[] = [
 ]
 
 export default async function ViolationsPage() {
-  const user = await requireUser()
+  const user = await requireModule("violations")
   const violations = await getViolations()
 
   const open = violations.filter((v) => v.status === "open" || v.status === "in_progress").length

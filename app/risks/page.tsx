@@ -7,7 +7,7 @@ import { RecordDialog, type FieldDef } from "@/components/record-dialog"
 import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { RiskMatrix } from "@/components/risk-matrix"
-import { requireUser } from "@/lib/session"
+import { requireModule } from "@/lib/session"
 import { getRisks, createRisk, deleteRisk } from "@/app/actions/hse"
 import { statusOptions, riskLevel, statusLabels } from "@/lib/labels"
 
@@ -26,7 +26,7 @@ const fields: FieldDef[] = [
 ]
 
 export default async function RisksPage() {
-  const user = await requireUser()
+  const user = await requireModule("risks")
   const risks = await getRisks()
 
   const scored = risks.map((r) => ({ ...r, score: (r.likelihood ?? 1) * (r.consequence ?? 1) }))

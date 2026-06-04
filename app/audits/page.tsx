@@ -6,7 +6,7 @@ import { StatusBadge } from "@/components/status-badge"
 import { RecordDialog, type FieldDef } from "@/components/record-dialog"
 import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
-import { requireUser } from "@/lib/session"
+import { requireModule } from "@/lib/session"
 import { getAudits, createAudit, deleteAudit } from "@/app/actions/hse"
 import { inspectionStatusOptions, statusLabels } from "@/lib/labels"
 import { cn } from "@/lib/utils"
@@ -35,7 +35,7 @@ const fields: FieldDef[] = [
 ]
 
 export default async function AuditsPage() {
-  const user = await requireUser()
+  const user = await requireModule("audits")
   const audits = await getAudits()
 
   const avg = audits.length ? Math.round(audits.reduce((a, b) => a + (b.score ?? 0), 0) / audits.length) : 0
