@@ -14,6 +14,7 @@ import {
   audit,
   document,
   violation,
+  user,
 } from "@/lib/db/schema"
 import { and, desc, eq } from "drizzle-orm"
 import { headers } from "next/headers"
@@ -295,17 +296,17 @@ export async function deleteDocument(id: number) {
 
 /* ---------------- Violations ---------------- */
 export async function getViolations() {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) throw new Error("Unauthorized")
-  const currentUser = session.user as any
+  const userId = await requireModuleUserId("violations")
+  const userRows = await db.select().from(user).where(eq(user.id, userId)).limit(1)
+  const u = userRows[0] as any
   const isManager =
-    currentUser.role === "admin" ||
-    currentUser.department === "المدير العام" ||
-    currentUser.department === "مفتش السلامة"
+    u?.role === "admin" ||
+    u?.department === "المدير العام" ||
+    u?.department === "مفتش السلامة"
   if (isManager) {
     return db.select().from(violation).orderBy(desc(violation.createdAt))
   }
-  return db.select().from(violation).where(eq(violation.userId, currentUser.id)).orderBy(desc(violation.createdAt))
+  return db.select().from(violation).where(eq(violation.userId, userId)).orderBy(desc(violation.createdAt))
 }
 
 export async function createViolationFull(formData: FormData) {
