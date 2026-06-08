@@ -292,6 +292,22 @@ export async function deleteDocument(id: number) {
   await db.delete(document).where(and(eq(document.id, id), eq(document.userId, userId)))
   revalidatePath("/documents")
 }
+
+/* ---------------- Violations ---------------- */
+export async function getViolations() {
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (!session?.user) throw new Error("Unauthorized")
+  const currentUser = session.user as any
+  const isManager =
+    currentUser.role === "admin" ||
+    currentUser.department === "المدير العام" ||
+    currentUser.department === "مفتش السلامة"
+  if (isManager) {
+    return db.select().from(violation).orderBy(desc(violation.createdAt))
+  }
+  return db.select().from(violation).where(eq(violation.userId, currentUser.id)).orderBy(desc(violation.createdAt))
+}
+
 export async function createViolationFull(formData: FormData) {
   const userId = await requireModuleUserId("violations")
   const year = new Date().getFullYear()
@@ -303,7 +319,8 @@ export async function createViolationFull(formData: FormData) {
   const extraDesc = str(formData.get("description"))
   const fullDescription = extraDesc ? `${violationType} — ${extraDesc}` : violationType
   await db.insert(violation).values({
-    userId, documentNo,
+    userId,
+    documentNo,
     companyName: str(formData.get("companyName")),
     employeeName: str(formData.get("employeeName")),
     employeeNo: str(formData.get("employeeNo")),
@@ -322,4 +339,23 @@ export async function createViolationFull(formData: FormData) {
   })
   revalidatePath("/violations")
   revalidatePath("/")
+}
+
+export async function deleteViolation(id: number) {
+  const userId = await requireModuleUserId("violations")
+  await db.delete(violation).where(and(eq(violation.id, id), eq(violation.userId, userId)))
+  revalidatePath("/violations")
+}
+
+/* ---------------- Dashboard aggregates ---------------- */
+export async function getDashboardData() {
+  const userId = await getUserId()
+  const [inc, ins, per, rsk, act] = await Promise.all([
+    db.select().from(incident).where(eq(incident.userId, userId)),
+    db.select().from(inspection).where(eq(inspection.userId, userId)),
+    db.select().from(permit).where(eq(permit.userId, userId)),
+    db.select().from(risk).where(eq(risk.userId, userId)),
+    db.select().from(correctiveAction).where(eq(correctiveAction.userId, userId)),
+  ])
+  return { incidents: inc, inspections: ins, permits: per, risks: rsk, actions: act }
 }
