@@ -293,87 +293,18 @@ export async function deleteDocument(id: number) {
   revalidatePath("/documents")
 }
 
-export async function getViolations() {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) throw new Error("Unauthorized")
-  const currentUser = session.user as any
-  const isManager =
-    currentUser.role === "admin" ||
-    currentUser.department === "المدير العام" ||
-    currentUser.department === "مفتش السلامة"
-  if (isManager) {
-    return db.select().from(violation).orderBy(desc(violation.createdAt))
-  }
-  return db.select().from(violation).where(eq(violation.userId, currentUser.id)).orderBy(desc(violation.createdAt))
-}
-export async function createViolation(formData: FormData) {
-  const userId = await requireModuleUserId("violations")
-  await db.insert(violation).values({
-    userId,
-    documentNo: str(formData.get("documentNo"), "MHS-IMS-PR-HSE-647"),
-    companyName: str(formData.get("companyName")),
-    employeeName: str(formData.get("employeeName")),
-    employeeNo: str(formData.get("employeeNo")),
-    violationDate: dateOrNull(formData.get("violationDate")),
-    violationTime: str(formData.get("violationTime")),
-    place: str(formData.get("place")),
-    description: str(formData.get("description")),
-    witnesses: str(formData.get("witnesses")),
-    evidences: str(formData.get("evidences")),
-    proposedAction: str(formData.get("proposedAction")),
-    status: str(formData.get("status"), "open"),
-  })
-  revalidatePath("/violations")
-  revalidatePath("/")
-}
-export async function deleteViolation(id: number) {
-  const userId = await requireModuleUserId("violations")
-  await db.delete(violation).where(and(eq(violation.id, id), eq(violation.userId, userId)))
-  revalidatePath("/violations")
-}
-
-/* ---------------- Dashboard aggregates ---------------- */
-export async function getDashboardData() {
-  const userId = await getUserId()
-  const [inc, ins, per, rsk, act] = await Promise.all([
-    db.select().from(incident).where(eq(incident.userId, userId)),
-    db.select().from(inspection).where(eq(inspection.userId, userId)),
-    db.select().from(permit).where(eq(permit.userId, userId)),
-    db.select().from(risk).where(eq(risk.userId, userId)),
-    db.select().from(correctiveAction).where(eq(correctiveAction.userId, userId)),
-  ])
-  return { incidents: inc, inspections: ins, permits: per, risks: rsk, actions: act }
-}
-
-// ─── أضف هذه الدالة في نهاية ملف hse.ts بدلاً من createViolation القديمة ───
-
-/* ---------------- Violations - Full (with signatures & images) ---------------- */
 export async function createViolationFull(formData: FormData) {
   const userId = await requireModuleUserId("violations")
-
-  // حساب الرقم التسلسلي التلقائي
   const year = new Date().getFullYear()
-  const existing = await db
-    .select({ documentNo: violation.documentNo })
-    .from(violation)
-    .orderBy(desc(violation.createdAt))
-  const thisYearNos = existing
-    .map((v) => v.documentNo ?? "")
-    .filter((n) => n.startsWith(`VIO-${year}-`))
-  const maxSeq = thisYearNos.reduce((max, n) => {
-    const seq = parseInt(n.split("-")[2] ?? "0", 10)
-    return seq > max ? seq : max
-  }, 0)
+  const existing = await db.select({ documentNo: violation.documentNo }).from(violation).orderBy(desc(violation.createdAt))
+  const thisYearNos = existing.map((v) => v.documentNo ?? "").filter((n) => n.startsWith(`VIO-${year}-`))
+  const maxSeq = thisYearNos.reduce((max, n) => { const seq = parseInt(n.split("-")[2] ?? "0", 10); return seq > max ? seq : max }, 0)
   const documentNo = `VIO-${year}-${String(maxSeq + 1).padStart(3, "0")}`
-
-  // نوع المخالفة + وصف
   const violationType = str(formData.get("violationType"))
   const extraDesc = str(formData.get("description"))
   const fullDescription = extraDesc ? `${violationType} — ${extraDesc}` : violationType
-
   await db.insert(violation).values({
-    userId,
-    documentNo,
+    userId, documentNo,
     companyName: str(formData.get("companyName")),
     employeeName: str(formData.get("employeeName")),
     employeeNo: str(formData.get("employeeNo")),
@@ -390,32 +321,6 @@ export async function createViolationFull(formData: FormData) {
     violatorSignature: str(formData.get("violatorSignature")),
     managerSignature: str(formData.get("managerSignature")),
   })
-
   revalidatePath("/violations")
   revalidatePath("/")
-}
-
-/* ---------------- getViolations: المدير يرى الكل ─────────────────────────── */
-// استبدل getViolations القديمة بهذه:
-export async function getViolations() {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) throw new Error("Unauthorized")
-
-  const currentUser = session.user as any
-  const isManager =
-    currentUser.role === "admin" ||
-    currentUser.department === "المدير العام" ||
-    currentUser.department === "مفتش السلامة"
-
-  if (isManager) {
-    // المدير ومفتش السلامة يرون جميع المخالفات
-    return db.select().from(violation).orderBy(desc(violation.createdAt))
-  }
-
-  // باقي المستخدمين يرون مخالفاتهم فقط
-  return db
-    .select()
-    .from(violation)
-    .where(eq(violation.userId, currentUser.id))
-    .orderBy(desc(violation.createdAt))
 }
