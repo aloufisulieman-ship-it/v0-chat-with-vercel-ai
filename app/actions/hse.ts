@@ -293,10 +293,18 @@ export async function deleteDocument(id: number) {
   revalidatePath("/documents")
 }
 
-/* ---------------- Violations ---------------- */
 export async function getViolations() {
-  const userId = await getUserId()
-  return db.select().from(violation).where(eq(violation.userId, userId)).orderBy(desc(violation.createdAt))
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (!session?.user) throw new Error("Unauthorized")
+  const currentUser = session.user as any
+  const isManager =
+    currentUser.role === "admin" ||
+    currentUser.department === "المدير العام" ||
+    currentUser.department === "مفتش السلامة"
+  if (isManager) {
+    return db.select().from(violation).orderBy(desc(violation.createdAt))
+  }
+  return db.select().from(violation).where(eq(violation.userId, currentUser.id)).orderBy(desc(violation.createdAt))
 }
 export async function createViolation(formData: FormData) {
   const userId = await requireModuleUserId("violations")
