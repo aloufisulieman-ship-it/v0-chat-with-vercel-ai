@@ -344,7 +344,17 @@ export async function createViolationFull(formData: FormData) {
 
 export async function deleteViolation(id: number) {
   const userId = await requireModuleUserId("violations")
-  await db.delete(violation).where(and(eq(violation.id, id), eq(violation.userId, userId)))
+  const userRows = await db.select().from(user).where(eq(user.id, userId)).limit(1)
+  const u = userRows[0] as any
+  const isManager =
+    u?.role === "admin" ||
+    u?.department === "المدير العام" ||
+    u?.department === "مفتش السلامة"
+  if (isManager) {
+    await db.delete(violation).where(eq(violation.id, id))
+  } else {
+    await db.delete(violation).where(and(eq(violation.id, id), eq(violation.userId, userId)))
+  }
   revalidatePath("/violations")
 }
 
