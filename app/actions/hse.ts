@@ -292,7 +292,6 @@ export async function deleteDocument(id: number) {
   await db.delete(document).where(and(eq(document.id, id), eq(document.userId, userId)))
   revalidatePath("/documents")
 }
-
 export async function createViolationFull(formData: FormData) {
   const userId = await requireModuleUserId("violations")
   const year = new Date().getFullYear()
