@@ -294,9 +294,9 @@ export async function deleteDocument(id: number) {
 }
 
 export async function getViolations() {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) throw new Error("Unauthorized")
-  const currentUser = session.user as any
+  const userId = await getUserId()
+  return db.select().from(violation).where(eq(violation.userId, userId)).orderBy(desc(violation.createdAt))
+}
   const isManager =
     currentUser.role === "admin" ||
     currentUser.department === "المدير العام" ||
