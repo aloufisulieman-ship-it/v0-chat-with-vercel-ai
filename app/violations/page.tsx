@@ -38,7 +38,7 @@ export default async function ViolationsPage() {
             fields={[
               { label: "اسم الموظف", value: r.employeeName },
               { label: "الرقم الوظيفي", value: r.employeeNo || "-" },
-              { label: "الجنسية", value: (r as any).nationality || "-" },
+        
               { label: "اسم الشركة", value: r.companyName || "-" },
               { label: "التاريخ", value: r.violationDate ?? "-" },
               { label: "الوقت", value: r.violationTime || "-" },
