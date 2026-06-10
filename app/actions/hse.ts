@@ -3,12 +3,12 @@
 import { db } from "@/lib/db";
 import * as schema from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
-import { requireModuleUserId } from "@/lib/auth-helpers";
+import { requireModuleUserId } from "@/lib/session";
 
 // ========== VIOLATIONS ==========
 
 export async function getViolations() {
-  const userId = await requireModuleUserId();
+  const userId = await requireModuleUserId("violations");
 
   const user = await db.query.users.findFirst({
     where: eq(schema.users.id, userId),
@@ -43,9 +43,8 @@ export async function createViolationFull(data: {
   witnessSignature?: string;
   inspectorSignature?: string;
 }) {
-  const userId = await requireModuleUserId();
+  const userId = await requireModuleUserId("violations");
 
-  // Auto-numbering VIO-YYYY-###
   const year = new Date().getFullYear();
   const existing = await db.query.violations.findMany();
   const count = existing.length + 1;
@@ -71,7 +70,7 @@ export async function createViolationFull(data: {
 }
 
 export async function deleteViolation(id: string) {
-  const userId = await requireModuleUserId();
+  const userId = await requireModuleUserId("violations");
 
   const user = await db.query.users.findFirst({
     where: eq(schema.users.id, userId),
