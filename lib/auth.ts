@@ -50,6 +50,9 @@ export const auth = betterAuth({
   },
   trustedOrigins: [
     "http://localhost:3000",
+    // v0 preview environments are served from rotating *.vusercontent.net
+    // subdomains that don't always match V0_RUNTIME_URL, so trust them all.
+    "https://*.vusercontent.net",
     ...(process.env.V0_RUNTIME_URL ? [process.env.V0_RUNTIME_URL] : []),
     ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : []),
     ...(process.env.VERCEL_PROJECT_PRODUCTION_URL ? [`https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`] : []),
