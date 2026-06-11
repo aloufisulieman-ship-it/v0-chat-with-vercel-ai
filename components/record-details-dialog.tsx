@@ -19,7 +19,6 @@ import { toast } from "@/hooks/use-toast"
 
 export type DetailField = { label: string; value: string }
 
-// Converts a same-origin image URL to a data URL so html2canvas can embed it reliably.
 async function toDataUrl(url: string): Promise<string | null> {
   try {
     const res = await fetch(url)
@@ -34,6 +33,10 @@ async function toDataUrl(url: string): Promise<string | null> {
   } catch {
     return null
   }
+}
+
+function isBase64Image(value: string) {
+  return value?.startsWith("data:image")
 }
 
 export function RecordDetailsDialog({
@@ -59,7 +62,6 @@ export function RecordDetailsDialog({
   const reportRef = useRef<HTMLDivElement | null>(null)
   const moduleRoles = signatureRolesConfig[module]
 
-  // Refresh attachments when opening so PDF/email reflect the latest uploads.
   async function handleOpenChange(next: boolean) {
     setOpen(next)
     if (next) {
@@ -72,7 +74,6 @@ export function RecordDetailsDialog({
     }
   }
 
-  // Builds an off-screen printable report with embedded (data-url) images.
   async function buildReportElement(): Promise<HTMLElement> {
     const photos = attachments.filter((a) => a.kind === "photo")
     const signatures = attachments.filter((a) => a.kind === "signature" || a.kind.startsWith("signature:"))
@@ -85,13 +86,20 @@ export function RecordDetailsDialog({
       })),
     )
 
+    // أيضاً نضيف التواقيع المحفوظة في fields (base64)
+    const fieldSigs = fields
+      .filter((f) => isBase64Image(f.value))
+      .map((f) => ({ data: f.value, label: f.label }))
+
+    const allSigs = [...sigData.filter((s) => s.data), ...fieldSigs]
+
     const container = document.createElement("div")
     container.dir = "rtl"
     container.style.cssText =
       "position:fixed;top:-10000px;right:0;width:794px;background:#ffffff;color:#0f172a;font-family:system-ui,'Segoe UI',Tahoma,sans-serif;padding:40px;box-sizing:border-box;"
 
     const rows = fields
-      .filter((f) => f.value && f.value !== "-")
+      .filter((f) => f.value && f.value !== "-" && !isBase64Image(f.value))
       .map(
         (f) => `
         <tr>
@@ -109,8 +117,7 @@ export function RecordDetailsDialog({
       )
       .join("")
 
-    const sigHtml = sigData
-      .filter((s) => s.data)
+    const sigHtml = allSigs
       .map(
         (s) =>
           `<div style="display:inline-block;width:46%;margin:1%;border:1px solid #e2e8f0;border-radius:6px;padding:8px;text-align:center;background:#fff;vertical-align:top;"><img src="${s.data}" style="max-height:90px;max-width:100%;" /><div style="margin-top:6px;font-size:12px;font-weight:600;color:#334155;border-top:1px solid #e2e8f0;padding-top:6px;">${escapeHtml(s.label)}</div></div>`,
@@ -136,7 +143,7 @@ export function RecordDetailsDialog({
       }
       ${
         sigHtml
-          ? `<h2 style="font-size:15px;color:#0f766e;margin:24px 0 8px;">التواقيع</h2><div>${sigHtml}</div>`
+          ? `<h2 style="font-size:15px;color:#0f766e;margin:24px 0 8px;">التواقيع الرسمية</h2><div>${sigHtml}</div>`
           : ""
       }
       <div style="margin-top:32px;border-top:1px solid #e2e8f0;padding-top:12px;font-size:11px;color:#94a3b8;text-align:center;">
@@ -172,11 +179,12 @@ export function RecordDetailsDialog({
     setBusy("email")
     let el: HTMLElement | null = null
     try {
-      // Download the PDF first so the user can attach it to the email.
       el = await buildReportElement()
       await downloadElementPdf(el, fileBase)
 
-      const lines = fields.filter((f) => f.value && f.value !== "-").map((f) => `${f.label}: ${f.value}`)
+      const lines = fields
+        .filter((f) => f.value && f.value !== "-" && !isBase64Image(f.value))
+        .map((f) => `${f.label}: ${f.value}`)
       const body = [
         `تقرير: ${title}`,
         documentNo ? `رقم الوثيقة: ${documentNo}` : "",
@@ -239,7 +247,7 @@ export function RecordDetailsDialog({
           </Button>
         </div>
 
-        {/* On-screen field summary */}
+        {/* عرض الحقول على الشاشة */}
         <div ref={reportRef} className="rounded-lg border border-border">
           <dl className="divide-y divide-border text-sm">
             {fields
@@ -247,7 +255,17 @@ export function RecordDetailsDialog({
               .map((f) => (
                 <div key={f.label} className="grid grid-cols-3 gap-2 px-4 py-2.5">
                   <dt className="font-medium text-muted-foreground">{f.label}</dt>
-                  <dd className="col-span-2 text-foreground">{f.value}</dd>
+                  <dd className="col-span-2 text-foreground">
+                    {isBase64Image(f.value) ? (
+                      <img
+                        src={f.value}
+                        alt={f.label}
+                        className="h-24 rounded border border-border object-contain bg-white"
+                      />
+                    ) : (
+                      f.value
+                    )}
+                  </dd>
                 </div>
               ))}
           </dl>
