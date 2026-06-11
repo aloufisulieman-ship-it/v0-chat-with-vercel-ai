@@ -38,7 +38,6 @@ export default async function ViolationsPage() {
             fields={[
               { label: "اسم الموظف", value: r.employeeName },
               { label: "الرقم الوظيفي", value: r.employeeNo || "-" },
-        
               { label: "اسم الشركة", value: r.companyName || "-" },
               { label: "التاريخ", value: r.violationDate ?? "-" },
               { label: "الوقت", value: r.violationTime || "-" },
@@ -47,6 +46,8 @@ export default async function ViolationsPage() {
               { label: "الشهود", value: r.witnesses || "-" },
               { label: "الإجراء المقترح", value: r.proposedAction || "-" },
               { label: "الحالة", value: statusLabels[r.status ?? ""] ?? "-" },
+              { label: "توقيع المخالف", value: r.violatorSignature || "" },
+              { label: "توقيع المُبلِّغ / المشرف", value: r.reporterSignature || "" },
             ]}
             initialAttachments={[]}
           />
