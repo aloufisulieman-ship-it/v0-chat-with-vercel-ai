@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
+import useSWR from "swr"
 import {
   LayoutDashboard,
   AlertTriangle,
@@ -18,12 +19,15 @@ import {
   Settings,
   ShieldCheck,
   Users,
+  UserCog,
   LogOut,
   X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { authClient } from "@/lib/auth-client"
 import { hasModuleAccess, type ModuleKey } from "@/lib/permissions"
+
+const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 // module: gates the item by the user's module access. Admins always see everything.
 const nav: { href: string; label: string; icon: typeof LayoutDashboard; module: ModuleKey }[] = [
@@ -35,6 +39,7 @@ const nav: { href: string; label: string; icon: typeof LayoutDashboard; module: 
   { href: "/training", label: "التدريب", icon: GraduationCap, module: "training" },
   { href: "/ppe", label: "معدات الوقاية", icon: HardHat, module: "ppe" },
   { href: "/violations", label: "المخالفات", icon: Ban, module: "violations" },
+  { href: "/hr", label: "الموارد البشرية", icon: UserCog, module: "hr" },
   { href: "/actions", label: "الإجراءات التصحيحية", icon: CheckSquare, module: "actions" },
   { href: "/audits", label: "التدقيق", icon: ClipboardList, module: "audits" },
   { href: "/documents", label: "الوثائق", icon: FolderKanban, module: "documents" },
@@ -67,6 +72,15 @@ export function AppSidebar({
   )
   const items =
     user?.role === "admin" ? [...visible, { href: "/users", label: "إدارة المستخدمين", icon: Users }] : visible
+
+  // شارة الإشعار: عدد بنود الموارد البشرية غير المعالجة (تُجلب فقط لمن يملك الوصول).
+  const hrVisible = visible.some((item) => item.href === "/hr")
+  const { data: hrData } = useSWR<{ count: number }>(
+    hrVisible ? "/api/hr/pending-count" : null,
+    fetcher,
+    { refreshInterval: 30000 },
+  )
+  const hrCount = hrData?.count ?? 0
 
   async function handleSignOut() {
     await authClient.signOut()
@@ -126,7 +140,20 @@ export function AppSidebar({
                     )}
                   >
                     <Icon className="size-5 shrink-0" />
-                    <span>{item.label}</span>
+                    <span className="flex-1">{item.label}</span>
+                    {item.href === "/hr" && hrCount > 0 && (
+                      <span
+                        className={cn(
+                          "flex min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-bold",
+                          active
+                            ? "bg-sidebar-primary-foreground text-sidebar-primary"
+                            : "bg-destructive text-destructive-foreground",
+                        )}
+                        aria-label={`${hrCount} بنود جديدة`}
+                      >
+                        {hrCount}
+                      </span>
+                    )}
                   </Link>
                 </li>
               )

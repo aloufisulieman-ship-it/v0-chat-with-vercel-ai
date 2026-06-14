@@ -99,6 +99,9 @@ export const incident = pgTable("incident", {
   hrSignature: text("hr_signature").default(""),
   gmSignature: text("gm_signature").default(""),
   managerSignature: text("manager_signature").default(""),
+  hrAction: text("hr_action").default(""),
+  hrActionDate: date("hr_action_date"),
+  hrNotes: text("hr_notes").default(""),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
@@ -210,6 +213,9 @@ export const violation = pgTable("violation", {
   editorSignature: text("editor_signature").default(""),
   violatorSignature: text("violator_signature").default(""),
   managerSignature: text("manager_signature").default(""),
+  hrAction: text("hr_action").default(""),
+  hrActionDate: date("hr_action_date"),
+  hrNotes: text("hr_notes").default(""),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
