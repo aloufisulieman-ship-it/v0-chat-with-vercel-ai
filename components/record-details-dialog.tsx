@@ -78,17 +78,19 @@ export function RecordDetailsDialog({
 
   async function buildReportElement(): Promise<HTMLElement> {
     const photos = attachments.filter((a) => a.kind === "photo")
-    const signatures = attachments.filter((a) => a.kind === "signature" || a.kind.startsWith("signature:"))
+    const signatureAttachments = attachments.filter(
+      (a) => a.kind === "signature" || a.kind.startsWith("signature:"),
+    )
 
     const photoData = await Promise.all(photos.map((p) => toDataUrl(fileUrl(p.pathname))))
     const sigData = await Promise.all(
-      signatures.map(async (s) => ({
+      signatureAttachments.map(async (s) => ({
         data: await toDataUrl(fileUrl(s.pathname)),
         label: s.kind === "signature" ? "توقيع" : labelForSignatureKind(module, s.kind),
       })),
     )
 
-    // التواقيع الرسمية المحفوظة كـ base64 في أعمدة السجل
+    // التواقيع الرسمية المحفوظة كـ base64 في أعمدة السجل (prop التواقيع)
     const columnSigs = (signatures ?? [])
       .filter((f) => isBase64Image(f.value))
       .map((f) => ({ data: f.value, label: f.label }))
