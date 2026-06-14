@@ -22,11 +22,13 @@ export function AttachmentsManager({
   recordId,
   initial,
   signatureRoles,
+  hideSignatures,
 }: {
   module: string
   recordId: number
   initial: AttachmentRow[]
   signatureRoles?: SignatureRole[]
+  hideSignatures?: boolean
 }) {
   const [items, setItems] = useState<AttachmentRow[]>(initial)
   const [isPending, startTransition] = useTransition()
@@ -172,7 +174,7 @@ export function AttachmentsManager({
       </section>
 
       {/* Role-named official signatures (violations, incidents, ...) */}
-      {useRoles && (
+      {!hideSignatures && useRoles && (
         <RoleSignatures
           module={module}
           recordId={recordId}
@@ -183,7 +185,7 @@ export function AttachmentsManager({
       )}
 
       {/* Free-form signatures (modules without role config) */}
-      {!useRoles && (
+      {!hideSignatures && !useRoles && (
       <section className="flex flex-col gap-3">
         <h4 className="flex items-center gap-2 text-sm font-semibold text-foreground">
           <PenLine className="size-4 text-muted-foreground" />

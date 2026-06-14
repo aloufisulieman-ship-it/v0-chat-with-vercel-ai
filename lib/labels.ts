@@ -16,6 +16,7 @@ export const severityOptions = [
 export const statusLabels: Record<string, string> = {
   open: "مفتوح",
   in_progress: "قيد المعالجة",
+  investigating: "قيد التحقيق",
   closed: "مغلق",
   overdue: "متأخر",
   scheduled: "مجدول",

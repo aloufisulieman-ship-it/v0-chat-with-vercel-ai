@@ -11,6 +11,14 @@ import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/hooks/use-toast"
 import { createViolationFull } from "@/app/actions/hse"
 import { violationStatusOptions } from "@/lib/labels"
+import {
+  classifyViolation,
+  categoryOptions,
+  internalActionOptions,
+  FINE_ACTION,
+  OTHER_ACTION,
+  type ViolationCategory,
+} from "@/lib/violation-category"
 
 const VIOLATION_TYPES = [
   "عدم ارتداء خوذة السلامة",
@@ -135,7 +143,8 @@ export function ViolationFormDialog() {
   const [form, setForm] = useState({
     employeeName: "", employeeNo: "", nationality: "", companyName: "",
     documentNo: "MHS-IMS-PR-HSE-647", violationDate: "", violationTime: "",
-    place: "", violationType: "", description: "", witnesses: "",
+    place: "", violationType: "", category: "internal", internalAction: "", actionDetail: "",
+    description: "", witnesses: "",
     evidences: "", proposedAction: "", status: "open",
   })
 
@@ -149,7 +158,8 @@ export function ViolationFormDialog() {
     setForm({
       employeeName: "", employeeNo: "", nationality: "", companyName: "",
       documentNo: "MHS-IMS-PR-HSE-647", violationDate: "", violationTime: "",
-      place: "", violationType: "", description: "", witnesses: "",
+      place: "", violationType: "", category: "internal", internalAction: "", actionDetail: "",
+      description: "", witnesses: "",
       evidences: "", proposedAction: "", status: "open",
     })
     setImages([])
@@ -172,6 +182,14 @@ export function ViolationFormDialog() {
       try {
         const fd = new FormData()
         Object.entries(form).forEach(([k, v]) => fd.append(k, v))
+        // ادمج الإجراء مع التفاصيل الإضافية (المبلغ أو النص الحر) في قيمة واحدة
+        let internalActionValue = form.internalAction
+        if (form.internalAction === FINE_ACTION && form.actionDetail.trim()) {
+          internalActionValue = `${FINE_ACTION}: ${form.actionDetail.trim()} ريال سعودي`
+        } else if (form.internalAction === OTHER_ACTION && form.actionDetail.trim()) {
+          internalActionValue = form.actionDetail.trim()
+        }
+        fd.set("internalAction", internalActionValue)
         fd.append("editorSignature", editorSignature)
         fd.append("violatorSignature", violatorSignature)
         fd.append("managerSignature", managerSignature)
@@ -252,13 +270,72 @@ export function ViolationFormDialog() {
             </div>
             <div className="flex flex-col gap-1 sm:col-span-2">
               <Label>نوع المخالفة <span className="text-destructive">*</span></Label>
-              <Select value={form.violationType} onValueChange={v => setForm(f => ({ ...f, violationType: v }))}>
+              <Select
+                value={form.violationType}
+                onValueChange={v =>
+                  setForm(f => ({ ...f, violationType: v, category: classifyViolation(v), internalAction: "" }))
+                }
+              >
                 <SelectTrigger><SelectValue placeholder="اختر نوع المخالفة..." /></SelectTrigger>
                 <SelectContent className="max-h-72">
                   {VIOLATION_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
+            {form.violationType && (
+              <>
+                <div className="flex flex-col gap-1">
+                  <Label>التصنيف</Label>
+                  <Select
+                    value={form.category}
+                    onValueChange={v => setForm(f => ({ ...f, category: v, internalAction: "" }))}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {categoryOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label>الإجراء الداخلي</Label>
+                  <Select
+                    value={form.internalAction}
+                    onValueChange={v => setForm(f => ({ ...f, internalAction: v, actionDetail: "" }))}
+                  >
+                    <SelectTrigger><SelectValue placeholder="اختر الإجراء..." /></SelectTrigger>
+                    <SelectContent>
+                      {internalActionOptions[form.category as ViolationCategory].map(o => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {form.internalAction === FINE_ACTION && (
+                  <div className="flex flex-col gap-1">
+                    <Label>قيمة الغرامة (ريال سعودي) <span className="text-destructive">*</span></Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      inputMode="decimal"
+                      value={form.actionDetail}
+                      onChange={e => setForm(f => ({ ...f, actionDetail: e.target.value }))}
+                      placeholder="مثال: 500"
+                    />
+                  </div>
+                )}
+                {form.internalAction === OTHER_ACTION && (
+                  <div className="flex flex-col gap-1 sm:col-span-2">
+                    <Label>حدّد الإجراء <span className="text-destructive">*</span></Label>
+                    <Textarea
+                      rows={2}
+                      value={form.actionDetail}
+                      onChange={e => setForm(f => ({ ...f, actionDetail: e.target.value }))}
+                      placeholder="اكتب الإجراء المتخذ..."
+                    />
+                  </div>
+                )}
+              </>
+            )}
             <div className="flex flex-col gap-1 sm:col-span-2">
               <Label>وصف تفصيلي (اختياري)</Label>
               <Textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} placeholder="تفاصيل إضافية..." />

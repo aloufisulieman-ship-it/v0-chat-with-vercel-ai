@@ -14,12 +14,51 @@ import {
   audit,
   document,
   violation,
+  attachment,
   user,
 } from "@/lib/db/schema"
 import { and, desc, eq } from "drizzle-orm"
 import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
 import { requireModuleUserId } from "@/lib/session"
+import { put } from "@vercel/blob"
+
+// Convert a base64 data URL (e.g. "data:image/png;base64,....") into a Blob.
+function dataUrlToBlob(dataUrl: string): { blob: Blob; ext: string } | null {
+  const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl)
+  if (!match) return null
+  const contentType = match[1]
+  const bytes = Buffer.from(match[2], "base64")
+  const ext = contentType.split("/")[1]?.split("+")[0] || "png"
+  return { blob: new Blob([bytes], { type: contentType }), ext }
+}
+
+// Upload one base64 data URL as an attachment row tied to a record.
+async function saveDataUrlAttachment(
+  userId: string,
+  module: string,
+  recordId: number,
+  kind: string,
+  dataUrl: string,
+  baseName: string,
+) {
+  const parsed = dataUrlToBlob(dataUrl)
+  if (!parsed) return
+  const filename = `${baseName}.${parsed.ext}`
+  const key = `hse/${userId}/${module}/${recordId}/${Date.now()}-${filename}`
+  const uploaded = await put(key, parsed.blob, { access: "private", addRandomSuffix: true })
+  await db.insert(attachment).values({
+    userId,
+    module,
+    recordId,
+    kind,
+    pathname: uploaded.pathname,
+    url: uploaded.url,
+    filename,
+    contentType: parsed.blob.type,
+    size: parsed.blob.size,
+  })
+}
 
 async function getUserId() {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -88,6 +127,105 @@ export async function createIncident(formData: FormData) {
   })
   revalidatePath("/incidents")
   revalidatePath("/")
+}
+
+// Full incident report: auto document number, parties, causes and signatures.
+export async function createIncidentFull(formData: FormData) {
+  const userId = await requireModuleUserId("incidents")
+
+  const title = str(formData.get("title")).trim()
+  if (!title) throw new Error("نوع الحادثة مطلوب")
+
+  // Auto document number: INC-YYYY-### (sequence resets each year).
+  const year = new Date().getFullYear()
+  const existing = await db
+    .select({ documentNo: incident.documentNo })
+    .from(incident)
+    .where(eq(incident.userId, userId))
+  const thisYearNos = (existing ?? [])
+    .map((i) => i.documentNo ?? "")
+    .filter((n) => n.startsWith(`INC-${year}-`))
+  const maxSeq = thisYearNos.reduce((max, n) => {
+    const seq = parseInt(n.split("-")[2] ?? "0", 10)
+    return seq > max ? seq : max
+  }, 0)
+  const documentNo = `INC-${year}-${String(maxSeq + 1).padStart(3, "0")}`
+
+  const [inserted] = await db
+    .insert(incident)
+    .values({
+      userId,
+      documentNo,
+      title,
+      type: str(formData.get("type"), "أخرى"),
+      severity: str(formData.get("severity"), "low"),
+      status: str(formData.get("status"), "open"),
+      location: str(formData.get("location")),
+      incidentDate: dateOrNull(formData.get("incidentDate")),
+      incidentTime: str(formData.get("incidentTime")),
+      description: str(formData.get("description")),
+      directCauses: str(formData.get("directCauses")),
+      rootCauses: str(formData.get("rootCauses")),
+      propertyDamage: str(formData.get("propertyDamage")),
+      damageCost: str(formData.get("damageCost")),
+      immediateActions: str(formData.get("immediateActions")),
+      parties: str(formData.get("parties"), "[]"),
+      witnesses: str(formData.get("witnesses")),
+      authoritiesNotified: str(formData.get("authoritiesNotified"), "no"),
+      authorityName: str(formData.get("authorityName")),
+      recommendations: str(formData.get("recommendations")),
+      reportedBy: str(formData.get("reportedBy")),
+      reporterSignature: str(formData.get("reporterSignature")),
+      safetySignature: str(formData.get("safetySignature")),
+      hrSignature: str(formData.get("hrSignature")),
+      gmSignature: str(formData.get("gmSignature")),
+      managerSignature: str(formData.get("safetySignature")),
+    })
+    .returning({ id: incident.id })
+
+  const recordId = inserted.id
+
+  // Persist the four official signatures as role-named attachments so they
+  // render once in the official signatures section and in the PDF export.
+  const signaturePairs: { value: string; kind: string; name: string }[] = [
+    { value: str(formData.get("reporterSignature")), kind: "signature:reporter", name: "reporter-signature" },
+    { value: str(formData.get("safetySignature")), kind: "signature:safety_manager", name: "safety-signature" },
+    { value: str(formData.get("hrSignature")), kind: "signature:hr", name: "hr-signature" },
+    { value: str(formData.get("gmSignature")), kind: "signature:gm", name: "gm-signature" },
+  ]
+  for (const sig of signaturePairs) {
+    if (sig.value.startsWith("data:image")) {
+      await saveDataUrlAttachment(userId, "incidents", recordId, sig.kind, sig.value, sig.name)
+    }
+  }
+
+  // Persist site photos (JSON array of base64 data URLs) as photo attachments.
+  try {
+    const sitePhotos = JSON.parse(str(formData.get("sitePhotos"), "[]")) as string[]
+    for (let i = 0; i < sitePhotos.length; i++) {
+      if (typeof sitePhotos[i] === "string" && sitePhotos[i].startsWith("data:image")) {
+        await saveDataUrlAttachment(userId, "incidents", recordId, "photo", sitePhotos[i], `site-${i + 1}`)
+      }
+    }
+  } catch {
+    // ignore malformed payloads; the incident itself is already saved
+  }
+
+  // Persist per-party injury photos as photo attachments.
+  try {
+    const injuryPhotos = JSON.parse(str(formData.get("injuryPhotos"), "[]")) as string[]
+    for (let i = 0; i < injuryPhotos.length; i++) {
+      if (typeof injuryPhotos[i] === "string" && injuryPhotos[i].startsWith("data:image")) {
+        await saveDataUrlAttachment(userId, "incidents", recordId, "photo", injuryPhotos[i], `injury-party-${i + 1}`)
+      }
+    }
+  } catch {
+    // ignore malformed payloads
+  }
+
+  revalidatePath("/incidents")
+  revalidatePath("/")
+  return { documentNo }
 }
 export async function deleteIncident(id: number) {
   const userId = await requireModuleUserId("incidents")
@@ -309,20 +447,7 @@ export async function getViolations() {
   return db.select().from(violation).where(eq(violation.userId, userId)).orderBy(desc(violation.createdAt))
 }
 
-export async function createViolationFull(data: {
-  employeeName: string
-  employeeNo?: string
-  companyName?: string
-  violationDate?: string
-  violationTime?: string
-  place?: string
-  description?: string
-  witnesses?: string
-  proposedAction?: string
-  editorSignature?: string
-  violatorSignature?: string
-  managerSignature?: string
-}) {
+export async function createViolationFull(formData: FormData) {
   const userId = await requireModuleUserId("violations")
   const year = new Date().getFullYear()
   const existing = await db.select({ documentNo: violation.documentNo }).from(violation).orderBy(desc(violation.createdAt))
@@ -332,23 +457,65 @@ export async function createViolationFull(data: {
     return seq > max ? seq : max
   }, 0)
   const documentNo = `VIO-${year}-${String(maxSeq + 1).padStart(3, "0")}`
-  await db.insert(violation).values({
-    userId,
-    documentNo,
-    employeeName: data.employeeName,
-    employeeNo: data.employeeNo ?? "",
-    companyName: data.companyName ?? "",
-    violationDate: data.violationDate ?? null,
-    violationTime: data.violationTime ?? "",
-    place: data.place ?? "",
-    description: data.description ?? "",
-    witnesses: data.witnesses ?? "",
-    proposedAction: data.proposedAction ?? "",
-    editorSignature: data.editorSignature ?? "",
-    violatorSignature: data.violatorSignature ?? "",
-    managerSignature: data.managerSignature ?? "",
-    status: "open",
-  })
+
+  const employeeName = str(formData.get("employeeName")).trim()
+  if (!employeeName) throw new Error("اسم الموظف مطلوب")
+
+  // Pass every column explicitly so nothing falls back to a DB default.
+  const [inserted] = await db
+    .insert(violation)
+    .values({
+      userId,
+      documentNo,
+      companyName: str(formData.get("companyName")),
+      employeeName,
+      employeeNo: str(formData.get("employeeNo")),
+      nationality: str(formData.get("nationality")),
+      violationType: str(formData.get("violationType")),
+      category: str(formData.get("category"), "internal"),
+      internalAction: str(formData.get("internalAction")),
+      violationDate: dateOrNull(formData.get("violationDate")),
+      violationTime: str(formData.get("violationTime")),
+      place: str(formData.get("place")),
+      description: str(formData.get("description")),
+      witnesses: str(formData.get("witnesses")),
+      evidences: str(formData.get("evidences")),
+      proposedAction: str(formData.get("proposedAction")),
+      status: str(formData.get("status"), "open"),
+      editorSignature: str(formData.get("editorSignature")),
+      violatorSignature: str(formData.get("violatorSignature")),
+      managerSignature: str(formData.get("managerSignature")),
+    })
+    .returning({ id: violation.id })
+
+  const recordId = inserted.id
+
+  // Persist evidence photos (sent as a JSON array of base64 data URLs) as
+  // real attachments so they show up in the details dialog and PDF export.
+  try {
+    const images = JSON.parse(str(formData.get("images"), "[]")) as string[]
+    for (let i = 0; i < images.length; i++) {
+      if (typeof images[i] === "string" && images[i].startsWith("data:image")) {
+        await saveDataUrlAttachment(userId, "violations", recordId, "photo", images[i], `evidence-${i + 1}`)
+      }
+    }
+  } catch {
+    // ignore malformed image payloads; the violation itself is already saved
+  }
+
+  // Persist the three drawn signatures as role-named attachments so they
+  // render once in the official signatures section (no duplication in fields).
+  const signaturePairs: { value: string; kind: string; name: string }[] = [
+    { value: str(formData.get("violatorSignature")), kind: "signature:violator", name: "violator-signature" },
+    { value: str(formData.get("editorSignature")), kind: "signature:reporter", name: "reporter-signature" },
+    { value: str(formData.get("managerSignature")), kind: "signature:safety_manager", name: "manager-signature" },
+  ]
+  for (const sig of signaturePairs) {
+    if (sig.value.startsWith("data:image")) {
+      await saveDataUrlAttachment(userId, "violations", recordId, sig.kind, sig.value, sig.name)
+    }
+  }
+
   revalidatePath("/violations")
   revalidatePath("/")
   return { documentNo }

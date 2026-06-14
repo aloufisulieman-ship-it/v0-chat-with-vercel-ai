@@ -3,38 +3,29 @@ import { AppShell } from "@/components/app-shell"
 import { KpiCard } from "@/components/kpi-card"
 import { DataTable, type Column } from "@/components/data-table"
 import { StatusBadge, SeverityBadge } from "@/components/status-badge"
-import { RecordDialog, type FieldDef } from "@/components/record-dialog"
 import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { requireModule } from "@/lib/session"
-import { getIncidents, createIncident, deleteIncident } from "@/app/actions/hse"
-import { incidentTypeLabels, severityLabels, statusLabels } from "@/lib/labels"
-import { severityOptions, statusOptions, incidentTypeOptions } from "@/lib/labels"
+import { getIncidents, deleteIncident } from "@/app/actions/hse"
+import { severityLabels, statusLabels } from "@/lib/labels"
+import { formatParties } from "@/lib/incident-types"
+import { IncidentFormDialog } from "./incident-form"
 
 type Incident = Awaited<ReturnType<typeof getIncidents>>[number]
 
-const fields: FieldDef[] = [
-  { name: "title", label: "وصف الحادثة", required: true, full: true, placeholder: "مثال: انزلاق في منطقة التحميل" },
-  { name: "location", label: "الموقع", placeholder: "مثال: المستودع الرئيسي" },
-  { name: "reportedBy", label: "المُبلِّغ" },
-  { name: "type", label: "النوع", type: "select", options: incidentTypeOptions },
-  { name: "severity", label: "الخطورة", type: "select", options: severityOptions },
-  { name: "status", label: "الحالة", type: "select", options: statusOptions },
-  { name: "incidentDate", label: "تاريخ الحادثة", type: "date" },
-  { name: "description", label: "تفاصيل إضافية", type: "textarea" },
-]
+const notifiedLabel = (v: string | null) => (v === "yes" ? "نعم" : "لا")
 
 export default async function IncidentsPage() {
   const user = await requireModule("incidents")
   const incidents = await getIncidents()
 
-  const open = incidents.filter((i) => i.status === "open" || i.status === "in_progress").length
+  const open = incidents.filter((i) => i.status === "open" || i.status === "in_progress" || i.status === "investigating").length
   const closed = incidents.filter((i) => i.status === "closed").length
   const critical = incidents.filter((i) => i.severity === "critical" || i.severity === "high").length
 
   const columns: Column<Incident>[] = [
-    { key: "title", header: "الوصف", render: (r) => <span className="font-medium text-foreground">{r.title}</span> },
-    { key: "type", header: "النوع", render: (r) => <span className="text-muted-foreground">{incidentTypeLabels[r.type ?? ""] ?? "-"}</span> },
+    { key: "documentNo", header: "رقم الحادثة", render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.documentNo || "-"}</span> },
+    { key: "title", header: "النوع", render: (r) => <span className="font-medium text-foreground">{r.title}</span> },
     { key: "location", header: "الموقع", render: (r) => <span className="text-muted-foreground">{r.location || "-"}</span> },
     { key: "reportedBy", header: "المُبلِّغ", render: (r) => <span className="text-muted-foreground">{r.reportedBy || "-"}</span> },
     { key: "severity", header: "الخطورة", render: (r) => <SeverityBadge severity={r.severity ?? "low"} /> },
@@ -51,15 +42,33 @@ export default async function IncidentsPage() {
             recordId={r.id}
             title={r.title}
             subtitle="تقرير حادثة"
+            documentNo={r.documentNo || undefined}
             fields={[
-              { label: "وصف الحادثة", value: r.title },
-              { label: "النوع", value: incidentTypeLabels[r.type ?? ""] ?? "-" },
+              { label: "رقم الحادثة", value: r.documentNo || "-" },
+              { label: "نوع الحادثة", value: r.title },
               { label: "الموقع", value: r.location || "-" },
-              { label: "المُبلِّغ", value: r.reportedBy || "-" },
+              { label: "تاريخ الحادثة", value: r.incidentDate ?? "-" },
+              { label: "وقت الحادثة", value: r.incidentTime || "-" },
               { label: "الخطورة", value: severityLabels[r.severity ?? ""] ?? "-" },
               { label: "الحالة", value: statusLabels[r.status ?? ""] ?? "-" },
-              { label: "تاريخ الحادثة", value: r.incidentDate ?? "-" },
-              { label: "تفاصيل إضافية", value: r.description || "-" },
+              { label: "المُبلِّغ عن الحادثة", value: r.reportedBy || "-" },
+              { label: "وصف تفصيلي", value: r.description || "-" },
+              { label: "الأسباب المباشرة", value: r.directCauses || "-" },
+              { label: "الأسباب الجذرية", value: r.rootCauses || "-" },
+              { label: "الأضرار المادية", value: r.propertyDamage || "-" },
+              { label: "تقدير التكلفة (ريال)", value: r.damageCost || "-" },
+              { label: "الإجراءات الفورية", value: r.immediateActions || "-" },
+              { label: "الأطراف المتضررة", value: formatParties(r.parties) },
+              { label: "الشهود", value: r.witnesses || "-" },
+              { label: "إبلاغ الجهات المختصة", value: notifiedLabel(r.authoritiesNotified) },
+              { label: "الجهة المبلَّغة", value: r.authorityName || "-" },
+              { label: "توصيات منع التكرار", value: r.recommendations || "-" },
+            ]}
+            signatures={[
+              { label: "توقيع المبلّغ", value: r.reporterSignature || "" },
+              { label: "توقيع مسؤول السلامة", value: r.safetySignature || "" },
+              { label: "توقيع الموارد البشرية", value: r.hrSignature || "" },
+              { label: "توقيع المدير العام", value: r.gmSignature || "" },
             ]}
             initialAttachments={[]}
           />
@@ -74,7 +83,7 @@ export default async function IncidentsPage() {
       title="إدارة الحوادث"
       subtitle="تسجيل ومتابعة الحوادث والإصابات والملاحظات الوشيكة"
       user={user}
-      action={<RecordDialog title="الإبلاغ عن حادثة" description="سجّل تفاصيل الحادثة." triggerLabel="الإبلاغ عن حادثة" fields={fields} action={createIncident} />}
+      action={<IncidentFormDialog defaultReporter={user.name ?? ""} />}
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard label="إجمالي الحوادث" value={incidents.length} icon={AlertOctagon} tone="blue" />
