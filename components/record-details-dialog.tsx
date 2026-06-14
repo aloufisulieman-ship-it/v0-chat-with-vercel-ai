@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { Eye, Download, Mail, Loader2 } from "lucide-react"
+import { Eye, Download, Mail, Loader2, PenLine } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -46,6 +46,7 @@ export function RecordDetailsDialog({
   subtitle,
   documentNo,
   fields,
+  signatures,
   initialAttachments,
 }: {
   module: string
@@ -54,6 +55,7 @@ export function RecordDetailsDialog({
   subtitle?: string
   documentNo?: string
   fields: DetailField[]
+  signatures?: DetailField[]
   initialAttachments: AttachmentRow[]
 }) {
   const [open, setOpen] = useState(false)
@@ -86,12 +88,12 @@ export function RecordDetailsDialog({
       })),
     )
 
-    // أيضاً نضيف التواقيع المحفوظة في fields (base64)
-    const fieldSigs = fields
+    // التواقيع الرسمية المحفوظة كـ base64 في أعمدة السجل
+    const columnSigs = (signatures ?? [])
       .filter((f) => isBase64Image(f.value))
       .map((f) => ({ data: f.value, label: f.label }))
 
-    const allSigs = [...sigData.filter((s) => s.data), ...fieldSigs]
+    const allSigs = [...sigData.filter((s) => s.data), ...columnSigs]
 
     const container = document.createElement("div")
     container.dir = "rtl"
@@ -276,7 +278,41 @@ export function RecordDetailsDialog({
           recordId={recordId}
           initial={attachments}
           signatureRoles={moduleRoles}
+          hideSignatures={!!signatures}
         />
+
+        {signatures && signatures.length > 0 && (
+          <section className="flex flex-col gap-3">
+            <h4 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <PenLine className="size-4 text-muted-foreground" />
+              التواقيع الرسمية
+            </h4>
+            <div className="grid gap-4 sm:grid-cols-3">
+              {signatures.map((sig) => (
+                <div
+                  key={sig.label}
+                  className="flex flex-col gap-2 rounded-lg border border-border p-3"
+                >
+                  <span className="text-sm font-medium text-foreground">{sig.label}</span>
+                  {isBase64Image(sig.value) ? (
+                    <div className="overflow-hidden rounded-md border border-border bg-white">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={sig.value || "/placeholder.svg"}
+                        alt={sig.label}
+                        className="h-24 w-full object-contain p-2"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex h-24 items-center justify-center rounded-md border border-dashed border-border bg-muted/30">
+                      <span className="text-xs text-muted-foreground">لم يتم التوقيع بعد</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
       </DialogContent>
     </Dialog>
   )

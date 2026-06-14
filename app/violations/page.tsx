@@ -53,6 +53,11 @@ export default async function ViolationsPage() {
               { label: "الإجراء المقترح", value: r.proposedAction || "-" },
               { label: "الحالة", value: statusLabels[r.status ?? ""] ?? "-" },
             ]}
+            signatures={[
+              { label: "توقيع المخالف", value: r.violatorSignature || "" },
+              { label: "توقيع المُبلِّغ / المشرف", value: r.editorSignature || "" },
+              { label: "توقيع مدير السلامة", value: r.managerSignature || "" },
+            ]}
             initialAttachments={[]}
           />
           <DeleteButton id={r.id} action={handleDelete} />
