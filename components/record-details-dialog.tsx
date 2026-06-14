@@ -130,17 +130,37 @@ export function RecordDetailsDialog({
       )
       .join("")
 
+    const mhsLogo = `
+      <svg width="118" height="64" viewBox="0 0 118 64" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5" orient="auto">
+            <path d="M0,0 L7,3.5 L0,7 Z" fill="#1a5fa8"/>
+          </marker>
+        </defs>
+        <path d="M 95 9 A 17 17 0 1 1 93 8" stroke="#1a5fa8" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
+        <text x="6" y="44" font-size="38" font-weight="bold" fill="#1a5fa8" font-family="Arial, sans-serif">MHS</text>
+        <text x="59" y="60" font-size="11" font-weight="600" fill="#1a5fa8" font-family="system-ui, Tahoma, sans-serif" text-anchor="middle">الأيادي الفضية الحديثة</text>
+      </svg>`
+
     container.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #0f766e;padding-bottom:16px;margin-bottom:24px;">
-        <div>
-          <h1 style="margin:0;font-size:22px;color:#0f766e;">${escapeHtml(title)}</h1>
-          ${subtitle ? `<p style="margin:6px 0 0;font-size:13px;color:#64748b;">${escapeHtml(subtitle)}</p>` : ""}
-        </div>
-        <div style="text-align:left;font-size:12px;color:#64748b;">
-          ${documentNo ? `<div>رقم الوثيقة: <span style="font-family:monospace;">${escapeHtml(documentNo)}</span></div>` : ""}
-          <div>تاريخ التصدير: ${new Date().toLocaleDateString("ar-EG")}</div>
-        </div>
-      </div>
+      <table style="width:100%;border-collapse:collapse;border:1px solid #cbd5e1;margin-bottom:24px;">
+        <tr>
+          <td style="border:1px solid #cbd5e1;padding:10px;width:150px;text-align:center;vertical-align:middle;background:#ffffff;">
+            ${mhsLogo}
+          </td>
+          <td style="border:1px solid #cbd5e1;padding:10px 14px;text-align:center;vertical-align:middle;">
+            <div style="font-size:18px;font-weight:700;color:#0f172a;">${escapeHtml(title)}</div>
+            ${subtitle ? `<div style="font-size:12px;color:#64748b;margin-top:4px;">${escapeHtml(subtitle)}</div>` : ""}
+            <div style="font-size:11px;color:#94a3b8;margin-top:4px;direction:ltr;">Health, Safety &amp; Environment Report</div>
+          </td>
+          <td style="border:1px solid #cbd5e1;padding:8px 12px;width:210px;font-size:11px;color:#334155;vertical-align:middle;line-height:1.7;">
+            <div>رقم الوثيقة: <span style="font-family:monospace;">MHS-IMS-FR-HSE-01</span></div>
+            <div>رقم الإصدار/التاريخ: 01 / 28.12.2025</div>
+            <div>رقم المراجعة/التاريخ: 00</div>
+            ${documentNo ? `<div style="margin-top:4px;padding-top:4px;border-top:1px solid #e2e8f0;">المرجع: <span style="font-family:monospace;">${escapeHtml(documentNo)}</span></div>` : ""}
+          </td>
+        </tr>
+      </table>
       <table style="width:100%;border-collapse:collapse;font-size:13px;">${rows}</table>
       ${
         photosHtml
