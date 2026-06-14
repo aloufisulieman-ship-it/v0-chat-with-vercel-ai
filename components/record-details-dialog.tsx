@@ -48,6 +48,7 @@ export function RecordDetailsDialog({
   fields,
   signatures,
   initialAttachments,
+  trigger,
 }: {
   module: string
   recordId: number
@@ -57,6 +58,7 @@ export function RecordDetailsDialog({
   fields: DetailField[]
   signatures?: DetailField[]
   initialAttachments: AttachmentRow[]
+  trigger?: React.ReactNode
 }) {
   const [open, setOpen] = useState(false)
   const [attachments, setAttachments] = useState<AttachmentRow[]>(initialAttachments)
@@ -265,9 +267,11 @@ export function RecordDetailsDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="size-8" aria-label="عرض التفاصيل">
-          <Eye className="size-4" />
-        </Button>
+        {trigger ?? (
+          <Button variant="ghost" size="icon" className="size-8" aria-label="عرض التفاصيل">
+            <Eye className="size-4" />
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="max-h-[90svh] max-w-2xl overflow-y-auto">
         <DialogHeader>
