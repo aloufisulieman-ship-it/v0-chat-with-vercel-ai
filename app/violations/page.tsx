@@ -7,6 +7,7 @@ import { DeleteButton } from "@/components/delete-button"
 import { requireModule } from "@/lib/session"
 import { getViolations, deleteViolation } from "@/app/actions/hse"
 import { statusLabels } from "@/lib/labels"
+import { categoryLabels } from "@/lib/violation-category"
 import { FileWarning, Clock, CheckCircle2 } from "lucide-react"
 import { ViolationFormDialog } from "./violation-form"
 
@@ -45,6 +46,9 @@ export default async function ViolationsPage() {
               { label: "اسم الموظف", value: r.employeeName },
               { label: "الرقم الوظيفي", value: r.employeeNo || "-" },
               { label: "اسم الشركة", value: r.companyName || "-" },
+              { label: "نوع المخالفة", value: r.violationType || "-" },
+              { label: "التصنيف", value: categoryLabels[r.category ?? "internal"] ?? "-" },
+              { label: "الإجراء الداخلي", value: r.internalAction || "-" },
               { label: "التاريخ", value: r.violationDate ?? "-" },
               { label: "الوقت", value: r.violationTime || "-" },
               { label: "المكان", value: r.place || "-" },

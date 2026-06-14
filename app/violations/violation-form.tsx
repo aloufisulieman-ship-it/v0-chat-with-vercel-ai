@@ -11,6 +11,13 @@ import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/hooks/use-toast"
 import { createViolationFull } from "@/app/actions/hse"
 import { violationStatusOptions } from "@/lib/labels"
+import {
+  classifyViolation,
+  categoryOptions,
+  internalActionOptions,
+  type ViolationCategory,
+} from "@/lib/violation-category"
+import { Checkbox } from "@/components/ui/checkbox"
 
 const VIOLATION_TYPES = [
   "عدم ارتداء خوذة السلامة",
@@ -135,7 +142,8 @@ export function ViolationFormDialog() {
   const [form, setForm] = useState({
     employeeName: "", employeeNo: "", nationality: "", companyName: "",
     documentNo: "MHS-IMS-PR-HSE-647", violationDate: "", violationTime: "",
-    place: "", violationType: "", description: "", witnesses: "",
+    place: "", violationType: "", category: "internal", internalAction: "",
+    description: "", witnesses: "",
     evidences: "", proposedAction: "", status: "open",
   })
 
@@ -149,7 +157,8 @@ export function ViolationFormDialog() {
     setForm({
       employeeName: "", employeeNo: "", nationality: "", companyName: "",
       documentNo: "MHS-IMS-PR-HSE-647", violationDate: "", violationTime: "",
-      place: "", violationType: "", description: "", witnesses: "",
+      place: "", violationType: "", category: "internal", internalAction: "",
+      description: "", witnesses: "",
       evidences: "", proposedAction: "", status: "open",
     })
     setImages([])
@@ -252,13 +261,60 @@ export function ViolationFormDialog() {
             </div>
             <div className="flex flex-col gap-1 sm:col-span-2">
               <Label>نوع المخالفة <span className="text-destructive">*</span></Label>
-              <Select value={form.violationType} onValueChange={v => setForm(f => ({ ...f, violationType: v }))}>
+              <Select
+                value={form.violationType}
+                onValueChange={v =>
+                  setForm(f => ({ ...f, violationType: v, category: classifyViolation(v), internalAction: "" }))
+                }
+              >
                 <SelectTrigger><SelectValue placeholder="اختر نوع المخالفة..." /></SelectTrigger>
                 <SelectContent className="max-h-72">
                   {VIOLATION_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
+            {form.violationType && (
+              <>
+                <div className="flex flex-col gap-1">
+                  <Label>التصنيف</Label>
+                  <Select
+                    value={form.category}
+                    onValueChange={v => setForm(f => ({ ...f, category: v, internalAction: "" }))}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {categoryOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label>الإجراء الداخلي</Label>
+                  {form.category === "internal" ? (
+                    <label className="flex h-9 items-center gap-2 rounded-md border border-input bg-background px-3 cursor-pointer">
+                      <Checkbox
+                        checked={form.internalAction === "تحويل إلى الموارد البشرية"}
+                        onCheckedChange={(c) =>
+                          setForm(f => ({ ...f, internalAction: c ? "تحويل إلى الموارد البشرية" : "" }))
+                        }
+                      />
+                      <span className="text-sm">تحويل إلى الموارد البشرية</span>
+                    </label>
+                  ) : (
+                    <Select
+                      value={form.internalAction}
+                      onValueChange={v => setForm(f => ({ ...f, internalAction: v }))}
+                    >
+                      <SelectTrigger><SelectValue placeholder="اختر الإجراء..." /></SelectTrigger>
+                      <SelectContent>
+                        {internalActionOptions[form.category as ViolationCategory].map(o => (
+                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              </>
+            )}
             <div className="flex flex-col gap-1 sm:col-span-2">
               <Label>وصف تفصيلي (اختياري)</Label>
               <Textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} placeholder="تفاصيل إضافية..." />
