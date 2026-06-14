@@ -95,6 +95,9 @@ export const incident = pgTable("incident", {
   authorityName: text("authority_name").default(""),
   recommendations: text("recommendations").default(""),
   reporterSignature: text("reporter_signature").default(""),
+  safetySignature: text("safety_signature").default(""),
+  hrSignature: text("hr_signature").default(""),
+  gmSignature: text("gm_signature").default(""),
   managerSignature: text("manager_signature").default(""),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })

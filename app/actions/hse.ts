@@ -176,22 +176,51 @@ export async function createIncidentFull(formData: FormData) {
       recommendations: str(formData.get("recommendations")),
       reportedBy: str(formData.get("reportedBy")),
       reporterSignature: str(formData.get("reporterSignature")),
-      managerSignature: str(formData.get("managerSignature")),
+      safetySignature: str(formData.get("safetySignature")),
+      hrSignature: str(formData.get("hrSignature")),
+      gmSignature: str(formData.get("gmSignature")),
+      managerSignature: str(formData.get("safetySignature")),
     })
     .returning({ id: incident.id })
 
   const recordId = inserted.id
 
-  // Persist signatures as role-named attachments so they render once in the
-  // official signatures section and in the PDF export.
+  // Persist the four official signatures as role-named attachments so they
+  // render once in the official signatures section and in the PDF export.
   const signaturePairs: { value: string; kind: string; name: string }[] = [
     { value: str(formData.get("reporterSignature")), kind: "signature:reporter", name: "reporter-signature" },
-    { value: str(formData.get("managerSignature")), kind: "signature:safety_manager", name: "manager-signature" },
+    { value: str(formData.get("safetySignature")), kind: "signature:safety_manager", name: "safety-signature" },
+    { value: str(formData.get("hrSignature")), kind: "signature:hr", name: "hr-signature" },
+    { value: str(formData.get("gmSignature")), kind: "signature:gm", name: "gm-signature" },
   ]
   for (const sig of signaturePairs) {
     if (sig.value.startsWith("data:image")) {
       await saveDataUrlAttachment(userId, "incidents", recordId, sig.kind, sig.value, sig.name)
     }
+  }
+
+  // Persist site photos (JSON array of base64 data URLs) as photo attachments.
+  try {
+    const sitePhotos = JSON.parse(str(formData.get("sitePhotos"), "[]")) as string[]
+    for (let i = 0; i < sitePhotos.length; i++) {
+      if (typeof sitePhotos[i] === "string" && sitePhotos[i].startsWith("data:image")) {
+        await saveDataUrlAttachment(userId, "incidents", recordId, "photo", sitePhotos[i], `site-${i + 1}`)
+      }
+    }
+  } catch {
+    // ignore malformed payloads; the incident itself is already saved
+  }
+
+  // Persist per-party injury photos as photo attachments.
+  try {
+    const injuryPhotos = JSON.parse(str(formData.get("injuryPhotos"), "[]")) as string[]
+    for (let i = 0; i < injuryPhotos.length; i++) {
+      if (typeof injuryPhotos[i] === "string" && injuryPhotos[i].startsWith("data:image")) {
+        await saveDataUrlAttachment(userId, "incidents", recordId, "photo", injuryPhotos[i], `injury-party-${i + 1}`)
+      }
+    }
+  } catch {
+    // ignore malformed payloads
   }
 
   revalidatePath("/incidents")

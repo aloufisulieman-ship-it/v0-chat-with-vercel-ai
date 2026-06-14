@@ -36,12 +36,11 @@ export const partyAffiliationOptions = [
 ]
 
 export const partyInjuryOptions = [
-  { value: "none", label: "لا إصابة" },
-  { value: "cut", label: "جرح" },
-  { value: "fracture", label: "كسر" },
-  { value: "burn", label: "حرق" },
-  { value: "bruise", label: "كدمة" },
+  { value: "minor", label: "بسيطة" },
+  { value: "moderate", label: "متوسطة" },
+  { value: "severe", label: "بالغة" },
   { value: "death", label: "وفاة" },
+  { value: "other", label: "أخرى" },
 ]
 
 export const partyHospitalizedOptions = [
@@ -58,6 +57,8 @@ export type IncidentParty = {
   affiliation: string
   injuryType: string
   hospitalized: string
+  // base64 صورة الإصابة (تُستخدم في الواجهة فقط، وتُرفع كمرفق عند الحفظ)
+  injuryPhoto?: string
 }
 
 // نص مقروء لطرف واحد لعرضه في صفحة التفاصيل وملف PDF.

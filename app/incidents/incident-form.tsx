@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useTransition } from "react"
-import { AlertTriangle, PenLine, X, ChevronRight, ChevronLeft, Plus, Trash2, Users } from "lucide-react"
+import { AlertTriangle, PenLine, X, ChevronRight, ChevronLeft, Plus, Trash2, Users, Camera, ImageIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -117,19 +117,43 @@ export function IncidentFormDialog({ defaultReporter = "" }: { defaultReporter?:
 
   const [form, setForm] = useState(initialForm)
   const [parties, setParties] = useState<IncidentParty[]>([])
+  const [sitePhotos, setSitePhotos] = useState<string[]>([])
   const [reporterSignature, setReporterSignature] = useState("")
-  const [managerSignature, setManagerSignature] = useState("")
+  const [safetySignature, setSafetySignature] = useState("")
+  const [hrSignature, setHrSignature] = useState("")
+  const [gmSignature, setGmSignature] = useState("")
 
   function resetForm() {
     setStep(1)
     setForm(initialForm)
     setParties([])
+    setSitePhotos([])
     setReporterSignature("")
-    setManagerSignature("")
+    setSafetySignature("")
+    setHrSignature("")
+    setGmSignature("")
   }
 
   function updateParty(index: number, key: keyof IncidentParty, value: string) {
     setParties((prev) => prev.map((p, i) => (i === index ? { ...p, [key]: value } : p)))
+  }
+
+  function readFileToDataUrl(file: File, onDone: (dataUrl: string) => void) {
+    const reader = new FileReader()
+    reader.onload = () => onDone(reader.result as string)
+    reader.readAsDataURL(file)
+  }
+
+  function handlePartyPhoto(index: number, e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (file) readFileToDataUrl(file, (url) => updateParty(index, "injuryPhoto", url))
+    e.target.value = ""
+  }
+
+  function handleSitePhotos(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? [])
+    files.forEach((f) => readFileToDataUrl(f, (url) => setSitePhotos((prev) => [...prev, url])))
+    e.target.value = ""
   }
 
   function handleSave() {
@@ -137,9 +161,16 @@ export function IncidentFormDialog({ defaultReporter = "" }: { defaultReporter?:
       try {
         const fd = new FormData()
         Object.entries(form).forEach(([k, v]) => fd.append(k, v))
-        fd.append("parties", JSON.stringify(parties))
+        // افصل صور الإصابات عن بيانات الأطراف لتجنّب تضخّم عمود parties
+        const cleanParties = parties.map(({ injuryPhoto, ...rest }) => rest)
+        const injuryPhotos = parties.map((p) => p.injuryPhoto ?? "")
+        fd.append("parties", JSON.stringify(cleanParties))
+        fd.append("injuryPhotos", JSON.stringify(injuryPhotos))
+        fd.append("sitePhotos", JSON.stringify(sitePhotos))
         fd.append("reporterSignature", reporterSignature)
-        fd.append("managerSignature", managerSignature)
+        fd.append("safetySignature", safetySignature)
+        fd.append("hrSignature", hrSignature)
+        fd.append("gmSignature", gmSignature)
         await createIncidentFull(fd)
         toast({ title: "تم الحفظ بنجاح", description: "تم تسجيل الحادثة في قاعدة البيانات." })
         setOpen(false)
@@ -329,17 +360,67 @@ export function IncidentFormDialog({ defaultReporter = "" }: { defaultReporter?:
                         </SelectContent>
                       </Select>
                     </div>
+                    <div className="flex flex-col gap-1 sm:col-span-2">
+                      <Label>صورة الإصابة (اختياري)</Label>
+                      {p.injuryPhoto ? (
+                        <div className="relative w-fit">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={p.injuryPhoto || "/placeholder.svg"} alt="صورة الإصابة" className="h-28 w-28 rounded-lg border border-border object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => updateParty(i, "injuryPhoto", "")}
+                            className="absolute -right-2 -top-2 rounded-full bg-destructive p-1 text-destructive-foreground"
+                          >
+                            <X className="size-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="flex h-20 w-full cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border text-sm text-muted-foreground transition-colors hover:bg-muted/50">
+                          <Camera className="size-5" /> رفع صورة الإصابة
+                          <input type="file" accept="image/*" className="hidden" onChange={(e) => handlePartyPhoto(i, e)} />
+                        </label>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))
             )}
+
+            <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
+              <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <ImageIcon className="size-4 text-muted-foreground" /> صور موقع الحادث
+              </span>
+              <label className="flex h-24 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border text-sm text-muted-foreground transition-colors hover:bg-muted/50">
+                <Camera className="size-6" /> اضغط لرفع صورة أو أكثر لموقع الحادث
+                <input type="file" accept="image/*" multiple className="hidden" onChange={handleSitePhotos} />
+              </label>
+              {sitePhotos.length > 0 && (
+                <div className="grid grid-cols-3 gap-2">
+                  {sitePhotos.map((img, i) => (
+                    <div key={i} className="relative">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={img || "/placeholder.svg"} alt={`صورة الموقع ${i + 1}`} className="h-24 w-full rounded-lg border border-border object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setSitePhotos((imgs) => imgs.filter((_, j) => j !== i))}
+                        className="absolute -right-2 -top-2 rounded-full bg-destructive p-1 text-destructive-foreground"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
         {step === 3 && (
-          <div className="flex flex-col gap-6">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <SignaturePad label="توقيع المبلّغ" value={reporterSignature} onChange={setReporterSignature} />
-            <SignaturePad label="توقيع مدير السلامة" value={managerSignature} onChange={setManagerSignature} />
+            <SignaturePad label="توقيع مسؤول السلامة" value={safetySignature} onChange={setSafetySignature} />
+            <SignaturePad label="توقيع الموارد البشرية" value={hrSignature} onChange={setHrSignature} />
+            <SignaturePad label="توقيع المدير العام" value={gmSignature} onChange={setGmSignature} />
           </div>
         )}
 

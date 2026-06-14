@@ -66,7 +66,9 @@ export default async function IncidentsPage() {
             ]}
             signatures={[
               { label: "توقيع المبلّغ", value: r.reporterSignature || "" },
-              { label: "توقيع مدير السلامة", value: r.managerSignature || "" },
+              { label: "توقيع مسؤول السلامة", value: r.safetySignature || "" },
+              { label: "توقيع الموارد البشرية", value: r.hrSignature || "" },
+              { label: "توقيع المدير العام", value: r.gmSignature || "" },
             ]}
             initialAttachments={[]}
           />
