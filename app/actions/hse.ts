@@ -309,20 +309,7 @@ export async function getViolations() {
   return db.select().from(violation).where(eq(violation.userId, userId)).orderBy(desc(violation.createdAt))
 }
 
-export async function createViolationFull(data: {
-  employeeName: string
-  employeeNo?: string
-  companyName?: string
-  violationDate?: string
-  violationTime?: string
-  place?: string
-  description?: string
-  witnesses?: string
-  proposedAction?: string
-  editorSignature?: string
-  violatorSignature?: string
-  managerSignature?: string
-}) {
+export async function createViolationFull(formData: FormData) {
   const userId = await requireModuleUserId("violations")
   const year = new Date().getFullYear()
   const existing = await db.select({ documentNo: violation.documentNo }).from(violation).orderBy(desc(violation.createdAt))
@@ -332,22 +319,29 @@ export async function createViolationFull(data: {
     return seq > max ? seq : max
   }, 0)
   const documentNo = `VIO-${year}-${String(maxSeq + 1).padStart(3, "0")}`
+
+  const employeeName = str(formData.get("employeeName")).trim()
+  if (!employeeName) throw new Error("اسم الموظف مطلوب")
+
+  // Pass every column explicitly so nothing falls back to a DB default.
   await db.insert(violation).values({
     userId,
     documentNo,
-    employeeName: data.employeeName,
-    employeeNo: data.employeeNo ?? "",
-    companyName: data.companyName ?? "",
-    violationDate: data.violationDate ?? null,
-    violationTime: data.violationTime ?? "",
-    place: data.place ?? "",
-    description: data.description ?? "",
-    witnesses: data.witnesses ?? "",
-    proposedAction: data.proposedAction ?? "",
-    editorSignature: data.editorSignature ?? "",
-    violatorSignature: data.violatorSignature ?? "",
-    managerSignature: data.managerSignature ?? "",
-    status: "open",
+    companyName: str(formData.get("companyName")),
+    employeeName,
+    employeeNo: str(formData.get("employeeNo")),
+    nationality: str(formData.get("nationality")),
+    violationDate: dateOrNull(formData.get("violationDate")),
+    violationTime: str(formData.get("violationTime")),
+    place: str(formData.get("place")),
+    description: str(formData.get("description")),
+    witnesses: str(formData.get("witnesses")),
+    evidences: str(formData.get("evidences")),
+    proposedAction: str(formData.get("proposedAction")),
+    status: str(formData.get("status"), "open"),
+    editorSignature: str(formData.get("editorSignature")),
+    violatorSignature: str(formData.get("violatorSignature")),
+    managerSignature: str(formData.get("managerSignature")),
   })
   revalidatePath("/violations")
   revalidatePath("/")
