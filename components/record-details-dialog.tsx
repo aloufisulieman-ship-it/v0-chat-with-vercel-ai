@@ -107,10 +107,9 @@ export function RecordDetailsDialog({
     const rows = fields
       .filter((f) => f.value && f.value !== "-" && !isBase64Image(f.value))
       .map(
-        (f) => `
-        <tr>
-          <td style="padding:10px 12px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;width:35%;vertical-align:top;">${f.label}</td>
-          <td style="padding:10px 12px;border:1px solid #e2e8f0;vertical-align:top;">${escapeHtml(f.value)}</td>
+        (f) => `<tr>
+          <td style="border:1px solid black;background:#f0f0f0;font-weight:bold;width:30%;padding:6px;vertical-align:top;">${f.label}</td>
+          <td style="border:1px solid black;background:#ffffff;width:70%;padding:6px;vertical-align:top;white-space:pre-line;">${escapeHtml(f.value)}</td>
         </tr>`,
       )
       .join("")
@@ -168,8 +167,8 @@ export function RecordDetailsDialog({
           </td>
         </tr>
       </table>
-      <table style="width:100%;border-collapse:collapse;font-size:12pt;">${rows}</table>
-      <div style="margin-top:32px;border-top:1px solid #e2e8f0;padding-top:12px;font-size:12pt;color:#94a3b8;text-align:center;">
+      <table style="width:100%;border-collapse:collapse;border:2px solid black;font-size:12pt;">${rows}</table>
+      <div style="border:2px solid black;border-top:none;padding:6px;font-size:12pt;color:#334155;text-align:center;">
         نظام إدارة الصحة والسلامة والبيئة (HSE) — تم إنشاء هذا التقرير إلكترونياً
       </div>
     `
