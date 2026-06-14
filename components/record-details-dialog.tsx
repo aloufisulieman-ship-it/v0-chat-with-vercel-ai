@@ -95,7 +95,9 @@ export function RecordDetailsDialog({
       .filter((f) => isBase64Image(f.value))
       .map((f) => ({ data: f.value, label: f.label }))
 
-    const allSigs = [...sigData.filter((s) => s.data), ...columnSigs]
+    // استخدم مصدراً واحداً فقط لتفادي تكرار التواقيع: أعمدة السجل إن وُجدت،
+    // وإلا فالمرفقات المحفوظة باسم الدور.
+    const allSigs = columnSigs.length > 0 ? columnSigs : sigData.filter((s) => s.data)
 
     const container = document.createElement("div")
     container.dir = "rtl"
@@ -165,7 +167,7 @@ export function RecordDetailsDialog({
     let el: HTMLElement | null = null
     try {
       el = await buildReportElement()
-      await downloadElementPdf(el, fileBase)
+      await downloadElementPdf(el, fileBase, { singlePage: true })
       toast({ title: "تم تنزيل ملف PDF" })
     } catch (err) {
       toast({
@@ -184,7 +186,7 @@ export function RecordDetailsDialog({
     let el: HTMLElement | null = null
     try {
       el = await buildReportElement()
-      await downloadElementPdf(el, fileBase)
+      await downloadElementPdf(el, fileBase, { singlePage: true })
 
       const lines = fields
         .filter((f) => f.value && f.value !== "-" && !isBase64Image(f.value))
