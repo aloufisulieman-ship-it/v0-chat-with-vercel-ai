@@ -15,9 +15,10 @@ import {
   classifyViolation,
   categoryOptions,
   internalActionOptions,
+  FINE_ACTION,
+  OTHER_ACTION,
   type ViolationCategory,
 } from "@/lib/violation-category"
-import { Checkbox } from "@/components/ui/checkbox"
 
 const VIOLATION_TYPES = [
   "عدم ارتداء خوذة السلامة",
@@ -142,7 +143,7 @@ export function ViolationFormDialog() {
   const [form, setForm] = useState({
     employeeName: "", employeeNo: "", nationality: "", companyName: "",
     documentNo: "MHS-IMS-PR-HSE-647", violationDate: "", violationTime: "",
-    place: "", violationType: "", category: "internal", internalAction: "",
+    place: "", violationType: "", category: "internal", internalAction: "", actionDetail: "",
     description: "", witnesses: "",
     evidences: "", proposedAction: "", status: "open",
   })
@@ -157,7 +158,7 @@ export function ViolationFormDialog() {
     setForm({
       employeeName: "", employeeNo: "", nationality: "", companyName: "",
       documentNo: "MHS-IMS-PR-HSE-647", violationDate: "", violationTime: "",
-      place: "", violationType: "", category: "internal", internalAction: "",
+      place: "", violationType: "", category: "internal", internalAction: "", actionDetail: "",
       description: "", witnesses: "",
       evidences: "", proposedAction: "", status: "open",
     })
@@ -181,6 +182,14 @@ export function ViolationFormDialog() {
       try {
         const fd = new FormData()
         Object.entries(form).forEach(([k, v]) => fd.append(k, v))
+        // ادمج الإجراء مع التفاصيل الإضافية (المبلغ أو النص الحر) في قيمة واحدة
+        let internalActionValue = form.internalAction
+        if (form.internalAction === FINE_ACTION && form.actionDetail.trim()) {
+          internalActionValue = `${FINE_ACTION}: ${form.actionDetail.trim()} ريال سعودي`
+        } else if (form.internalAction === OTHER_ACTION && form.actionDetail.trim()) {
+          internalActionValue = form.actionDetail.trim()
+        }
+        fd.set("internalAction", internalActionValue)
         fd.append("editorSignature", editorSignature)
         fd.append("violatorSignature", violatorSignature)
         fd.append("managerSignature", managerSignature)
@@ -289,30 +298,42 @@ export function ViolationFormDialog() {
                 </div>
                 <div className="flex flex-col gap-1">
                   <Label>الإجراء الداخلي</Label>
-                  {form.category === "internal" ? (
-                    <label className="flex h-9 items-center gap-2 rounded-md border border-input bg-background px-3 cursor-pointer">
-                      <Checkbox
-                        checked={form.internalAction === "تحويل إلى الموارد البشرية"}
-                        onCheckedChange={(c) =>
-                          setForm(f => ({ ...f, internalAction: c ? "تحويل إلى الموارد البشرية" : "" }))
-                        }
-                      />
-                      <span className="text-sm">تحويل إلى الموارد البشرية</span>
-                    </label>
-                  ) : (
-                    <Select
-                      value={form.internalAction}
-                      onValueChange={v => setForm(f => ({ ...f, internalAction: v }))}
-                    >
-                      <SelectTrigger><SelectValue placeholder="اختر الإجراء..." /></SelectTrigger>
-                      <SelectContent>
-                        {internalActionOptions[form.category as ViolationCategory].map(o => (
-                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
+                  <Select
+                    value={form.internalAction}
+                    onValueChange={v => setForm(f => ({ ...f, internalAction: v, actionDetail: "" }))}
+                  >
+                    <SelectTrigger><SelectValue placeholder="اختر الإجراء..." /></SelectTrigger>
+                    <SelectContent>
+                      {internalActionOptions[form.category as ViolationCategory].map(o => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
+                {form.internalAction === FINE_ACTION && (
+                  <div className="flex flex-col gap-1">
+                    <Label>قيمة الغرامة (ريال سعودي) <span className="text-destructive">*</span></Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      inputMode="decimal"
+                      value={form.actionDetail}
+                      onChange={e => setForm(f => ({ ...f, actionDetail: e.target.value }))}
+                      placeholder="مثال: 500"
+                    />
+                  </div>
+                )}
+                {form.internalAction === OTHER_ACTION && (
+                  <div className="flex flex-col gap-1 sm:col-span-2">
+                    <Label>حدّد الإجراء <span className="text-destructive">*</span></Label>
+                    <Textarea
+                      rows={2}
+                      value={form.actionDetail}
+                      onChange={e => setForm(f => ({ ...f, actionDetail: e.target.value }))}
+                      placeholder="اكتب الإجراء المتخذ..."
+                    />
+                  </div>
+                )}
               </>
             )}
             <div className="flex flex-col gap-1 sm:col-span-2">
