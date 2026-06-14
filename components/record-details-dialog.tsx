@@ -261,7 +261,7 @@ export function RecordDetailsDialog({
               .map((f) => (
                 <div key={f.label} className="grid grid-cols-3 gap-2 px-4 py-2.5">
                   <dt className="font-medium text-muted-foreground">{f.label}</dt>
-                  <dd className="col-span-2 text-foreground">
+                  <dd className="col-span-2 whitespace-pre-line text-foreground">
                     {isBase64Image(f.value) ? (
                       <img
                         src={f.value}

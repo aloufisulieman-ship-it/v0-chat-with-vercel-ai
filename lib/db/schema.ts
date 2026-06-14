@@ -74,6 +74,7 @@ export const company = pgTable("company", {
 export const incident = pgTable("incident", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
+  documentNo: text("documentNo").default(""),
   title: text("title").notNull(),
   location: text("location").default(""),
   type: text("type").default("near_miss"),
@@ -82,6 +83,19 @@ export const incident = pgTable("incident", {
   reportedBy: text("reportedBy").default(""),
   description: text("description").default(""),
   incidentDate: date("incidentDate"),
+  incidentTime: text("incidentTime").default(""),
+  directCauses: text("direct_causes").default(""),
+  rootCauses: text("root_causes").default(""),
+  propertyDamage: text("property_damage").default(""),
+  damageCost: text("damage_cost").default(""),
+  immediateActions: text("immediate_actions").default(""),
+  parties: text("parties").default("[]"),
+  witnesses: text("witnesses").default(""),
+  authoritiesNotified: text("authorities_notified").default("no"),
+  authorityName: text("authority_name").default(""),
+  recommendations: text("recommendations").default(""),
+  reporterSignature: text("reporter_signature").default(""),
+  managerSignature: text("manager_signature").default(""),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 

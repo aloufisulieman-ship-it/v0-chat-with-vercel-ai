@@ -128,6 +128,76 @@ export async function createIncident(formData: FormData) {
   revalidatePath("/incidents")
   revalidatePath("/")
 }
+
+// Full incident report: auto document number, parties, causes and signatures.
+export async function createIncidentFull(formData: FormData) {
+  const userId = await requireModuleUserId("incidents")
+
+  const title = str(formData.get("title")).trim()
+  if (!title) throw new Error("نوع الحادثة مطلوب")
+
+  // Auto document number: INC-YYYY-### (sequence resets each year).
+  const year = new Date().getFullYear()
+  const existing = await db
+    .select({ documentNo: incident.documentNo })
+    .from(incident)
+    .where(eq(incident.userId, userId))
+  const thisYearNos = (existing ?? [])
+    .map((i) => i.documentNo ?? "")
+    .filter((n) => n.startsWith(`INC-${year}-`))
+  const maxSeq = thisYearNos.reduce((max, n) => {
+    const seq = parseInt(n.split("-")[2] ?? "0", 10)
+    return seq > max ? seq : max
+  }, 0)
+  const documentNo = `INC-${year}-${String(maxSeq + 1).padStart(3, "0")}`
+
+  const [inserted] = await db
+    .insert(incident)
+    .values({
+      userId,
+      documentNo,
+      title,
+      type: str(formData.get("type"), "أخرى"),
+      severity: str(formData.get("severity"), "low"),
+      status: str(formData.get("status"), "open"),
+      location: str(formData.get("location")),
+      incidentDate: dateOrNull(formData.get("incidentDate")),
+      incidentTime: str(formData.get("incidentTime")),
+      description: str(formData.get("description")),
+      directCauses: str(formData.get("directCauses")),
+      rootCauses: str(formData.get("rootCauses")),
+      propertyDamage: str(formData.get("propertyDamage")),
+      damageCost: str(formData.get("damageCost")),
+      immediateActions: str(formData.get("immediateActions")),
+      parties: str(formData.get("parties"), "[]"),
+      witnesses: str(formData.get("witnesses")),
+      authoritiesNotified: str(formData.get("authoritiesNotified"), "no"),
+      authorityName: str(formData.get("authorityName")),
+      recommendations: str(formData.get("recommendations")),
+      reportedBy: str(formData.get("reportedBy")),
+      reporterSignature: str(formData.get("reporterSignature")),
+      managerSignature: str(formData.get("managerSignature")),
+    })
+    .returning({ id: incident.id })
+
+  const recordId = inserted.id
+
+  // Persist signatures as role-named attachments so they render once in the
+  // official signatures section and in the PDF export.
+  const signaturePairs: { value: string; kind: string; name: string }[] = [
+    { value: str(formData.get("reporterSignature")), kind: "signature:reporter", name: "reporter-signature" },
+    { value: str(formData.get("managerSignature")), kind: "signature:safety_manager", name: "manager-signature" },
+  ]
+  for (const sig of signaturePairs) {
+    if (sig.value.startsWith("data:image")) {
+      await saveDataUrlAttachment(userId, "incidents", recordId, sig.kind, sig.value, sig.name)
+    }
+  }
+
+  revalidatePath("/incidents")
+  revalidatePath("/")
+  return { documentNo }
+}
 export async function deleteIncident(id: number) {
   const userId = await requireModuleUserId("incidents")
   await db.delete(incident).where(and(eq(incident.id, id), eq(incident.userId, userId)))
