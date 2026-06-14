@@ -276,6 +276,7 @@ export function RecordDetailsDialog({
         </div>
 
         <AttachmentsManager
+          key={`${recordId}-${attachments.length}`}
           module={module}
           recordId={recordId}
           initial={attachments}
