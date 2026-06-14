@@ -14,12 +14,51 @@ import {
   audit,
   document,
   violation,
+  attachment,
   user,
 } from "@/lib/db/schema"
 import { and, desc, eq } from "drizzle-orm"
 import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
 import { requireModuleUserId } from "@/lib/session"
+import { put } from "@vercel/blob"
+
+// Convert a base64 data URL (e.g. "data:image/png;base64,....") into a Blob.
+function dataUrlToBlob(dataUrl: string): { blob: Blob; ext: string } | null {
+  const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl)
+  if (!match) return null
+  const contentType = match[1]
+  const bytes = Buffer.from(match[2], "base64")
+  const ext = contentType.split("/")[1]?.split("+")[0] || "png"
+  return { blob: new Blob([bytes], { type: contentType }), ext }
+}
+
+// Upload one base64 data URL as an attachment row tied to a record.
+async function saveDataUrlAttachment(
+  userId: string,
+  module: string,
+  recordId: number,
+  kind: string,
+  dataUrl: string,
+  baseName: string,
+) {
+  const parsed = dataUrlToBlob(dataUrl)
+  if (!parsed) return
+  const filename = `${baseName}.${parsed.ext}`
+  const key = `hse/${userId}/${module}/${recordId}/${Date.now()}-${filename}`
+  const uploaded = await put(key, parsed.blob, { access: "private", addRandomSuffix: true })
+  await db.insert(attachment).values({
+    userId,
+    module,
+    recordId,
+    kind,
+    pathname: uploaded.pathname,
+    url: uploaded.url,
+    filename,
+    contentType: parsed.blob.type,
+    size: parsed.blob.size,
+  })
+}
 
 async function getUserId() {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -324,25 +363,57 @@ export async function createViolationFull(formData: FormData) {
   if (!employeeName) throw new Error("اسم الموظف مطلوب")
 
   // Pass every column explicitly so nothing falls back to a DB default.
-  await db.insert(violation).values({
-    userId,
-    documentNo,
-    companyName: str(formData.get("companyName")),
-    employeeName,
-    employeeNo: str(formData.get("employeeNo")),
-    nationality: str(formData.get("nationality")),
-    violationDate: dateOrNull(formData.get("violationDate")),
-    violationTime: str(formData.get("violationTime")),
-    place: str(formData.get("place")),
-    description: str(formData.get("description")),
-    witnesses: str(formData.get("witnesses")),
-    evidences: str(formData.get("evidences")),
-    proposedAction: str(formData.get("proposedAction")),
-    status: str(formData.get("status"), "open"),
-    editorSignature: str(formData.get("editorSignature")),
-    violatorSignature: str(formData.get("violatorSignature")),
-    managerSignature: str(formData.get("managerSignature")),
-  })
+  const [inserted] = await db
+    .insert(violation)
+    .values({
+      userId,
+      documentNo,
+      companyName: str(formData.get("companyName")),
+      employeeName,
+      employeeNo: str(formData.get("employeeNo")),
+      nationality: str(formData.get("nationality")),
+      violationDate: dateOrNull(formData.get("violationDate")),
+      violationTime: str(formData.get("violationTime")),
+      place: str(formData.get("place")),
+      description: str(formData.get("description")),
+      witnesses: str(formData.get("witnesses")),
+      evidences: str(formData.get("evidences")),
+      proposedAction: str(formData.get("proposedAction")),
+      status: str(formData.get("status"), "open"),
+      editorSignature: str(formData.get("editorSignature")),
+      violatorSignature: str(formData.get("violatorSignature")),
+      managerSignature: str(formData.get("managerSignature")),
+    })
+    .returning({ id: violation.id })
+
+  const recordId = inserted.id
+
+  // Persist evidence photos (sent as a JSON array of base64 data URLs) as
+  // real attachments so they show up in the details dialog and PDF export.
+  try {
+    const images = JSON.parse(str(formData.get("images"), "[]")) as string[]
+    for (let i = 0; i < images.length; i++) {
+      if (typeof images[i] === "string" && images[i].startsWith("data:image")) {
+        await saveDataUrlAttachment(userId, "violations", recordId, "photo", images[i], `evidence-${i + 1}`)
+      }
+    }
+  } catch {
+    // ignore malformed image payloads; the violation itself is already saved
+  }
+
+  // Persist the three drawn signatures as role-named attachments so they
+  // render once in the official signatures section (no duplication in fields).
+  const signaturePairs: { value: string; kind: string; name: string }[] = [
+    { value: str(formData.get("violatorSignature")), kind: "signature:violator", name: "violator-signature" },
+    { value: str(formData.get("editorSignature")), kind: "signature:reporter", name: "reporter-signature" },
+    { value: str(formData.get("managerSignature")), kind: "signature:safety_manager", name: "manager-signature" },
+  ]
+  for (const sig of signaturePairs) {
+    if (sig.value.startsWith("data:image")) {
+      await saveDataUrlAttachment(userId, "violations", recordId, sig.kind, sig.value, sig.name)
+    }
+  }
+
   revalidatePath("/violations")
   revalidatePath("/")
   return { documentNo }

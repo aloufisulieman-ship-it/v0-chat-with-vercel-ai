@@ -52,9 +52,6 @@ export default async function ViolationsPage() {
               { label: "الشهود", value: r.witnesses || "-" },
               { label: "الإجراء المقترح", value: r.proposedAction || "-" },
               { label: "الحالة", value: statusLabels[r.status ?? ""] ?? "-" },
-              { label: "توقيع المخالف", value: r.violatorSignature || "" },
-              { label: "توقيع المُبلِّغ / المشرف", value: r.editorSignature || "" },
-              { label: "توقيع المدير", value: r.managerSignature || "" },
             ]}
             initialAttachments={[]}
           />
