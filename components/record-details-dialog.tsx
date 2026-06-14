@@ -102,7 +102,7 @@ export function RecordDetailsDialog({
     const container = document.createElement("div")
     container.dir = "rtl"
     container.style.cssText =
-      "position:fixed;top:-10000px;right:0;width:794px;background:#ffffff;color:#0f172a;font-family:system-ui,'Segoe UI',Tahoma,sans-serif;padding:40px;box-sizing:border-box;"
+      "position:fixed;top:-10000px;right:0;width:794px;background:#ffffff;color:#0f172a;font-family:system-ui,'Segoe UI',Tahoma,sans-serif;font-size:12pt;line-height:1.5;box-sizing:border-box;"
 
     const rows = fields
       .filter((f) => f.value && f.value !== "-" && !isBase64Image(f.value))
@@ -115,20 +115,27 @@ export function RecordDetailsDialog({
       )
       .join("")
 
-    const photosHtml = photoData
-      .filter(Boolean)
+    // الصور المرفقة: شبكة من عمودين، عرض كل صورة لا يتجاوز نصف الصفحة
+    const validPhotos = photoData.filter(Boolean)
+    const photosHtml = validPhotos
       .map(
         (d) =>
-          `<img src="${d}" style="width:48%;margin:1%;border:1px solid #e2e8f0;border-radius:6px;object-fit:cover;" />`,
+          `<div style="width:50%;box-sizing:border-box;padding:6px;"><img src="${d}" style="width:100%;height:220px;border:1px solid #e2e8f0;border-radius:6px;object-fit:cover;" /></div>`,
       )
       .join("")
 
-    const sigHtml = allSigs
-      .map(
-        (s) =>
-          `<div style="display:inline-block;width:46%;margin:1%;border:1px solid #e2e8f0;border-radius:6px;padding:8px;text-align:center;background:#fff;vertical-align:top;"><img src="${s.data}" style="max-height:90px;max-width:100%;" /><div style="margin-top:6px;font-size:12px;font-weight:600;color:#334155;border-top:1px solid #e2e8f0;padding-top:6px;">${escapeHtml(s.label)}</div></div>`,
-      )
-      .join("")
+    // التواقيع الرسمية: جدول 2×2
+    const sigCell = (s?: { data: string; label: string }) =>
+      s
+        ? `<td style="width:50%;border:1px solid #e2e8f0;padding:12px;text-align:center;vertical-align:top;background:#fff;"><img src="${s.data}" style="max-height:110px;max-width:90%;" /><div style="margin-top:8px;font-size:12pt;font-weight:600;color:#334155;border-top:1px solid #e2e8f0;padding-top:8px;">${escapeHtml(s.label)}</div></td>`
+        : `<td style="width:50%;border:1px solid #e2e8f0;padding:12px;"></td>`
+    const sigRows: string[] = []
+    for (let i = 0; i < allSigs.length; i += 2) {
+      sigRows.push(`<tr>${sigCell(allSigs[i])}${sigCell(allSigs[i + 1])}</tr>`)
+    }
+    const sigHtml = sigRows.length
+      ? `<table style="width:100%;border-collapse:collapse;">${sigRows.join("")}</table>`
+      : ""
 
     const mhsLogo = `
       <svg width="118" height="64" viewBox="0 0 118 64" xmlns="http://www.w3.org/2000/svg">
@@ -161,21 +168,34 @@ export function RecordDetailsDialog({
           </td>
         </tr>
       </table>
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">${rows}</table>
-      ${
-        photosHtml
-          ? `<h2 style="font-size:15px;color:#0f766e;margin:24px 0 8px;">الصور المرفقة (${photoData.filter(Boolean).length})</h2><div style="display:flex;flex-wrap:wrap;">${photosHtml}</div>`
-          : ""
-      }
-      ${
-        sigHtml
-          ? `<h2 style="font-size:15px;color:#0f766e;margin:24px 0 8px;">التواقيع الرسمية</h2><div>${sigHtml}</div>`
-          : ""
-      }
-      <div style="margin-top:32px;border-top:1px solid #e2e8f0;padding-top:12px;font-size:11px;color:#94a3b8;text-align:center;">
+      <table style="width:100%;border-collapse:collapse;font-size:12pt;">${rows}</table>
+      <div style="margin-top:32px;border-top:1px solid #e2e8f0;padding-top:12px;font-size:12pt;color:#94a3b8;text-align:center;">
         نظام إدارة الصحة والسلامة والبيئة (HSE) — تم إنشاء هذا التقرير إلكترونياً
       </div>
     `
+
+    const hasAttachments = !!photosHtml || !!sigHtml
+
+    const page1 = `<div style="min-height:1123px;padding:40px;box-sizing:border-box;">${container.innerHTML}</div>`
+
+    const page2 = hasAttachments
+      ? `<div style="page-break-before:always;min-height:1123px;padding:40px;box-sizing:border-box;">
+           <h1 style="font-size:16pt;color:#0f766e;margin:0 0 24px;border-bottom:2px solid #0f766e;padding-bottom:10px;">المرفقات والتواقيع الرسمية</h1>
+           ${
+             photosHtml
+               ? `<h2 style="font-size:14pt;color:#0f766e;margin:0 0 8px;">الصور المرفقة (${validPhotos.length})</h2><div style="display:flex;flex-wrap:wrap;margin-bottom:28px;">${photosHtml}</div>`
+               : ""
+           }
+           ${
+             sigHtml
+               ? `<h2 style="font-size:14pt;color:#0f766e;margin:0 0 8px;">التواقيع الرسمية</h2>${sigHtml}`
+               : ""
+           }
+         </div>`
+      : ""
+
+    // أعِد بناء المحتوى: صفحة البيانات ثم صفحة المرفقات والتواقيع المستقلة
+    container.innerHTML = page1 + page2
     document.body.appendChild(container)
     return container
   }
@@ -187,7 +207,7 @@ export function RecordDetailsDialog({
     let el: HTMLElement | null = null
     try {
       el = await buildReportElement()
-      await downloadElementPdf(el, fileBase, { singlePage: true })
+      await downloadElementPdf(el, fileBase)
       toast({ title: "تم تنزيل ملف PDF" })
     } catch (err) {
       toast({
@@ -206,7 +226,7 @@ export function RecordDetailsDialog({
     let el: HTMLElement | null = null
     try {
       el = await buildReportElement()
-      await downloadElementPdf(el, fileBase, { singlePage: true })
+      await downloadElementPdf(el, fileBase)
 
       const lines = fields
         .filter((f) => f.value && f.value !== "-" && !isBase64Image(f.value))
