@@ -21,6 +21,7 @@ import { and, desc, eq } from "drizzle-orm"
 import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
 import { requireModuleUserId } from "@/lib/session"
+import { severityLabels, statusLabels } from "@/lib/labels"
 import { put } from "@vercel/blob"
 
 // Convert a base64 data URL (e.g. "data:image/png;base64,....") into a Blob.
@@ -549,4 +550,119 @@ export async function getDashboardData() {
     db.select().from(correctiveAction).where(eq(correctiveAction.userId, userId)),
   ])
   return { incidents: inc, inspections: ins, permits: per, risks: rsk, actions: act }
+}
+
+/* ---------------- Reports ---------------- */
+export type ReportType = "incidents" | "violations" | "inspections" | "all"
+
+export type ReportRow = Record<string, string | number | null>
+
+export type ReportSection = {
+  key: ReportType
+  title: string
+  columns: { key: string; label: string }[]
+  rows: ReportRow[]
+}
+
+// Filters a date-like field against an inclusive [from, to] range (YYYY-MM-DD).
+function inRange(value: string | null | undefined, from: string, to: string) {
+  if (!value) return false
+  const d = value.slice(0, 10)
+  if (from && d < from) return false
+  if (to && d > to) return false
+  return true
+}
+
+// Returns report sections filtered by type and date range. Each section is
+// fully shaped for table preview, PDF and Excel export (Arabic columns).
+export async function getReportData(
+  type: ReportType,
+  dateFrom: string,
+  dateTo: string,
+): Promise<ReportSection[]> {
+  const userId = await requireModuleUserId("reports")
+  const from = (dateFrom || "").slice(0, 10)
+  const to = (dateTo || "").slice(0, 10)
+  const sections: ReportSection[] = []
+
+  if (type === "incidents" || type === "all") {
+    const rows = await db.select().from(incident).where(eq(incident.userId, userId)).orderBy(desc(incident.createdAt))
+    const filtered = rows.filter((r) => inRange(r.incidentDate ?? null, from, to))
+    sections.push({
+      key: "incidents",
+      title: "تقرير الحوادث",
+      columns: [
+        { key: "documentNo", label: "رقم الحادثة" },
+        { key: "title", label: "نوع الحادثة" },
+        { key: "location", label: "الموقع" },
+        { key: "incidentDate", label: "التاريخ" },
+        { key: "severity", label: "الخطورة" },
+        { key: "status", label: "الحالة" },
+        { key: "reportedBy", label: "المُبلِّغ" },
+      ],
+      rows: filtered.map((r) => ({
+        documentNo: r.documentNo || "-",
+        title: r.title || "-",
+        location: r.location || "-",
+        incidentDate: r.incidentDate ?? "-",
+        severity: severityLabels[r.severity ?? ""] ?? r.severity ?? "-",
+        status: statusLabels[r.status ?? ""] ?? r.status ?? "-",
+        reportedBy: r.reportedBy || "-",
+      })),
+    })
+  }
+
+  if (type === "violations" || type === "all") {
+    const rows = await db.select().from(violation).where(eq(violation.userId, userId)).orderBy(desc(violation.createdAt))
+    const filtered = rows.filter((r) => inRange(r.violationDate ?? null, from, to))
+    sections.push({
+      key: "violations",
+      title: "تقرير المخالفات",
+      columns: [
+        { key: "documentNo", label: "رقم المخالفة" },
+        { key: "employeeName", label: "اسم الموظف" },
+        { key: "violationType", label: "نوع المخالفة" },
+        { key: "violationDate", label: "التاريخ" },
+        { key: "category", label: "التصنيف" },
+        { key: "status", label: "الحالة" },
+      ],
+      rows: filtered.map((r) => ({
+        documentNo: r.documentNo || "-",
+        employeeName: r.employeeName || "-",
+        violationType: r.violationType || "-",
+        violationDate: r.violationDate ?? "-",
+        category: r.category === "external" ? "خارجية" : "داخلية",
+        status: statusLabels[r.status ?? ""] ?? r.status ?? "-",
+      })),
+    })
+  }
+
+  if (type === "inspections" || type === "all") {
+    const rows = await db.select().from(inspection).where(eq(inspection.userId, userId)).orderBy(desc(inspection.createdAt))
+    const filtered = rows.filter((r) => inRange(r.inspectionDate ?? null, from, to))
+    sections.push({
+      key: "inspections",
+      title: "تقرير التفتيش",
+      columns: [
+        { key: "title", label: "عنوان التفتيش" },
+        { key: "area", label: "المنطقة" },
+        { key: "inspector", label: "المفتّش" },
+        { key: "inspectionDate", label: "التاريخ" },
+        { key: "compliance", label: "نسبة الامتثال %" },
+        { key: "findings", label: "الملاحظات" },
+        { key: "status", label: "الحالة" },
+      ],
+      rows: filtered.map((r) => ({
+        title: r.title || "-",
+        area: r.area || "-",
+        inspector: r.inspector || "-",
+        inspectionDate: r.inspectionDate ?? "-",
+        compliance: r.compliance ?? 0,
+        findings: r.findings ?? 0,
+        status: statusLabels[r.status ?? ""] ?? r.status ?? "-",
+      })),
+    })
+  }
+
+  return sections
 }

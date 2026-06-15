@@ -6,6 +6,7 @@ import { IncidentTrendChart, IncidentTypeChart, SeverityChart } from "@/componen
 import { requireModule } from "@/lib/session"
 import { getDashboardData } from "@/app/actions/hse"
 import { incidentTypeLabels } from "@/lib/labels"
+import { ReportsClient } from "./reports-client"
 
 export default async function ReportsPage() {
   const user = await requireModule("reports")
@@ -95,6 +96,14 @@ export default async function ReportsPage() {
           تُحسب جميع المؤشرات والرسوم البيانية تلقائياً من بياناتك الفعلية المسجّلة في النظام، وتتحدّث فور إضافة أي سجل جديد.
         </p>
       </Card>
+
+      <section className="mt-10 border-t border-border pt-8">
+        <h2 className="mb-1 text-xl font-bold text-foreground">إنشاء وتصدير التقارير</h2>
+        <p className="mb-5 text-sm text-muted-foreground">
+          اختر نوع التقرير والمدة لمعاينة البيانات، ثم صدّرها بصيغة PDF أو Excel أو أرسلها بالبريد الإلكتروني.
+        </p>
+        <ReportsClient />
+      </section>
     </AppShell>
   )
 }
