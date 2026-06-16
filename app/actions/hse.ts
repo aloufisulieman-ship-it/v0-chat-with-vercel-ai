@@ -331,7 +331,6 @@ export async function createTraining(formData: FormData) {
   })
   revalidatePath("/training")
 }
-
 export type AttendeeInput = {
   name: string
   designation: string
@@ -357,7 +356,7 @@ export async function createTrainingFull(formData: FormData) {
     .values({
       userId,
       title,
-      trainer: str(formData.get("trainer")),
+      trainer: str(formData.get("conductedBy")),
       conductedBy: str(formData.get("conductedBy")),
       language: str(formData.get("language")),
       status: str(formData.get("status"), "scheduled"),
@@ -393,7 +392,7 @@ export async function createTrainingFull(formData: FormData) {
     )
   }
 
-  // Update the cached attendee count on the training row.
+  // Keep the cached attendee count on the training row in sync.
   await db.update(training).set({ attendees: cleaned.length }).where(eq(training.id, trainingId))
 
   // Persist trainer signature as an attachment (same pattern as violations).
