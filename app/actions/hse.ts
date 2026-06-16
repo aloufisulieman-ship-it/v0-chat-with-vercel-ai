@@ -9,6 +9,7 @@ import {
   permit,
   risk,
   training,
+  trainingAttendee,
   ppe,
   correctiveAction,
   audit,
@@ -330,8 +331,115 @@ export async function createTraining(formData: FormData) {
   })
   revalidatePath("/training")
 }
+
+export type AttendeeInput = {
+  name: string
+  designation: string
+  company: string
+  cardCode: string
+  understood: string
+  signature: string
+}
+
+// Full training record (MHS-IMS-FR-HSE-2): course header + dynamic attendees
+// table. Attendees are stored in training_attendee; signatures (trainer + each
+// attendee) are also persisted to the attachment table like violation signatures.
+export async function createTrainingFull(formData: FormData) {
+  const userId = await requireModuleUserId("training")
+
+  const title = str(formData.get("title")).trim()
+  if (!title) throw new Error("اسم الدورة مطلوب")
+
+  const trainerSignature = str(formData.get("trainerSignature"))
+
+  const [inserted] = await db
+    .insert(training)
+    .values({
+      userId,
+      title,
+      trainer: str(formData.get("trainer")),
+      conductedBy: str(formData.get("conductedBy")),
+      language: str(formData.get("language")),
+      status: str(formData.get("status"), "scheduled"),
+      trainingDate: dateOrNull(formData.get("trainingDate")),
+      trainerSignature,
+    })
+    .returning({ id: training.id })
+
+  const trainingId = inserted.id
+
+  // Parse and persist attendees.
+  let attendeesList: AttendeeInput[] = []
+  try {
+    attendeesList = JSON.parse(str(formData.get("attendeesList"), "[]")) as AttendeeInput[]
+  } catch {
+    attendeesList = []
+  }
+  const cleaned = attendeesList.filter((a) => (a.name ?? "").trim() !== "")
+
+  if (cleaned.length > 0) {
+    await db.insert(trainingAttendee).values(
+      cleaned.map((a, i) => ({
+        trainingId,
+        userId,
+        rowNo: i + 1,
+        name: a.name ?? "",
+        designation: a.designation ?? "",
+        company: a.company || "MHS",
+        cardCode: a.cardCode ?? "",
+        understood: a.understood === "no" ? "no" : "yes",
+        signature: a.signature ?? "",
+      })),
+    )
+  }
+
+  // Update the cached attendee count on the training row.
+  await db.update(training).set({ attendees: cleaned.length }).where(eq(training.id, trainingId))
+
+  // Persist trainer signature as an attachment (same pattern as violations).
+  if (trainerSignature.startsWith("data:image")) {
+    await saveDataUrlAttachment(userId, "training", trainingId, "signature:trainer", trainerSignature, "trainer-signature")
+  }
+
+  // Persist each attendee signature as an attachment for the audit trail.
+  for (let i = 0; i < cleaned.length; i++) {
+    const sig = cleaned[i].signature ?? ""
+    if (sig.startsWith("data:image")) {
+      await saveDataUrlAttachment(userId, "training", trainingId, "photo", sig, `attendee-${i + 1}-signature`)
+    }
+  }
+
+  revalidatePath("/training")
+  return { trainingId }
+}
+
+export async function getTrainingAttendees(trainingId: number) {
+  const userId = await getUserId()
+  return db
+    .select()
+    .from(trainingAttendee)
+    .where(and(eq(trainingAttendee.trainingId, trainingId), eq(trainingAttendee.userId, userId)))
+    .orderBy(trainingAttendee.rowNo)
+}
+
+// All attendees for the current user, grouped by trainingId (for the list page).
+export async function getAllTrainingAttendees() {
+  const userId = await getUserId()
+  const rows = await db
+    .select()
+    .from(trainingAttendee)
+    .where(eq(trainingAttendee.userId, userId))
+    .orderBy(trainingAttendee.rowNo)
+  const map: Record<number, typeof rows> = {}
+  for (const r of rows) {
+    ;(map[r.trainingId] ??= []).push(r)
+  }
+  return map
+}
+
 export async function deleteTraining(id: number) {
   const userId = await requireModuleUserId("training")
+  await db.delete(trainingAttendee).where(and(eq(trainingAttendee.trainingId, id), eq(trainingAttendee.userId, userId)))
   await db.delete(training).where(and(eq(training.id, id), eq(training.userId, userId)))
   revalidatePath("/training")
 }

@@ -49,6 +49,8 @@ export function RecordDetailsDialog({
   signatures,
   initialAttachments,
   trigger,
+  extraSection,
+  extraReportHtml,
 }: {
   module: string
   recordId: number
@@ -59,6 +61,10 @@ export function RecordDetailsDialog({
   signatures?: DetailField[]
   initialAttachments: AttachmentRow[]
   trigger?: React.ReactNode
+  // Optional custom block rendered on-screen below the fields.
+  extraSection?: React.ReactNode
+  // Optional custom HTML injected into the PDF (page 1) after the fields table.
+  extraReportHtml?: string
 }) {
   const [open, setOpen] = useState(false)
   const [attachments, setAttachments] = useState<AttachmentRow[]>(initialAttachments)
@@ -126,8 +132,8 @@ export function RecordDetailsDialog({
       .join("")
 
     // التواقيع الرسمية: جدول 2×2
-    const sigCell = (s?: { data: string; label: string }) =>
-      s
+    const sigCell = (s?: { data: string | null; label: string }) =>
+      s && s.data
         ? `<td style="width:50%;border:1px solid #e2e8f0;padding:12px;text-align:center;vertical-align:top;background:#fff;"><img src="${s.data}" style="max-height:110px;max-width:90%;" /><div style="margin-top:8px;font-size:12pt;font-weight:600;color:#334155;border-top:1px solid #e2e8f0;padding-top:8px;">${escapeHtml(s.label)}</div></td>`
         : `<td style="width:50%;border:1px solid #e2e8f0;padding:12px;"></td>`
     const sigRows: string[] = []
@@ -170,6 +176,7 @@ export function RecordDetailsDialog({
         </tr>
       </table>
       <table style="width:100%;border-collapse:collapse;border:2px solid black;font-size:12pt;">${rows}</table>
+      ${extraReportHtml ? `<div style="margin-top:20px;">${extraReportHtml}</div>` : ""}
       <div style="border:2px solid black;border-top:none;padding:6px;font-size:12pt;color:#334155;text-align:center;">
         نظام إدارة الصحة والسلامة والبيئة (HSE) — تم إنشاء هذا التقرير إلكترونياً
       </div>
@@ -319,6 +326,8 @@ export function RecordDetailsDialog({
               ))}
           </dl>
         </div>
+
+        {extraSection}
 
         <AttachmentsManager
           key={`${recordId}-${attachments.length}`}

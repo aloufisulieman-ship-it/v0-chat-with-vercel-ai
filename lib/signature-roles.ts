@@ -13,6 +13,7 @@ export const signatureRoles: Record<string, SignatureRole[]> = {
     { key: "supervisor", label: "توقيع المشرف المباشر" },
     { key: "safety_manager", label: "توقيع مدير السلامة" },
   ],
+  training: [{ key: "trainer", label: "توقيع المدرب" }],
 }
 
 export const SIGNATURE_KIND_PREFIX = "signature:"

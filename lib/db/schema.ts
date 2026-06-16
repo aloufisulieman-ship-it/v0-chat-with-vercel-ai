@@ -152,6 +152,24 @@ export const training = pgTable("training", {
   attendees: integer("attendees").default(0),
   status: text("status").default("scheduled"),
   trainingDate: date("trainingDate"),
+  conductedBy: text("conducted_by").default(""),
+  language: text("language").default(""),
+  trainerSignature: text("trainer_signature").default(""),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
+// سجل حضور كل متدرب لدورة تدريبية (نموذج MHS-IMS-FR-HSE-2)
+export const trainingAttendee = pgTable("training_attendee", {
+  id: serial("id").primaryKey(),
+  trainingId: integer("training_id").notNull(),
+  userId: text("userId").notNull(),
+  rowNo: integer("row_no").default(0),
+  name: text("name").default(""),
+  designation: text("designation").default(""),
+  company: text("company").default("MHS"),
+  cardCode: text("card_code").default(""),
+  understood: text("understood").default("yes"),
+  signature: text("signature").default(""),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
