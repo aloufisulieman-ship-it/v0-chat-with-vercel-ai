@@ -32,13 +32,21 @@ export async function elementToPdf(el: HTMLElement, opts?: { singlePage?: boolea
   const imgWidth = pageWidth
   const imgHeight = (canvas.height * imgWidth) / canvas.width
 
+  // If the whole content fits within one page (with a small tolerance), render
+  // it once — prevents a trailing near-empty page from rounding.
+  const TOLERANCE = 2 // mm
+  if (imgHeight <= pageHeight + TOLERANCE) {
+    pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight)
+    return pdf
+  }
+
   let heightLeft = imgHeight
   let position = 0
 
   pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight)
   heightLeft -= pageHeight
 
-  while (heightLeft > 0) {
+  while (heightLeft > TOLERANCE) {
     position -= pageHeight
     pdf.addPage()
     pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight)

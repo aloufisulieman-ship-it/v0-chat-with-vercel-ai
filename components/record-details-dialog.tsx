@@ -51,6 +51,7 @@ export function RecordDetailsDialog({
   trigger,
   extraSection,
   extraReportHtml,
+  suppressReportAttachments,
 }: {
   module: string
   recordId: number
@@ -65,6 +66,9 @@ export function RecordDetailsDialog({
   extraSection?: React.ReactNode
   // Optional custom HTML injected into the PDF (page 1) after the fields table.
   extraReportHtml?: string
+  // When true, the PDF omits the separate "attachments & signatures" page
+  // (used by training, where attendee signatures already appear inline).
+  suppressReportAttachments?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [attachments, setAttachments] = useState<AttachmentRow[]>(initialAttachments)
@@ -182,13 +186,16 @@ export function RecordDetailsDialog({
       </div>
     `
 
-    const hasAttachments = !!photosHtml || !!sigHtml
+    // Natural-height first page (no forced A4 min-height → avoids blank pages).
+    const page1 = `<div style="padding:40px;box-sizing:border-box;">${container.innerHTML}</div>`
 
-    const page1 = `<div style="min-height:1123px;padding:40px;box-sizing:border-box;">${container.innerHTML}</div>`
+    // The attachments/signatures page is skipped entirely for training, where
+    // attendee signatures already appear inline in the attendance table.
+    const hasAttachments = !suppressReportAttachments && (!!photosHtml || !!sigHtml)
 
     const page2 = hasAttachments
-      ? `<div style="page-break-before:always;min-height:1123px;padding:40px;box-sizing:border-box;">
-           <h1 style="font-size:16pt;color:#0f766e;margin:0 0 24px;border-bottom:2px solid #0f766e;padding-bottom:10px;">المرفقات والتواقيع الرسمية</h1>
+      ? `<div style="margin-top:24px;padding:0 40px 40px;box-sizing:border-box;">
+           <h1 style="font-size:16pt;color:#0f766e;margin:0 0 16px;border-bottom:2px solid #0f766e;padding-bottom:10px;">المرفقات والتواقيع الرسمية</h1>
            ${
              photosHtml
                ? `<h2 style="font-size:14pt;color:#0f766e;margin:0 0 8px;">الصور المرفقة (${validPhotos.length})</h2><div style="display:flex;flex-wrap:wrap;margin-bottom:28px;">${photosHtml}</div>`
@@ -202,7 +209,7 @@ export function RecordDetailsDialog({
          </div>`
       : ""
 
-    // أعِد بناء المحتوى: صفحة البيانات ثم صفحة المرفقات والتواقيع المستقلة
+    // أعِد بناء المحتوى: بيانات السجل ثم المرفقات والتواقيع (إن وُجدت).
     container.innerHTML = page1 + page2
     document.body.appendChild(container)
     return container

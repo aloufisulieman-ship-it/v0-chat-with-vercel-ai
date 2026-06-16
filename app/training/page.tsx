@@ -154,6 +154,7 @@ export default async function TrainingPage() {
               initialAttachments={[]}
               extraSection={<AttendanceTable rows={attendees} />}
               extraReportHtml={buildAttendanceHtml(attendees)}
+              suppressReportAttachments
             />
             <DeleteButton id={r.id} action={deleteTraining} />
           </div>
