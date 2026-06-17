@@ -10,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/use-toast"
 import { createTrainingFull } from "@/app/actions/hse"
 import { inspectionStatusOptions } from "@/lib/labels"
+import { TrainingPhotosUploader } from "./training-photos-uploader"
+import { BulkAttendeeImport, type ParsedAttendee } from "./bulk-attendee-import"
 
 // لوحة توقيع رقمية تدعم الماوس واللمس (بصمة الإصبع على الشاشة) وتحفظ كصورة base64.
 function SignaturePad({
@@ -147,16 +149,32 @@ export function TrainingFormDialog() {
 
   const [form, setForm] = useState(initialForm)
   const [trainerSignature, setTrainerSignature] = useState("")
+  const [photos, setPhotos] = useState<string[]>([])
   const [attendees, setAttendees] = useState<Attendee[]>([{ ...emptyAttendee }])
 
   function resetForm() {
     setForm(initialForm)
     setTrainerSignature("")
+    setPhotos([])
     setAttendees([{ ...emptyAttendee }])
   }
 
   function updateAttendee(index: number, key: keyof Attendee, value: string) {
     setAttendees((prev) => prev.map((a, i) => (i === index ? { ...a, [key]: value } : a)))
+  }
+
+  // Merges imported rows (name + designation) into the attendance table.
+  // Remaining fields stay empty/default for manual entry.
+  function handleBulkImport(rows: ParsedAttendee[]) {
+    const imported: Attendee[] = rows.map((r) => ({
+      ...emptyAttendee,
+      name: r.name,
+      designation: r.designation,
+    }))
+    setAttendees((prev) => {
+      const base = prev.length === 1 && prev[0].name.trim() === "" ? [] : prev
+      return [...base, ...imported]
+    })
   }
 
   function handleSave() {
@@ -169,6 +187,7 @@ export function TrainingFormDialog() {
         const fd = new FormData()
         Object.entries(form).forEach(([k, v]) => fd.append(k, v))
         fd.append("trainerSignature", trainerSignature)
+        fd.append("photos", JSON.stringify(photos))
         fd.append("attendeesList", JSON.stringify(attendees.filter((a) => a.name.trim() !== "")))
         await createTrainingFull(fd)
         toast({ title: "تم الحفظ بنجاح", description: "تم تسجيل الدورة وسجل الحضور في قاعدة البيانات." })
@@ -229,6 +248,9 @@ export function TrainingFormDialog() {
           <div className="sm:col-span-2">
             <SignaturePad label="توقيع المدرب" value={trainerSignature} onChange={setTrainerSignature} />
           </div>
+          <div className="sm:col-span-2">
+            <TrainingPhotosUploader photos={photos} onChange={setPhotos} />
+          </div>
         </div>
 
         {/* جدول الحضور */}
@@ -237,9 +259,12 @@ export function TrainingFormDialog() {
             <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
               <Users className="size-4 text-muted-foreground" /> سجل الحضور
             </span>
-            <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => setAttendees((a) => [...a, { ...emptyAttendee }])}>
-              <Plus className="size-4" /> إضافة متدرب
-            </Button>
+            <div className="flex items-center gap-2">
+              <BulkAttendeeImport onImport={handleBulkImport} />
+              <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => setAttendees((a) => [...a, { ...emptyAttendee }])}>
+                <Plus className="size-4" /> إضافة متدرب
+              </Button>
+            </div>
           </div>
 
           {attendees.map((a, i) => (
