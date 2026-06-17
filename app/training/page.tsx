@@ -27,17 +27,6 @@ function understoodLabel(v: string | null) {
   return v === "no" ? "لا" : "نعم"
 }
 
-// Parses the JSON `photos` column into an array of base64 data URLs.
-function parsePhotos(raw: string | null): string[] {
-  if (!raw) return []
-  try {
-    const arr = JSON.parse(raw)
-    return Array.isArray(arr) ? arr.filter((p) => typeof p === "string" && p.startsWith("data:image")) : []
-  } catch {
-    return []
-  }
-}
-
 // Escapes user text before embedding it in the PDF HTML string.
 function esc(v: string | number | null | undefined) {
   return String(v ?? "")
@@ -47,46 +36,33 @@ function esc(v: string | number | null | undefined) {
 }
 
 // Builds the attendance table HTML for the PDF export (Arabic RTL, MHS-IMS-FR-HSE-2).
-function buildAttendanceHtml(rows: Attendee[], photos: string[] = []) {
-  let html = ""
-  if (rows.length > 0) {
-    const head = ATTENDEE_HEADERS.map(
-      (h) =>
-        `<th style="border:1px solid black;background:#f0f0f0;padding:6px;font-size:11pt;font-weight:bold;">${h}</th>`,
-    ).join("")
-    const body = rows
-      .map((r) => {
-        const sig = (r.signature ?? "").startsWith("data:image")
-          ? `<img src="${r.signature}" style="max-height:42px;max-width:120px;" />`
-          : ""
-        return `<tr>
-          <td style="border:1px solid black;padding:5px;text-align:center;font-size:11pt;">${r.rowNo ?? ""}</td>
-          <td style="border:1px solid black;padding:5px;font-size:11pt;">${esc(r.name)}</td>
-          <td style="border:1px solid black;padding:5px;font-size:11pt;">${esc(r.designation)}</td>
-          <td style="border:1px solid black;padding:5px;font-size:11pt;">${esc(r.company)}</td>
-          <td style="border:1px solid black;padding:5px;font-size:11pt;">${esc(r.cardCode)}</td>
-          <td style="border:1px solid black;padding:5px;text-align:center;font-size:11pt;">${understoodLabel(r.understood)}</td>
-          <td style="border:1px solid black;padding:5px;text-align:center;">${sig}</td>
-        </tr>`
-      })
-      .join("")
-    html += `<h2 style="font-size:14pt;color:#0f766e;margin:0 0 8px;">سجل الحضور (${rows.length})</h2>
-      <table style="width:100%;border-collapse:collapse;border:2px solid black;" dir="rtl">
-        <thead><tr>${head}</tr></thead>
-        <tbody>${body}</tbody>
-      </table>`
-  }
-  if (photos.length > 0) {
-    const imgs = photos
-      .map(
-        (p) =>
-          `<img src="${p}" style="height:150px;width:auto;max-width:31%;object-fit:cover;border:1px solid #cbd5e1;border-radius:4px;" />`,
-      )
-      .join("")
-    html += `<h2 style="font-size:14pt;color:#0f766e;margin:18px 0 8px;">صور الدورة (${photos.length})</h2>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;">${imgs}</div>`
-  }
-  return html
+function buildAttendanceHtml(rows: Attendee[]) {
+  if (rows.length === 0) return ""
+  const head = ATTENDEE_HEADERS.map(
+    (h) =>
+      `<th style="border:1px solid black;background:#f0f0f0;padding:6px;font-size:11pt;font-weight:bold;">${h}</th>`,
+  ).join("")
+  const body = rows
+    .map((r) => {
+      const sig = (r.signature ?? "").startsWith("data:image")
+        ? `<img src="${r.signature}" style="max-height:42px;max-width:120px;" />`
+        : ""
+      return `<tr>
+        <td style="border:1px solid black;padding:5px;text-align:center;font-size:11pt;">${r.rowNo ?? ""}</td>
+        <td style="border:1px solid black;padding:5px;font-size:11pt;">${esc(r.name)}</td>
+        <td style="border:1px solid black;padding:5px;font-size:11pt;">${esc(r.designation)}</td>
+        <td style="border:1px solid black;padding:5px;font-size:11pt;">${esc(r.company)}</td>
+        <td style="border:1px solid black;padding:5px;font-size:11pt;">${esc(r.cardCode)}</td>
+        <td style="border:1px solid black;padding:5px;text-align:center;font-size:11pt;">${understoodLabel(r.understood)}</td>
+        <td style="border:1px solid black;padding:5px;text-align:center;">${sig}</td>
+      </tr>`
+    })
+    .join("")
+  return `<h2 style="font-size:14pt;color:#0f766e;margin:0 0 8px;">سجل الحضور (${rows.length})</h2>
+    <table style="width:100%;border-collapse:collapse;border:2px solid black;" dir="rtl">
+      <thead><tr>${head}</tr></thead>
+      <tbody>${body}</tbody>
+    </table>`
 }
 
 // On-screen attendance table shown inside the details dialog.
@@ -140,27 +116,6 @@ function AttendanceTable({ rows }: { rows: Attendee[] }) {
   )
 }
 
-// On-screen course photo gallery shown inside the details dialog.
-function CoursePhotos({ photos }: { photos: string[] }) {
-  if (photos.length === 0) return null
-  return (
-    <div>
-      <h3 className="mb-2 text-sm font-semibold text-foreground">صور الدورة ({photos.length})</h3>
-      <div className="flex flex-wrap gap-2">
-        {photos.map((p, i) => (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            key={i}
-            src={p || "/placeholder.svg"}
-            alt={`صورة الدورة ${i + 1}`}
-            className="h-28 w-auto max-w-[180px] rounded-md border border-border object-cover"
-          />
-        ))}
-      </div>
-    </div>
-  )
-}
-
 export default async function TrainingPage() {
   const user = await requireModule("training")
   const trainings = await getTrainings()
@@ -182,7 +137,6 @@ export default async function TrainingPage() {
       className: "text-left",
       render: (r) => {
         const attendees = attendeesByTraining[r.id] ?? []
-        const photos = parsePhotos((r as { photos?: string | null }).photos ?? null)
         return (
           <div className="flex items-center justify-end gap-1">
             <RecordDetailsDialog
@@ -198,13 +152,8 @@ export default async function TrainingPage() {
                 { label: "تاريخ الدورة", value: r.trainingDate ?? "-" },
               ]}
               initialAttachments={[]}
-              extraSection={
-                <div className="flex flex-col gap-4">
-                  <AttendanceTable rows={attendees} />
-                  <CoursePhotos photos={photos} />
-                </div>
-              }
-              extraReportHtml={buildAttendanceHtml(attendees, photos)}
+              extraSection={<AttendanceTable rows={attendees} />}
+              extraReportHtml={buildAttendanceHtml(attendees)}
               suppressReportAttachments
             />
             <DeleteButton id={r.id} action={deleteTraining} />

@@ -400,14 +400,6 @@ export async function createTrainingFull(formData: FormData) {
     await saveDataUrlAttachment(userId, "training", trainingId, "signature:trainer", trainerSignature, "trainer-signature")
   }
 
-  // Persist each attendee signature as an attachment for the audit trail.
-  for (let i = 0; i < cleaned.length; i++) {
-    const sig = cleaned[i].signature ?? ""
-    if (sig.startsWith("data:image")) {
-      await saveDataUrlAttachment(userId, "training", trainingId, "photo", sig, `attendee-${i + 1}-signature`)
-    }
-  }
-
   revalidatePath("/training")
   return { trainingId }
 }

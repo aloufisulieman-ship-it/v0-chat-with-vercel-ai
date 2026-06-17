@@ -3,37 +3,10 @@
 import jsPDF from "jspdf"
 import html2canvas from "html2canvas-pro"
 
-// Waits until every <img> inside `el` has finished loading/decoding. Base64
-// data-URL images attached to a freshly-built DOM node are NOT guaranteed to be
-// decoded synchronously; rasterizing before they finish produces blank images
-// (this is why signatures/photos were missing from the exported PDF).
-async function waitForImages(el: HTMLElement) {
-  const imgs = Array.from(el.querySelectorAll("img"))
-  await Promise.all(
-    imgs.map(
-      (img) =>
-        new Promise<void>((resolve) => {
-          const done = () => resolve()
-          if (img.complete && img.naturalWidth > 0) {
-            img.decode().then(done, done)
-            return
-          }
-          img.addEventListener("load", () => img.decode().then(done, done), { once: true })
-          img.addEventListener("error", done, { once: true })
-        }),
-    ),
-  )
-  // One extra frame so layout settles after images report their size.
-  await new Promise((r) => requestAnimationFrame(() => r(null)))
-}
-
 // Renders a DOM element into an A4 PDF and returns the jsPDF instance.
 // When `singlePage` is true, the entire content is scaled to fit one page
 // (all data, photos and signatures stay together on a single page).
 export async function elementToPdf(el: HTMLElement, opts?: { singlePage?: boolean }): Promise<jsPDF> {
-  // Ensure all base64 signatures/photos are decoded before rasterizing.
-  await waitForImages(el)
-
   const canvas = await html2canvas(el, {
     scale: 2,
     useCORS: true,
