@@ -17,6 +17,7 @@ export const statusLabels: Record<string, string> = {
   open: "مفتوح",
   in_progress: "قيد المعالجة",
   investigating: "قيد التحقيق",
+  under_review: "قيد المراجعة",
   closed: "مغلق",
   overdue: "متأخر",
   scheduled: "مجدول",
@@ -77,6 +78,28 @@ export const permitTypeOptions = [
   { value: "height", label: "العمل على ارتفاع" },
 ]
 
+// حالات الحادث الوشيك
+export const nearMissStatusOptions = [
+  { value: "open", label: "مفتوح" },
+  { value: "under_review", label: "قيد المراجعة" },
+  { value: "closed", label: "مغلق" },
+]
+
+// تصنيفات الحادث الوشيك
+export const nearMissCategoryOptions = [
+  { value: "forklift_equipment", label: "رافعة شوكية / معدات" },
+  { value: "pedestrian_safety", label: "سلامة المشاة" },
+  { value: "ppe", label: "معدات الوقاية الشخصية" },
+  { value: "route_violation", label: "مخالفة مسار" },
+  { value: "electrical", label: "كهربائي" },
+  { value: "fire", label: "حريق" },
+  { value: "manual_handling", label: "المناولة اليدوية" },
+  { value: "other", label: "أخرى" },
+]
+export const nearMissCategoryLabels: Record<string, string> = Object.fromEntries(
+  nearMissCategoryOptions.map((c) => [c.value, c.label]),
+)
+
 export const violationStatusOptions = [
   { value: "open", label: "مفتوحة" },
   { value: "in_progress", label: "قيد المعالجة" },
@@ -103,6 +126,7 @@ export const departmentLabels: Record<string, string> = Object.fromEntries(
 export const moduleOptions = [
   { value: "dashboard", label: "لوحة التحكم" },
   { value: "incidents", label: "الحوادث" },
+  { value: "near-miss", label: "الحوادث الوشيكة" },
   { value: "inspections", label: "التفتيش" },
   { value: "risks", label: "تقييم المخاطر" },
   { value: "permits", label: "تصاريح العمل" },

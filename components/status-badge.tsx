@@ -5,6 +5,7 @@ const statusStyles: Record<string, string> = {
   open: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
   in_progress: "bg-accent/15 text-amber-700 dark:text-amber-400 border-accent/30",
   investigating: "bg-accent/15 text-amber-700 dark:text-amber-400 border-accent/30",
+  under_review: "bg-accent/15 text-amber-700 dark:text-amber-400 border-accent/30",
   closed: "bg-primary/10 text-primary border-primary/20",
   overdue: "bg-destructive/10 text-destructive border-destructive/20",
   scheduled: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",

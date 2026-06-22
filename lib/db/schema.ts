@@ -237,6 +237,28 @@ export const violation = pgTable("violation", {
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
+// تقارير الحوادث الوشيكة (Near-Miss) — مرقّمة تلقائياً NMS-YYYY-###
+export const nearMiss = pgTable("near_miss", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  nearMissNumber: text("nearMissNumber").default(""),
+  missDate: date("missDate"),
+  missTime: text("missTime").default(""),
+  location: text("location").default(""),
+  department: text("department").default(""),
+  reportedBy: text("reportedBy").default(""),
+  description: text("description").default(""),
+  potentialConsequence: text("potentialConsequence").default(""),
+  immediateAction: text("immediateAction").default(""),
+  category: text("category").default("other"),
+  severity: text("severity").default("low"),
+  status: text("status").default("open"),
+  assignedTo: text("assignedTo").default(""),
+  closureDate: date("closureDate"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
 export const attachment = pgTable("attachment", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
