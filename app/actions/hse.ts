@@ -15,6 +15,7 @@ import {
   audit,
   document,
   violation,
+  nearMiss,
   attachment,
   user,
 } from "@/lib/db/schema"
@@ -233,6 +234,63 @@ export async function deleteIncident(id: number) {
   const userId = await requireModuleUserId("incidents")
   await db.delete(incident).where(and(eq(incident.id, id), eq(incident.userId, userId)))
   revalidatePath("/incidents")
+  revalidatePath("/")
+}
+
+/* ---------------- Near-miss (الحوادث الوشيكة) ---------------- */
+export async function getNearMisses() {
+  const userId = await getUserId()
+  return db.select().from(nearMiss).where(eq(nearMiss.userId, userId)).orderBy(desc(nearMiss.createdAt))
+}
+
+export async function createNearMiss(formData: FormData) {
+  const userId = await requireModuleUserId("near-miss")
+
+  const description = str(formData.get("description")).trim()
+  if (!description) throw new Error("وصف الحادث الوشيك مطلوب")
+
+  // ترقيم تلقائي: NMS-YYYY-### (يبدأ التسلسل من جديد كل سنة).
+  const year = new Date().getFullYear()
+  const existing = await db
+    .select({ nearMissNumber: nearMiss.nearMissNumber })
+    .from(nearMiss)
+    .where(eq(nearMiss.userId, userId))
+  const maxSeq = (existing ?? [])
+    .map((r) => r.nearMissNumber ?? "")
+    .filter((n) => n.startsWith(`NMS-${year}-`))
+    .reduce((max, n) => {
+      const seq = parseInt(n.split("-")[2] ?? "0", 10)
+      return seq > max ? seq : max
+    }, 0)
+  const nearMissNumber = `NMS-${year}-${String(maxSeq + 1).padStart(3, "0")}`
+
+  const status = str(formData.get("status"), "open")
+  await db.insert(nearMiss).values({
+    userId,
+    nearMissNumber,
+    missDate: dateOrNull(formData.get("missDate")),
+    missTime: str(formData.get("missTime")),
+    location: str(formData.get("location")),
+    department: str(formData.get("department")),
+    reportedBy: str(formData.get("reportedBy")),
+    description,
+    potentialConsequence: str(formData.get("potentialConsequence")),
+    immediateAction: str(formData.get("immediateAction")),
+    category: str(formData.get("category"), "other"),
+    severity: str(formData.get("severity"), "low"),
+    status,
+    assignedTo: str(formData.get("assignedTo")),
+    // تُعبّأ تلقائياً عند إغلاق الحادث الوشيك.
+    closureDate: status === "closed" ? dateOrNull(formData.get("missDate")) ?? new Date().toISOString().slice(0, 10) : null,
+  })
+  revalidatePath("/near-miss")
+  revalidatePath("/")
+}
+
+export async function deleteNearMiss(id: number) {
+  const userId = await requireModuleUserId("near-miss")
+  await db.delete(nearMiss).where(and(eq(nearMiss.id, id), eq(nearMiss.userId, userId)))
+  revalidatePath("/near-miss")
   revalidatePath("/")
 }
 

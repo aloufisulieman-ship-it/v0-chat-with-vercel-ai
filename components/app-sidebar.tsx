@@ -6,6 +6,7 @@ import useSWR from "swr"
 import {
   LayoutDashboard,
   AlertTriangle,
+  Siren,
   ClipboardCheck,
   ShieldAlert,
   GraduationCap,
@@ -33,6 +34,7 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json())
 const nav: { href: string; label: string; icon: typeof LayoutDashboard; module: ModuleKey }[] = [
   { href: "/", label: "لوحة التحكم", icon: LayoutDashboard, module: "dashboard" },
   { href: "/incidents", label: "الحوادث", icon: AlertTriangle, module: "incidents" },
+  { href: "/near-miss", label: "الحوادث الوشيكة", icon: Siren, module: "near-miss" },
   { href: "/inspections", label: "التفتيش", icon: ClipboardCheck, module: "inspections" },
   { href: "/risks", label: "تقييم المخاطر", icon: ShieldAlert, module: "risks" },
   { href: "/permits", label: "تصاريح العمل", icon: FileSignature, module: "permits" },
