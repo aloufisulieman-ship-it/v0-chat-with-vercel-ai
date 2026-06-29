@@ -535,8 +535,8 @@ export async function deleteDocument(id: number) {
 /* ---------------- Violations ---------------- */
 export async function getViolations() {
   const userId = await requireModuleUserId("violations")
-  const userRows = await db.select().from(user).where(eq(user.id, userId)).limit(1)
-  const u = userRows[0] as any
+  const userRows = await db.select({ role: user.role, department: user.department }).from(user).where(eq(user.id, userId)).limit(1)
+  const u = userRows[0]
   const isManager =
     u?.role === "admin" ||
     u?.department === "المدير العام" ||
@@ -623,8 +623,8 @@ export async function createViolationFull(formData: FormData) {
 
 export async function deleteViolation(id: number) {
   const userId = await requireModuleUserId("violations")
-  const userRows = await db.select().from(user).where(eq(user.id, userId)).limit(1)
-  const u = userRows[0] as any
+  const userRows = await db.select({ role: user.role, department: user.department }).from(user).where(eq(user.id, userId)).limit(1)
+  const u = userRows[0]
   const v = await db.select().from(violation).where(eq(violation.id, id)).limit(1)
   if (!v[0]) throw new Error("المخالفة غير موجودة")
   const canDelete =
