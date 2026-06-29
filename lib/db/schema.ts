@@ -1,9 +1,7 @@
 import { pgTable, text, timestamp, boolean, serial, integer, date } from "drizzle-orm/pg-core"
-import { pgSchema } from "drizzle-orm/pg-core"
 
 // ---------- Better Auth tables (do not rename columns) ----------
-const publicSchema = pgSchema("public")
-export const user = publicSchema.table("user", {
+export const user = pgTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
