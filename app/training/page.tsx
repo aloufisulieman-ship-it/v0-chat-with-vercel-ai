@@ -6,6 +6,8 @@ import { StatusBadge } from "@/components/status-badge"
 import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { TrainingFormDialog } from "./training-form"
+import { ToolboxTalkTab } from "./toolbox-talk"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { requireModule } from "@/lib/session"
 import { getTrainings, getAllTrainingAttendees, deleteTraining } from "@/app/actions/hse"
 import { statusLabels } from "@/lib/labels"
@@ -177,10 +179,21 @@ export default async function TrainingPage() {
         <KpiCard label="دورات مجدولة" value={scheduled} icon={GraduationCap} tone="blue" />
       </div>
 
-      <div className="mt-6">
-        <h2 className="mb-3 text-lg font-semibold text-foreground">برنامج التدريب</h2>
-        <DataTable columns={columns} rows={trainings} emptyMessage="لا توجد دورات. أضف دورة جديدة للبدء." />
-      </div>
+      <Tabs defaultValue="training" dir="rtl" className="mt-6 gap-4">
+        <TabsList>
+          <TabsTrigger value="training">برنامج التدريب</TabsTrigger>
+          <TabsTrigger value="toolbox">الحديث التوعوي اليومي</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="training">
+          <h2 className="mb-3 text-lg font-semibold text-foreground">برنامج التدريب</h2>
+          <DataTable columns={columns} rows={trainings} emptyMessage="لا توجد دورات. أضف دورة جديدة للبدء." />
+        </TabsContent>
+
+        <TabsContent value="toolbox">
+          <ToolboxTalkTab />
+        </TabsContent>
+      </Tabs>
     </AppShell>
   )
 }
