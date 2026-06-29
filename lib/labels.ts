@@ -24,8 +24,6 @@ export const statusLabels: Record<string, string> = {
   approved: "معتمد",
   active: "ساري",
   expired: "منتهٍ",
-  sufficient: "كافٍ",
-  low_stock: "مخزون منخفض",
 }
 export const statusOptions = [
   { value: "open", label: "مفتوح" },
@@ -83,11 +81,6 @@ export const violationStatusOptions = [
   { value: "closed", label: "مغلقة" },
 ]
 
-export const ppeStatusOptions = [
-  { value: "sufficient", label: "كافٍ" },
-  { value: "low_stock", label: "مخزون منخفض" },
-]
-
 export const departmentOptions = [
   { value: "hr", label: "الموارد البشرية" },
   { value: "workshop", label: "الورشة" },
@@ -107,7 +100,6 @@ export const moduleOptions = [
   { value: "risks", label: "تقييم المخاطر" },
   { value: "permits", label: "تصاريح العمل" },
   { value: "training", label: "التدريب" },
-  { value: "ppe", label: "معدات الوقاية" },
   { value: "violations", label: "المخالفات" },
   { value: "hr", label: "الموارد البشرية" },
   { value: "actions", label: "الإجراءات التصحيحية" },

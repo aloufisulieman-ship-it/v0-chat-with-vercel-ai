@@ -10,7 +10,6 @@ import {
   risk,
   training,
   trainingAttendee,
-  ppe,
   correctiveAction,
   audit,
   document,
@@ -435,29 +434,6 @@ export async function deleteTraining(id: number) {
   revalidatePath("/training")
 }
 
-/* ---------------- PPE ---------------- */
-export async function getPpe() {
-  const userId = await getUserId()
-  return db.select().from(ppe).where(eq(ppe.userId, userId)).orderBy(desc(ppe.createdAt))
-}
-export async function createPpe(formData: FormData) {
-  const userId = await requireModuleUserId("ppe")
-  await db.insert(ppe).values({
-    userId,
-    name: str(formData.get("name")),
-    category: str(formData.get("category")),
-    inStock: num(formData.get("inStock")),
-    assigned: num(formData.get("assigned")),
-    minLevel: num(formData.get("minLevel")),
-    status: str(formData.get("status"), "sufficient"),
-  })
-  revalidatePath("/ppe")
-}
-export async function deletePpe(id: number) {
-  const userId = await requireModuleUserId("ppe")
-  await db.delete(ppe).where(and(eq(ppe.id, id), eq(ppe.userId, userId)))
-  revalidatePath("/ppe")
-}
 
 /* ---------------- Corrective actions ---------------- */
 export async function getActions() {

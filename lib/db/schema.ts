@@ -173,18 +173,6 @@ export const trainingAttendee = pgTable("training_attendee", {
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
-export const ppe = pgTable("ppe", {
-  id: serial("id").primaryKey(),
-  userId: text("userId").notNull(),
-  name: text("name").notNull(),
-  category: text("category").default(""),
-  inStock: integer("inStock").default(0),
-  assigned: integer("assigned").default(0),
-  minLevel: integer("minLevel").default(0),
-  status: text("status").default("sufficient"),
-  createdAt: timestamp("createdAt").notNull().defaultNow(),
-})
-
 export const correctiveAction = pgTable("corrective_action", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
