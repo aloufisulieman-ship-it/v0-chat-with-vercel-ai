@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import {
   Camera,
   MapPin,
@@ -879,10 +880,41 @@ function AddEntryModal({ onClose, onAdd }: { onClose: () => void; onAdd: (e: Pat
 // ── Summary Sheet ──────────────────────────────────────────────────────────────
 
 function SummarySheet({ session, onClose }: { session: PatrolSession; onClose: () => void }) {
+  const router = useRouter()
+  const [saving, setSaving] = useState(false)
   const violations = session.entries.filter((e) => e.type === "violation")
   const observations = session.entries.filter((e) => e.type === "observation")
   const positives = session.entries.filter((e) => e.type === "positive")
   const saved = violations.filter((e) => e.status === "saved").length
+
+  // الحفظ النهائي: تحديث حالة سجل الجولة إلى "مكتملة" في التخزين ثم العودة للرئيسية.
+  // (المخالفات الفردية محفوظة مسبقاً في Neon عبر createViolationFull لحظة تسجيلها.)
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const completed = { ...session, status: "completed", endTime: session.endTime || "" }
+      localStorage.setItem("hse_patrol_v3", JSON.stringify(completed))
+      router.push("/")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // الإغلاق عبر X: أغلق النافذة ثم ارجع للقائمة الرئيسية.
+  const handleClose = () => {
+    onClose()
+    router.push("/")
+  }
+
+  // الطباعة: افتح نافذة الطباعة ثم وجّه المستخدم للرئيسية بعد انتهائها/إغلاقها.
+  const handlePrint = () => {
+    const after = () => {
+      window.removeEventListener("afterprint", after)
+      router.push("/")
+    }
+    window.addEventListener("afterprint", after)
+    window.print()
+  }
 
   const catStats = VIOLATION_CATEGORIES.map((cat) => ({
     ...cat,
@@ -895,7 +927,7 @@ function SummarySheet({ session, onClose }: { session: PatrolSession; onClose: (
         <div className="p-4" style={{ background: "#1e3a5f" }}>
           <div className="flex items-center justify-between">
             <h2 className="text-white font-black">ملخص الجولة الميدانية</h2>
-            <button onClick={onClose}>
+            <button onClick={handleClose}>
               <X size={20} className="text-white" />
             </button>
           </div>
@@ -976,13 +1008,23 @@ function SummarySheet({ session, onClose }: { session: PatrolSession; onClose: (
             ))}
           </div>
 
-          <button
-            onClick={() => window.print()}
-            className="w-full py-3.5 rounded-2xl font-black text-white flex items-center justify-center gap-2"
-            style={{ background: "#1e3a5f" }}
-          >
-            <FileText size={16} /> طباعة تقرير الجولة
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handlePrint}
+              className="flex-1 py-3.5 rounded-2xl font-black text-white flex items-center justify-center gap-2"
+              style={{ background: "#1e3a5f" }}
+            >
+              <FileText size={16} /> طباعة تقرير الجولة
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex-1 py-3.5 rounded-2xl font-black text-white flex items-center justify-center gap-2 disabled:opacity-60"
+              style={{ background: "#16a34a" }}
+            >
+              <CheckCircle2 size={16} /> {saving ? "جاري الحفظ..." : "حفظ"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
