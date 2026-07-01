@@ -25,7 +25,9 @@ import {
   CloudUpload,
   CheckCircle2,
   AlertCircle,
+  ArrowRight,
 } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 type EntryType = "violation" | "observation" | "positive"
 type ViolationCategory = "forklift" | "tuktuk" | "loading" | "vest" | "crossing" | "shoes" | "other"
@@ -1034,6 +1036,7 @@ function SummarySheet({ session, onClose }: { session: PatrolSession; onClose: (
 // ── Main Component ───────────────────────────────────────────────────────────────
 
 export function PatrolClient() {
+  const router = useRouter()
   const [session, setSession] = useState<PatrolSession | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [showSummary, setShowSummary] = useState(false)
@@ -1117,6 +1120,16 @@ export function PatrolClient() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-5" style={{ background: "#f8fafc" }} dir="rtl">
         <div className="w-full max-w-sm space-y-5">
+          <div className="flex justify-start">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push("/")}
+              className="gap-1 text-gray-600 hover:text-gray-900"
+            >
+              <ArrowRight size={16} /> رجوع للرئيسية
+            </Button>
+          </div>
           <div className="text-center">
             <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-3" style={{ background: "#1e3a5f" }}>
               <ShieldAlert size={30} className="text-white" />
