@@ -26,6 +26,7 @@ import {
   CheckCircle2,
   AlertCircle,
   ArrowRight,
+  PenLine,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -54,6 +55,9 @@ interface PatrolEntry {
   employeeNo?: string // رقم الهوية أو الوظيفي
   equipmentNo?: string // رقم المعدة
   equipmentType?: string // نوع المعدة
+  violatorSignature?: string // توقيع المخالف (base64) — اختياري
+  inspectorSignature?: string // توقيع مفتش السلامة (base64) — إلزامي
+  violatorRefused?: boolean // رفض المخالف التوقيع
   status: "draft" | "saving" | "saved" | "error"
   documentNo?: string
   errorMsg?: string
@@ -208,6 +212,8 @@ async function saveViolationToDB(entry: PatrolEntry): Promise<{ documentNo: stri
       violationTime: entry.time,
       status: "open",
       images: entry.photos,
+      violatorSignature: entry.violatorSignature || "",
+      inspectorSignature: entry.inspectorSignature || "",
     }),
   })
   if (!res.ok) {
@@ -419,9 +425,124 @@ function EntryCard({ entry, onDelete }: { entry: PatrolEntry; onDelete: () => vo
   )
 }
 
+// ── Signature Pad ────────────────────────────────────────────────────────────
+// لوحة توقيع رقمية (canvas) بنفس أسلوب المكوّن المستخدم في violation-form.tsx —
+// تعمل باللمس والماوس وتُخرج التوقيع كـ base64 عبر toDataURL.
+function SignaturePad({
+  label,
+  value,
+  onChange,
+  disabled,
+  disabledText,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  disabled?: boolean
+  disabledText?: string
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [drawing, setDrawing] = useState(false)
+
+  function getPos(e: React.MouseEvent | React.TouchEvent) {
+    const canvas = canvasRef.current!
+    const rect = canvas.getBoundingClientRect()
+    if ("touches" in e) {
+      return { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top }
+    }
+    return { x: (e as React.MouseEvent).clientX - rect.left, y: (e as React.MouseEvent).clientY - rect.top }
+  }
+  function start(e: React.MouseEvent | React.TouchEvent) {
+    if (disabled) return
+    e.preventDefault()
+    setDrawing(true)
+    const ctx = canvasRef.current!.getContext("2d")!
+    const pos = getPos(e)
+    ctx.beginPath()
+    ctx.moveTo(pos.x, pos.y)
+  }
+  function draw(e: React.MouseEvent | React.TouchEvent) {
+    if (disabled || !drawing) return
+    e.preventDefault()
+    const ctx = canvasRef.current!.getContext("2d")!
+    ctx.strokeStyle = "#1a1a2e"
+    ctx.lineWidth = 2
+    ctx.lineCap = "round"
+    const pos = getPos(e)
+    ctx.lineTo(pos.x, pos.y)
+    ctx.stroke()
+  }
+  function end() {
+    if (disabled) return
+    setDrawing(false)
+    onChange(canvasRef.current!.toDataURL())
+  }
+  function clear() {
+    const canvas = canvasRef.current!
+    const ctx = canvas.getContext("2d")!
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    onChange("")
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-bold text-gray-600">{label}</label>
+        {!disabled && (
+          <button
+            type="button"
+            onClick={clear}
+            className="text-xs text-gray-400 hover:text-red-500 flex items-center gap-1"
+          >
+            <X className="size-3" /> مسح
+          </button>
+        )}
+      </div>
+      <div
+        className="relative rounded-xl border border-dashed border-gray-300 bg-white overflow-hidden"
+        style={{ opacity: disabled ? 0.5 : 1 }}
+      >
+        <canvas
+          ref={canvasRef}
+          width={320}
+          height={110}
+          className="w-full touch-none cursor-crosshair"
+          onMouseDown={start}
+          onMouseMove={draw}
+          onMouseUp={end}
+          onMouseLeave={end}
+          onTouchStart={start}
+          onTouchMove={draw}
+          onTouchEnd={end}
+        />
+        {!value && !disabled && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <span className="text-xs text-gray-400 flex items-center gap-1">
+              <PenLine className="size-3" /> وقّع هنا
+            </span>
+          </div>
+        )}
+        {disabled && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <span className="text-xs text-gray-400">{disabledText || "معطّل"}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Add Entry Modal ────────────────────────────────────────────────────────────
 
-function AddEntryModal({ onClose, onAdd }: { onClose: () => void; onAdd: (e: PatrolEntry) => void }) {
+function AddEntryModal({
+  onClose,
+  onAdd,
+  officerName,
+}: {
+  onClose: () => void
+  onAdd: (e: PatrolEntry) => void
+  officerName: string
+}) {
   const [step, setStep] = useState<"type" | "category" | "template" | "details">("type")
   const [entryType, setEntryType] = useState<EntryType>("violation")
   const [category, setCategory] = useState<ViolationCategory>("forklift")
@@ -437,6 +558,9 @@ function AddEntryModal({ onClose, onAdd }: { onClose: () => void; onAdd: (e: Pat
   const [equipmentType, setEquipmentType] = useState("")
   const [obsText, setObsText] = useState("")
   const [posText, setPosText] = useState("")
+  const [violatorSignature, setViolatorSignature] = useState("")
+  const [inspectorSignature, setInspectorSignature] = useState("")
+  const [violatorRefused, setViolatorRefused] = useState(false)
 
   const filteredTemplates = VIOLATION_TEMPLATES.filter((t) => t.category === category)
 
@@ -450,6 +574,8 @@ function AddEntryModal({ onClose, onAdd }: { onClose: () => void; onAdd: (e: Pat
           ? obsText
           : posText
     if (!desc.trim()) return
+    // توقيع المفتش إلزامي للمخالفات؛ توقيع المخالف اختياري (أو رفض التوقيع).
+    if (entryType === "violation" && !inspectorSignature) return
     onAdd({
       id: generateId("OBS"),
       type: entryType,
@@ -465,6 +591,9 @@ function AddEntryModal({ onClose, onAdd }: { onClose: () => void; onAdd: (e: Pat
       employeeNo: employeeNo || undefined,
       equipmentNo: equipmentNo || undefined,
       equipmentType: equipmentType || undefined,
+      violatorSignature: entryType === "violation" && !violatorRefused ? violatorSignature || undefined : undefined,
+      inspectorSignature: entryType === "violation" ? inspectorSignature || undefined : undefined,
+      violatorRefused: entryType === "violation" ? violatorRefused || undefined : undefined,
       status: "draft",
     })
     onClose()
@@ -857,11 +986,53 @@ function AddEntryModal({ onClose, onAdd }: { onClose: () => void; onAdd: (e: Pat
                 </div>
               </div>
 
+              {/* قسم التوقيعات — للمخالفات فقط */}
+              {entryType === "violation" && (
+                <div className="rounded-2xl overflow-hidden" style={{ border: "1.5px solid #e5e7eb" }}>
+                  <div className="px-3 py-2" style={{ background: "#f8fafc" }}>
+                    <p className="text-xs font-black text-gray-600">التوقيعات</p>
+                  </div>
+                  <div className="p-3 space-y-4" style={{ background: "#fff" }}>
+                    {/* توقيع المخالف — اختياري مع خيار رفض التوقيع */}
+                    <div className="space-y-2">
+                      <SignaturePad
+                        label="توقيع المخالف (اختياري)"
+                        value={violatorSignature}
+                        onChange={setViolatorSignature}
+                        disabled={violatorRefused}
+                        disabledText="رفض المخالف التوقيع"
+                      />
+                      <label className="flex items-center gap-2 text-xs font-bold text-gray-600">
+                        <input
+                          type="checkbox"
+                          checked={violatorRefused}
+                          onChange={(e) => {
+                            setViolatorRefused(e.target.checked)
+                            if (e.target.checked) setViolatorSignature("")
+                          }}
+                          className="size-4 accent-red-500"
+                        />
+                        رفض المخالف التوقيع
+                      </label>
+                    </div>
+                    {/* توقيع مفتش السلامة — إلزامي، يظهر اسم الضابط كعنوان */}
+                    <SignaturePad
+                      label={`توقيع مفتش السلامة — ${officerName}`}
+                      value={inspectorSignature}
+                      onChange={setInspectorSignature}
+                    />
+                    {!inspectorSignature && (
+                      <p className="text-xs font-bold text-red-500">توقيع المفتش إلزامي قبل الحفظ</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <button
                 onClick={handleSave}
                 disabled={
                   entryType === "violation"
-                    ? !template && !customText.trim()
+                    ? (!template && !customText.trim()) || !inspectorSignature
                     : entryType === "observation"
                       ? !obsText.trim()
                       : !posText.trim()
@@ -1135,7 +1306,7 @@ export function PatrolClient() {
               <ShieldAlert size={30} className="text-white" />
             </div>
             <h1 className="text-2xl font-black text-gray-900">جولة HSE الميدانية</h1>
-            <p className="text-gray-400 text-sm mt-1">السوق المركزي — بركاء · المخالفات تُحفظ تلقائياً</p>
+            <p className="text-gray-400 text-sm mt-1">السوق المركزي — ��ركاء · المخالفات تُحفظ تلقائياً</p>
           </div>
 
           <div className="rounded-2xl p-4 space-y-3" style={{ background: "#fff", boxShadow: "0 2px 12px rgba(0,0,0,0.07)" }}>
@@ -1259,7 +1430,9 @@ export function PatrolClient() {
         <Plus size={30} className="text-white" />
       </button>
 
-      {showAdd && <AddEntryModal onClose={() => setShowAdd(false)} onAdd={addEntry} />}
+      {showAdd && (
+        <AddEntryModal onClose={() => setShowAdd(false)} onAdd={addEntry} officerName={session.officerName} />
+      )}
       {showSummary && <SummarySheet session={{ ...session, notes }} onClose={() => setShowSummary(false)} />}
     </div>
   )

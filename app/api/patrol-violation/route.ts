@@ -35,6 +35,9 @@ export async function POST(req: Request) {
     fd.set("status", String(body.status || "open"))
     // صور الأدلة (اختيارية) كمصفوفة base64.
     fd.set("images", JSON.stringify(Array.isArray(body.images) ? body.images : []))
+    // التوقيعات (base64): توقيع المخالف، وتوقيع المفتش يُخزَّن كتوقيع المحرّر (reporter).
+    fd.set("violatorSignature", String(body.violatorSignature ?? ""))
+    fd.set("editorSignature", String(body.inspectorSignature ?? ""))
 
     const result = await createViolationFull(fd)
     return NextResponse.json({ documentNo: result.documentNo })
