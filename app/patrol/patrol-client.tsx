@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import dynamic from "next/dynamic"
 import {
   Camera,
   MapPin,
@@ -26,9 +27,14 @@ import {
   CheckCircle2,
   AlertCircle,
   ArrowRight,
-  PenLine,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+
+// حقل التوقيع يعتمد على DOM، لذا يُحمّل ديناميكياً بدون SSR.
+const SignaturePad = dynamic(() => import("./signature-field"), {
+  ssr: false,
+  loading: () => <div className="h-[160px] w-full rounded-md border border-gray-300 bg-white" />,
+})
 
 type EntryType = "violation" | "observation" | "positive"
 type ViolationCategory = "forklift" | "tuktuk" | "loading" | "vest" | "crossing" | "shoes" | "other"
@@ -421,113 +427,6 @@ function EntryCard({ entry, onDelete }: { entry: PatrolEntry; onDelete: () => vo
           </div>
         </div>
       )}
-    </div>
-  )
-}
-
-// ── Signature Pad ────────────────────────────────────────────────────────────
-// لوحة توقيع رقمية (canvas) بنفس أسلوب المكوّن المستخدم في violation-form.tsx —
-// تعمل باللمس والماوس وتُخرج التوقيع كـ base64 عبر toDataURL.
-function SignaturePad({
-  label,
-  value,
-  onChange,
-  disabled,
-  disabledText,
-}: {
-  label: string
-  value: string
-  onChange: (v: string) => void
-  disabled?: boolean
-  disabledText?: string
-}) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [drawing, setDrawing] = useState(false)
-
-  function getPos(e: React.MouseEvent | React.TouchEvent) {
-    const canvas = canvasRef.current!
-    const rect = canvas.getBoundingClientRect()
-    if ("touches" in e) {
-      return { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top }
-    }
-    return { x: (e as React.MouseEvent).clientX - rect.left, y: (e as React.MouseEvent).clientY - rect.top }
-  }
-  function start(e: React.MouseEvent | React.TouchEvent) {
-    if (disabled) return
-    e.preventDefault()
-    setDrawing(true)
-    const ctx = canvasRef.current!.getContext("2d")!
-    const pos = getPos(e)
-    ctx.beginPath()
-    ctx.moveTo(pos.x, pos.y)
-  }
-  function draw(e: React.MouseEvent | React.TouchEvent) {
-    if (disabled || !drawing) return
-    e.preventDefault()
-    const ctx = canvasRef.current!.getContext("2d")!
-    ctx.strokeStyle = "#1a1a2e"
-    ctx.lineWidth = 2
-    ctx.lineCap = "round"
-    const pos = getPos(e)
-    ctx.lineTo(pos.x, pos.y)
-    ctx.stroke()
-  }
-  function end() {
-    if (disabled) return
-    setDrawing(false)
-    onChange(canvasRef.current!.toDataURL())
-  }
-  function clear() {
-    const canvas = canvasRef.current!
-    const ctx = canvas.getContext("2d")!
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-    onChange("")
-  }
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between">
-        <label className="text-xs font-bold text-gray-600">{label}</label>
-        {!disabled && (
-          <button
-            type="button"
-            onClick={clear}
-            className="text-xs text-gray-400 hover:text-red-500 flex items-center gap-1"
-          >
-            <X className="size-3" /> مسح
-          </button>
-        )}
-      </div>
-      <div
-        className="relative rounded-xl border border-dashed border-gray-300 bg-white overflow-hidden"
-        style={{ opacity: disabled ? 0.5 : 1 }}
-      >
-        <canvas
-          ref={canvasRef}
-          width={320}
-          height={110}
-          className="w-full touch-none cursor-crosshair"
-          onMouseDown={start}
-          onMouseMove={draw}
-          onMouseUp={end}
-          onMouseLeave={end}
-          onTouchStart={start}
-          onTouchMove={draw}
-          onTouchEnd={end}
-        />
-        {!value && !disabled && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <span className="text-xs text-gray-400 flex items-center gap-1">
-              <PenLine className="size-3" /> وقّع هنا
-            </span>
-          </div>
-        )}
-        {disabled && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <span className="text-xs text-gray-400">{disabledText || "معطّل"}</span>
-          </div>
-        )}
-      </div>
     </div>
   )
 }
@@ -1414,7 +1313,7 @@ export function PatrolClient() {
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={3}
-            placeholder="أي ملاحظات عامة..."
+            placeholder="أي م��احظات عامة..."
             className="w-full border border-gray-100 rounded-2xl px-4 py-3 text-sm resize-none"
             style={{ background: "#fff" }}
             dir="rtl"
