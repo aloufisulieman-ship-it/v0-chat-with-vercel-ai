@@ -707,15 +707,16 @@ export async function deleteObservation(id: number) {
 /* ---------------- Dashboard aggregates ---------------- */
 export async function getDashboardData() {
   const userId = await getUserId()
-  const [inc, ins, per, rsk, act, obs] = await Promise.all([
+  const [inc, ins, per, rsk, act, obs, vio] = await Promise.all([
     db.select().from(incident).where(eq(incident.userId, userId)),
     db.select().from(inspection).where(eq(inspection.userId, userId)),
     db.select().from(permit).where(eq(permit.userId, userId)),
     db.select().from(risk).where(eq(risk.userId, userId)),
     db.select().from(correctiveAction).where(eq(correctiveAction.userId, userId)),
     db.select().from(observation).where(eq(observation.userId, userId)),
+    db.select().from(violation).where(eq(violation.userId, userId)).orderBy(desc(violation.createdAt)),
   ])
-  return { incidents: inc, inspections: ins, permits: per, risks: rsk, actions: act, observations: obs }
+  return { incidents: inc, inspections: ins, permits: per, risks: rsk, actions: act, observations: obs, violations: vio }
 }
 
 /* ---------------- Reports ---------------- */
