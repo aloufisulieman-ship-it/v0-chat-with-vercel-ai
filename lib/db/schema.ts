@@ -121,13 +121,16 @@ export const inspection = pgTable("inspection", {
 export const permit = pgTable("permit", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
+  documentNo: text("documentNo").default(""),
   title: text("title").notNull(),
-  type: text("type").default("hot_work"),
+  type: text("type").default("construction"),
   location: text("location").default(""),
   requestedBy: text("requestedBy").default(""),
   status: text("status").default("pending"),
   validFrom: date("validFrom"),
   validTo: date("validTo"),
+  // حقول ديناميكية خاصة بكل نوع تصريح، مخزّنة كـ JSON.
+  details: text("details").default(""),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 

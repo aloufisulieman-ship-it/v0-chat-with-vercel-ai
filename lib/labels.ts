@@ -61,19 +61,56 @@ export const incidentTypeOptions = [
 ]
 
 export const permitTypeLabels: Record<string, string> = {
-  hot_work: "أعمال ساخنة",
-  confined_space: "أماكن مغلقة",
-  electrical: "أعمال كهربائية",
-  excavation: "حفريات",
-  height: "العمل على ارتفاع",
+  construction: "تصريح عمل إنشائي",
+  forklift: "تصريح قيادة رافعة شوكية",
+  tuktuk: "تصريح قيادة توك توك",
+  visitor: "بطاقة زائر",
+  trainee: "بطاقة متدرب",
 }
 export const permitTypeOptions = [
-  { value: "hot_work", label: "أعمال ساخنة" },
-  { value: "confined_space", label: "أماكن مغلقة" },
-  { value: "electrical", label: "أعمال كهربائية" },
-  { value: "excavation", label: "حفريات" },
-  { value: "height", label: "العمل على ارتفاع" },
+  { value: "construction", label: "تصريح عمل إنشائي" },
+  { value: "forklift", label: "تصريح قيادة رافعة شوكية" },
+  { value: "tuktuk", label: "تصريح قيادة توك توك" },
+  { value: "visitor", label: "بطاقة زائر" },
+  { value: "trainee", label: "بطاقة متدرب" },
 ]
+// بادئة الترقيم التسلسلي لكل نوع تصريح (مثال: CWP-2026-001).
+export const permitTypePrefix: Record<string, string> = {
+  construction: "CWP",
+  forklift: "FLP",
+  tuktuk: "TTP",
+  visitor: "VIS",
+  trainee: "TRN",
+}
+// الحقول الديناميكية الإضافية لكل نوع تصريح.
+export const permitTypeExtraFields: Record<string, { name: string; label: string; placeholder?: string }[]> = {
+  construction: [
+    { name: "workDescription", label: "وصف العمل", placeholder: "مثال: صب أساسات المستودع" },
+    { name: "equipmentUsed", label: "المعدات المستخدمة", placeholder: "مثال: خلاطة خرسانة، سقالات" },
+  ],
+  forklift: [
+    { name: "driverName", label: "اسم السائق" },
+    { name: "internalLicenseNo", label: "رقم الرخصة الداخلية" },
+    { name: "equipmentNo", label: "رقم المعدة" },
+  ],
+  tuktuk: [
+    { name: "driverName", label: "اسم السائق" },
+    { name: "internalLicenseNo", label: "رقم الرخصة الداخلية" },
+    { name: "vehicleNo", label: "رقم المركبة" },
+  ],
+  visitor: [
+    { name: "visitorName", label: "اسم الزائر" },
+    { name: "visitorCompany", label: "الجهة" },
+    { name: "hostName", label: "الشخص المسؤول عن الاستقبال" },
+    { name: "visitDuration", label: "مدة الزيارة", placeholder: "مثال: 3 ساعات" },
+  ],
+  trainee: [
+    { name: "traineeName", label: "اسم المتدرب" },
+    { name: "traineeDepartment", label: "القسم" },
+    { name: "supervisorName", label: "المشرف المسؤول" },
+    { name: "trainingDuration", label: "مدة التدريب", placeholder: "مثال: أسبوعين" },
+  ],
+}
 
 export const violationStatusOptions = [
   { value: "open", label: "مفتوحة" },

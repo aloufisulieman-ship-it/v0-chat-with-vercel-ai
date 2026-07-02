@@ -22,7 +22,7 @@ import { and, desc, eq } from "drizzle-orm"
 import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
 import { requireModuleUserId } from "@/lib/session"
-import { severityLabels, statusLabels } from "@/lib/labels"
+import { severityLabels, statusLabels, permitTypePrefix, permitTypeExtraFields } from "@/lib/labels"
 import { put } from "@vercel/blob"
 
 // Convert a base64 data URL (e.g. "data:image/png;base64,....") into a Blob.
@@ -269,15 +269,36 @@ export async function getPermits() {
 }
 export async function createPermit(formData: FormData) {
   const userId = await requireModuleUserId("permits")
+  const type = str(formData.get("type"), "construction")
+  const prefix = permitTypePrefix[type] ?? "PTW"
+  const year = new Date().getFullYear()
+
+  // ترقيم تسلسلي مستقل لكل نوع تصريح (مثال: CWP-2026-001).
+  const existing = await db.select({ documentNo: permit.documentNo }).from(permit).where(eq(permit.type, type))
+  const thisYearNos = existing.map((p) => p.documentNo ?? "").filter((n) => n.startsWith(`${prefix}-${year}-`))
+  const maxSeq = thisYearNos.reduce((max, n) => {
+    const seq = parseInt(n.split("-")[2] ?? "0", 10)
+    return seq > max ? seq : max
+  }, 0)
+  const documentNo = `${prefix}-${year}-${String(maxSeq + 1).padStart(3, "0")}`
+
+  // الحقول الديناميكية الخاصة بالنوع تُخزّن كـ JSON في عمود details.
+  const details: Record<string, string> = {}
+  for (const f of permitTypeExtraFields[type] ?? []) {
+    details[f.name] = str(formData.get(f.name))
+  }
+
   await db.insert(permit).values({
     userId,
+    documentNo,
     title: str(formData.get("title")),
-    type: str(formData.get("type"), "hot_work"),
+    type,
     location: str(formData.get("location")),
     requestedBy: str(formData.get("requestedBy")),
     status: str(formData.get("status"), "pending"),
     validFrom: dateOrNull(formData.get("validFrom")),
     validTo: dateOrNull(formData.get("validTo")),
+    details: JSON.stringify(details),
   })
   revalidatePath("/permits")
   revalidatePath("/")
