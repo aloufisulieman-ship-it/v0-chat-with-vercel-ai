@@ -27,8 +27,11 @@ import {
   CheckCircle2,
   AlertCircle,
   ArrowRight,
+  RefreshCw,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useToast } from "@/components/ui/use-toast"
+import { ToastAction } from "@/components/ui/toast"
 
 // حقل التوقيع يعتمد على DOM، لذا يُحمّل ديناميكياً بدون SSR.
 const SignaturePad = dynamic(() => import("./signature-field"), {
@@ -129,7 +132,7 @@ const VIOLATION_TEMPLATES: ViolationTemplate[] = [
   { id: "C3", category: "crossing", severity: "moderate", text: "تجاهل إشارات التوقف عند الممر" },
   { id: "C4", category: "crossing", severity: "moderate", text: "ممر مشاة محجوب ببضائع أو مركبات" },
   { id: "C5", category: "crossing", severity: "minor", text: "مشاة يستخدمون هواتفهم عند العبور" },
-  { id: "S1", category: "shoes", severity: "moderate", text: "عامل في منطقة التحميل بدون حذاء س��امة" },
+  { id: "S1", category: "shoes", severity: "moderate", text: "عامل في منطقة التحميل بدون حذاء س����امة" },
   { id: "S2", category: "shoes", severity: "moderate", text: "عامل مستودع يرتدي أحذية عادية أثناء التشغيل" },
   { id: "S3", category: "shoes", severity: "minor", text: "عامل يرتدي أحذية سلامة تالفة" },
   { id: "S4", category: "shoes", severity: "moderate", text: "عامل فرز بدون حذاء واق من الثقل" },
@@ -295,7 +298,15 @@ function SaveBadge({
 
 // ── Entry Card ─────────────────────────────────────────────────────────────────
 
-function EntryCard({ entry, onDelete }: { entry: PatrolEntry; onDelete: () => void }) {
+function EntryCard({
+  entry,
+  onDelete,
+  onRetry,
+}: {
+  entry: PatrolEntry
+  onDelete: () => void
+  onRetry?: () => void
+}) {
   const [open, setOpen] = useState(false)
   const catInfo = VIOLATION_CATEGORIES.find((c) => c.value === entry.category)
   const sevInfo = entry.severity ? SEVERITY_LABELS[entry.severity] : null
@@ -354,8 +365,19 @@ function EntryCard({ entry, onDelete }: { entry: PatrolEntry; onDelete: () => vo
               <span className="text-blue-500 font-bold">· {entry.workerCount} عمال</span>
             )}
           </p>
-          <div className="mt-1">
+          <div className="mt-1 flex items-center gap-2">
             <SaveBadge status={entry.status} documentNo={entry.documentNo} errorMsg={entry.errorMsg} />
+            {entry.status === "error" && onRetry && (
+              <button
+                onClick={(ev) => {
+                  ev.stopPropagation()
+                  onRetry()
+                }}
+                className="text-xs font-bold text-blue-500 flex items-center gap-1"
+              >
+                <RefreshCw size={11} /> إعادة المحاولة
+              </button>
+            )}
           </div>
         </div>
         <div>
@@ -951,13 +973,22 @@ function AddEntryModal({
 
 // ── Summary Sheet ──────────────────────────────────────────────────────────────
 
-function SummarySheet({ session, onClose }: { session: PatrolSession; onClose: () => void }) {
+function SummarySheet({
+  session,
+  onClose,
+  onRetry,
+}: {
+  session: PatrolSession
+  onClose: () => void
+  onRetry?: (id: string) => void
+}) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
   const violations = session.entries.filter((e) => e.type === "violation")
   const observations = session.entries.filter((e) => e.type === "observation")
   const positives = session.entries.filter((e) => e.type === "positive")
   const saved = violations.filter((e) => e.status === "saved").length
+  const failed = violations.filter((e) => e.status === "error").length
 
   // الحفظ النهائي: تحديث حالة سجل الجولة إلى "مكتملة" في التخزين ثم العودة للرئيسية.
   // (المخالفات الفردية محفوظة مسبقاً في Neon عبر createViolationFull لحظة تسجيلها.)
@@ -1038,7 +1069,45 @@ function SummarySheet({ session, onClose }: { session: PatrolSession; onClose: (
                 style={{ color: saved === violations.length ? "#16a34a" : "#d97706" }}
               >
                 {saved} من {violations.length} مخالفة محفوظة في النظام
+                {failed > 0 ? ` · ${failed} فشل الحفظ` : ""}
               </p>
+            </div>
+          )}
+
+          {/* حالة الحفظ الفعلية لكل مخالفة */}
+          {violations.length > 0 && (
+            <div className="rounded-2xl p-3 space-y-2" style={{ background: "#f8fafc" }}>
+              <p className="text-xs font-black text-gray-500 mb-1">حالة الحفظ في النظام</p>
+              {violations.map((v) => (
+                <div key={v.id} className="flex items-center gap-2">
+                  <span className="text-sm text-gray-700 flex-1 truncate">{v.description}</span>
+                  {v.status === "saved" && (
+                    <span className="text-xs font-bold text-green-600 flex items-center gap-1" dir="ltr">
+                      <CheckCircle2 size={12} /> {v.documentNo}
+                    </span>
+                  )}
+                  {v.status === "saving" && (
+                    <span className="text-xs text-blue-400 flex items-center gap-1">
+                      <CloudUpload size={12} className="animate-pulse" /> جاري الحفظ
+                    </span>
+                  )}
+                  {v.status === "error" && (
+                    <span className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-red-500 flex items-center gap-1">
+                        <AlertCircle size={12} /> فشل الحفظ
+                      </span>
+                      {onRetry && (
+                        <button
+                          onClick={() => onRetry(v.id)}
+                          className="text-xs font-bold text-blue-500 flex items-center gap-1"
+                        >
+                          <RefreshCw size={11} /> إعادة
+                        </button>
+                      )}
+                    </span>
+                  )}
+                </div>
+              ))}
             </div>
           )}
 
@@ -1107,6 +1176,7 @@ function SummarySheet({ session, onClose }: { session: PatrolSession; onClose: (
 
 export function PatrolClient() {
   const router = useRouter()
+  const { toast } = useToast()
   const [session, setSession] = useState<PatrolSession | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [showSummary, setShowSummary] = useState(false)
@@ -1140,39 +1210,46 @@ export function PatrolClient() {
       notes: "",
     })
 
+  const patchEntry = (id: string, patch: Partial<PatrolEntry>) =>
+    setSession((s) => (s ? { ...s, entries: s.entries.map((e) => (e.id === id ? { ...e, ...patch } : e)) } : s))
+
+  // الحفظ الفعلي لبند مخالفة في قاعدة البيانات عبر createViolationFull.
+  // يُحدّث حالة البند إلى محفوظ/فاشل، ويعرض تنبيهاً فورياً مع خيار إعادة المحاولة عند الفشل.
+  const runSave = async (entry: PatrolEntry) => {
+    patchEntry(entry.id, { status: "saving", errorMsg: undefined })
+    try {
+      const result = await saveViolationToDB(entry)
+      patchEntry(entry.id, { status: "saved", documentNo: result.documentNo })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "فشل الحفظ"
+      patchEntry(entry.id, { status: "error", errorMsg: msg })
+      toast({
+        variant: "destructive",
+        title: "فشل حفظ المخالفة",
+        description: `${entry.description} — ${msg}`,
+        action: (
+          <ToastAction altText="إعادة المحاولة" onClick={() => runSave(entry)}>
+            إعادة المحاولة
+          </ToastAction>
+        ),
+      })
+    }
+  }
+
   const addEntry = async (entry: PatrolEntry) => {
     // تظهر فوراً في القائمة؛ المخالفات تبدأ بحالة "جاري الحفظ".
     const initialStatus: PatrolEntry["status"] = entry.type === "violation" ? "saving" : entry.status
     setSession((s) => (s ? { ...s, entries: [...s.entries, { ...entry, status: initialStatus }] } : s))
 
+    // الحفظ التلقائي الفوري لكل مخالفة عبر نفس دالة createViolationFull.
     if (entry.type !== "violation") return
+    await runSave(entry)
+  }
 
-    // الحفظ التلقائي عبر نفس دالة createViolationFull (من خلال مسار API).
-    try {
-      const result = await saveViolationToDB(entry)
-      setSession((s) =>
-        s
-          ? {
-              ...s,
-              entries: s.entries.map((e) =>
-                e.id === entry.id ? { ...e, status: "saved" as const, documentNo: result.documentNo } : e,
-              ),
-            }
-          : s,
-      )
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "فشل الحفظ"
-      setSession((s) =>
-        s
-          ? {
-              ...s,
-              entries: s.entries.map((e) =>
-                e.id === entry.id ? { ...e, status: "error" as const, errorMsg: msg } : e,
-              ),
-            }
-          : s,
-      )
-    }
+  // إعادة محاولة حفظ بند فشل حفظه (من بطاقة البند أو من شاشة الملخص).
+  const retryEntry = (id: string) => {
+    const entry = session?.entries.find((e) => e.id === id)
+    if (entry) runSave(entry)
   }
 
   const delEntry = (id: string) =>
@@ -1305,7 +1382,9 @@ export function PatrolClient() {
             <p className="text-sm mt-1 text-gray-400">المخالفات تُحفظ تلقائياً في النظام</p>
           </div>
         ) : (
-          session.entries.map((e) => <EntryCard key={e.id} entry={e} onDelete={() => delEntry(e.id)} />)
+            session.entries.map((e) => (
+              <EntryCard key={e.id} entry={e} onDelete={() => delEntry(e.id)} onRetry={() => retryEntry(e.id)} />
+            ))
         )}
         <div className="mt-4">
           <label className="text-sm font-bold text-gray-500 block mb-2">ملاحظات الجولة العامة</label>
@@ -1332,7 +1411,9 @@ export function PatrolClient() {
       {showAdd && (
         <AddEntryModal onClose={() => setShowAdd(false)} onAdd={addEntry} officerName={session.officerName} />
       )}
-      {showSummary && <SummarySheet session={{ ...session, notes }} onClose={() => setShowSummary(false)} />}
+      {showSummary && (
+        <SummarySheet session={{ ...session, notes }} onClose={() => setShowSummary(false)} onRetry={retryEntry} />
+      )}
     </div>
   )
 }
