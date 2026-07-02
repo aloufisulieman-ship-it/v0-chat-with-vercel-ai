@@ -225,6 +225,23 @@ export const violation = pgTable("violation", {
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
+// ملاحظات وإيجابيات الجولة الميدانية.
+// kind: "observation" (ملاحظة/شبه حادثة) أو "positive" (ملاحظة إيجابية).
+export const observation = pgTable("observation", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  patrolId: text("patrolId").default(""),
+  kind: text("kind").notNull().default("observation"),
+  documentNo: text("documentNo").default(""),
+  description: text("description").notNull().default(""),
+  location: text("location").default(""),
+  observedBy: text("observedBy").default(""),
+  observationDate: date("observationDate"),
+  observationTime: text("observationTime").default(""),
+  status: text("status").default("open"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
 export const attachment = pgTable("attachment", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),

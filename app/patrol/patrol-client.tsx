@@ -232,6 +232,30 @@ async function saveViolationToDB(entry: PatrolEntry): Promise<{ documentNo: stri
   return res.json()
 }
 
+// ── حفظ الملاحظة/الإيجابية في قاعدة البيانات ────────────────────────────────────
+// تُرسل بيانات الملاحظة (observation) أو الإيجابية (positive) إلى
+// /api/patrol-observation ليُحفظ السجل ويظهر في لوحة التحكم والتقارير.
+async function saveObservationToDB(entry: PatrolEntry): Promise<{ documentNo: string }> {
+  const res = await fetch("/api/patrol-observation", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      kind: entry.type, // "observation" | "positive"
+      description: entry.description,
+      location: entry.location,
+      observationDate: new Date().toISOString().slice(0, 10),
+      observationTime: entry.time,
+      status: "open",
+      images: entry.photos,
+    }),
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data?.error || "فشل الحفظ")
+  }
+  return res.json()
+}
+
 // ── Photo Capture ──────────────────────────────────────────────────────────────
 
 function PhotoCapture({ onCapture }: { onCapture: (b: string) => void }) {
@@ -987,11 +1011,12 @@ function SummarySheet({
   const violations = session.entries.filter((e) => e.type === "violation")
   const observations = session.entries.filter((e) => e.type === "observation")
   const positives = session.entries.filter((e) => e.type === "positive")
-  const saved = violations.filter((e) => e.status === "saved").length
-  const failed = violations.filter((e) => e.status === "error").length
+  // إحصاءات الحفظ تشمل جميع البنود (مخالفات + ملاحظات + إيجابيات).
+  const saved = session.entries.filter((e) => e.status === "saved").length
+  const failed = session.entries.filter((e) => e.status === "error").length
 
   // الحفظ النهائي: تحديث حالة سجل الجولة إلى "مكتملة" في التخزين ثم العودة للرئيسية.
-  // (المخالفات الفردية محفوظة مسبقاً في Neon عبر createViolationFull لحظة تسجيلها.)
+  // (كل البنود محفوظة مسبقاً في Neon لحظة تسجيلها عبر createViolationFull/createObservationFull.)
   const handleSave = async () => {
     setSaving(true)
     try {
@@ -1054,32 +1079,39 @@ function SummarySheet({
             ))}
           </div>
 
-          {violations.length > 0 && (
+          {session.entries.length > 0 && (
             <div
               className="rounded-xl p-3 flex items-center gap-2"
-              style={{ background: saved === violations.length ? "#f0fdf4" : "#fffbeb" }}
+              style={{ background: saved === session.entries.length ? "#f0fdf4" : "#fffbeb" }}
             >
-              {saved === violations.length ? (
+              {saved === session.entries.length ? (
                 <CheckCircle2 size={16} className="text-green-500" />
               ) : (
                 <AlertCircle size={16} className="text-yellow-500" />
               )}
               <p
                 className="text-sm font-bold"
-                style={{ color: saved === violations.length ? "#16a34a" : "#d97706" }}
+                style={{ color: saved === session.entries.length ? "#16a34a" : "#d97706" }}
               >
-                {saved} من {violations.length} مخالفة محفوظة في النظام
+                {saved} من {session.entries.length} بند محفوظ في النظام
                 {failed > 0 ? ` · ${failed} فشل الحفظ` : ""}
               </p>
             </div>
           )}
 
-          {/* حالة الحفظ الفعلية لكل مخالفة */}
-          {violations.length > 0 && (
+          {/* حالة الحفظ الفعلية لكل بند (مخالفات + ملاحظات + إيجابيات) */}
+          {session.entries.length > 0 && (
             <div className="rounded-2xl p-3 space-y-2" style={{ background: "#f8fafc" }}>
               <p className="text-xs font-black text-gray-500 mb-1">حالة الحفظ في النظام</p>
-              {violations.map((v) => (
+              {session.entries.map((v) => (
                 <div key={v.id} className="flex items-center gap-2">
+                  <span
+                    className="w-2 h-2 rounded-full flex-shrink-0"
+                    style={{
+                      background:
+                        v.type === "violation" ? "#ef4444" : v.type === "observation" ? "#f59e0b" : "#22c55e",
+                    }}
+                  />
                   <span className="text-sm text-gray-700 flex-1 truncate">{v.description}</span>
                   {v.status === "saved" && (
                     <span className="text-xs font-bold text-green-600 flex items-center gap-1" dir="ltr">
@@ -1217,15 +1249,18 @@ export function PatrolClient() {
   // يُحدّث حالة البند إلى محفوظ/فاشل، ويعرض تنبيهاً فورياً مع خيار إعادة المحاولة عند الفشل.
   const runSave = async (entry: PatrolEntry) => {
     patchEntry(entry.id, { status: "saving", errorMsg: undefined })
+    const isViolation = entry.type === "violation"
+    const failTitle = isViolation ? "فشل حفظ المخالفة" : "فشل حفظ الملاحظة"
     try {
-      const result = await saveViolationToDB(entry)
+      // المخالفات تُحفظ في سجل المخالفات؛ الملاحظات والإيجابيات في سجل الملاحظات.
+      const result = isViolation ? await saveViolationToDB(entry) : await saveObservationToDB(entry)
       patchEntry(entry.id, { status: "saved", documentNo: result.documentNo })
     } catch (err) {
       const msg = err instanceof Error ? err.message : "فشل الحفظ"
       patchEntry(entry.id, { status: "error", errorMsg: msg })
       toast({
         variant: "destructive",
-        title: "فشل حفظ المخالفة",
+        title: failTitle,
         description: `${entry.description} — ${msg}`,
         action: (
           <ToastAction altText="إعادة المحاولة" onClick={() => runSave(entry)}>
@@ -1237,12 +1272,10 @@ export function PatrolClient() {
   }
 
   const addEntry = async (entry: PatrolEntry) => {
-    // تظهر فوراً في القائمة؛ المخالفات تبدأ بحالة "جاري الحفظ".
-    const initialStatus: PatrolEntry["status"] = entry.type === "violation" ? "saving" : entry.status
-    setSession((s) => (s ? { ...s, entries: [...s.entries, { ...entry, status: initialStatus }] } : s))
+    // تظهر فوراً في القائمة، وكل البنود تبدأ بحالة "جاري الحفظ" لأنها تُحفظ تلقائياً.
+    setSession((s) => (s ? { ...s, entries: [...s.entries, { ...entry, status: "saving" }] } : s))
 
-    // الحفظ التلقائي الفوري لكل مخالفة عبر نفس دالة createViolationFull.
-    if (entry.type !== "violation") return
+    // الحفظ التلقائي الفوري لكل بند: المخالفات + الملاحظات + الإيجابيات.
     await runSave(entry)
   }
 

@@ -14,6 +14,7 @@ import {
   audit,
   document,
   violation,
+  observation,
   attachment,
   user,
 } from "@/lib/db/schema"
@@ -614,21 +615,111 @@ export async function deleteViolation(id: number) {
   revalidatePath("/")
 }
 
+/* ---------------- Observations & positives (ملاحظات وإيجابيات الجولة) ---------------- */
+
+// يجلب كل الملاحظات/الإيجابيات الخاصة بالمستخدم؛ المدراء يرون الجميع.
+export async function getObservations() {
+  const userId = await requireModuleUserId("violations")
+  const userRows = await db.select({ role: user.role, department: user.department }).from(user).where(eq(user.id, userId)).limit(1)
+  const u = userRows[0]
+  const isManager =
+    u?.role === "admin" || u?.department === "المدير العام" || u?.department === "مفتش السلامة"
+  if (isManager) {
+    return db.select().from(observation).orderBy(desc(observation.createdAt))
+  }
+  return db.select().from(observation).where(eq(observation.userId, userId)).orderBy(desc(observation.createdAt))
+}
+
+// يحفظ ملاحظة (observation) أو ملاحظة إيجابية (positive) من الجولة، ويولّد رقم
+// وثيقة رسمي: OBS-YYYY-XXX للملاحظات، POS-YYYY-XXX للإيجابيات.
+export async function createObservationFull(formData: FormData) {
+  const userId = await requireModuleUserId("violations")
+  const kind = str(formData.get("kind"), "observation") === "positive" ? "positive" : "observation"
+  const prefix = kind === "positive" ? "POS" : "OBS"
+  const year = new Date().getFullYear()
+
+  const existing = await db
+    .select({ documentNo: observation.documentNo })
+    .from(observation)
+    .where(eq(observation.kind, kind))
+  const thisYearNos = existing.map((o) => o.documentNo ?? "").filter((n) => n.startsWith(`${prefix}-${year}-`))
+  const maxSeq = thisYearNos.reduce((max, n) => {
+    const seq = parseInt(n.split("-")[2] ?? "0", 10)
+    return seq > max ? seq : max
+  }, 0)
+  const documentNo = `${prefix}-${year}-${String(maxSeq + 1).padStart(3, "0")}`
+
+  const description = str(formData.get("description")).trim()
+  if (!description) throw new Error("وصف الملاحظة مطلوب")
+
+  const [inserted] = await db
+    .insert(observation)
+    .values({
+      userId,
+      patrolId: str(formData.get("patrolId")),
+      kind,
+      documentNo,
+      description,
+      location: str(formData.get("location")),
+      observedBy: str(formData.get("observedBy")),
+      observationDate: dateOrNull(formData.get("observationDate")),
+      observationTime: str(formData.get("observationTime")),
+      status: str(formData.get("status"), "open"),
+    })
+    .returning({ id: observation.id })
+
+  const recordId = inserted.id
+
+  // حفظ الصور المرفقة (مصفوفة base64) كمرفقات حقيقية على وحدة observations.
+  try {
+    const images = JSON.parse(str(formData.get("images"), "[]")) as string[]
+    for (let i = 0; i < images.length; i++) {
+      if (typeof images[i] === "string" && images[i].startsWith("data:image")) {
+        await saveDataUrlAttachment(userId, "observations", recordId, "photo", images[i], `photo-${i + 1}`)
+      }
+    }
+  } catch {
+    // نتجاهل الصور غير الصالحة؛ السجل نفسه محفوظ.
+  }
+
+  revalidatePath("/")
+  revalidatePath("/reports")
+  return { documentNo }
+}
+
+export async function deleteObservation(id: number) {
+  const userId = await requireModuleUserId("violations")
+  const userRows = await db.select({ role: user.role, department: user.department }).from(user).where(eq(user.id, userId)).limit(1)
+  const u = userRows[0]
+  const rows = await db.select().from(observation).where(eq(observation.id, id)).limit(1)
+  if (!rows[0]) throw new Error("الملاحظة غير موجودة")
+  const canDelete =
+    u?.role === "admin" ||
+    u?.department === "المدير العام" ||
+    u?.department === "مفتش السلامة" ||
+    rows[0].userId === userId
+  if (!canDelete) throw new Error("غير مصرح لك بالحذف")
+  await db.delete(observation).where(eq(observation.id, id))
+  revalidatePath("/")
+  revalidatePath("/reports")
+}
+
 /* ---------------- Dashboard aggregates ---------------- */
 export async function getDashboardData() {
   const userId = await getUserId()
-  const [inc, ins, per, rsk, act] = await Promise.all([
+  const [inc, ins, per, rsk, act, obs] = await Promise.all([
     db.select().from(incident).where(eq(incident.userId, userId)),
     db.select().from(inspection).where(eq(inspection.userId, userId)),
     db.select().from(permit).where(eq(permit.userId, userId)),
     db.select().from(risk).where(eq(risk.userId, userId)),
     db.select().from(correctiveAction).where(eq(correctiveAction.userId, userId)),
+    db.select().from(observation).where(eq(observation.userId, userId)),
   ])
-  return { incidents: inc, inspections: ins, permits: per, risks: rsk, actions: act }
+  return { incidents: inc, inspections: ins, permits: per, risks: rsk, actions: act, observations: obs }
 }
 
 /* ---------------- Reports ---------------- */
-export type ReportType = "incidents" | "violations" | "inspections" | "all"
+export type ReportType = "incidents" | "violations" | "inspections" | "observations" | "positives" | "all"
 
 export type ReportRow = Record<string, string | number | null>
 
@@ -735,6 +826,62 @@ export async function getReportData(
         compliance: r.compliance ?? 0,
         findings: r.findings ?? 0,
         status: statusLabels[r.status ?? ""] ?? r.status ?? "-",
+      })),
+    })
+  }
+
+  if (type === "observations" || type === "all") {
+    const rows = await db
+      .select()
+      .from(observation)
+      .where(and(eq(observation.userId, userId), eq(observation.kind, "observation")))
+      .orderBy(desc(observation.createdAt))
+    const filtered = rows.filter((r) => inRange(r.observationDate ?? null, from, to))
+    sections.push({
+      key: "observations",
+      title: "تقرير الملاحظات الوشيكة",
+      columns: [
+        { key: "documentNo", label: "رقم الملاحظة" },
+        { key: "description", label: "الوصف" },
+        { key: "location", label: "الموقع" },
+        { key: "observationDate", label: "التاريخ" },
+        { key: "observedBy", label: "المُسجِّل" },
+        { key: "status", label: "الحالة" },
+      ],
+      rows: filtered.map((r) => ({
+        documentNo: r.documentNo || "-",
+        description: r.description || "-",
+        location: r.location || "-",
+        observationDate: r.observationDate ?? "-",
+        observedBy: r.observedBy || "-",
+        status: statusLabels[r.status ?? ""] ?? r.status ?? "-",
+      })),
+    })
+  }
+
+  if (type === "positives" || type === "all") {
+    const rows = await db
+      .select()
+      .from(observation)
+      .where(and(eq(observation.userId, userId), eq(observation.kind, "positive")))
+      .orderBy(desc(observation.createdAt))
+    const filtered = rows.filter((r) => inRange(r.observationDate ?? null, from, to))
+    sections.push({
+      key: "positives",
+      title: "تقرير الملاحظات الإيجابية",
+      columns: [
+        { key: "documentNo", label: "رقم الملاحظة" },
+        { key: "description", label: "الوصف" },
+        { key: "location", label: "الموقع" },
+        { key: "observationDate", label: "التاريخ" },
+        { key: "observedBy", label: "المُسجِّل" },
+      ],
+      rows: filtered.map((r) => ({
+        documentNo: r.documentNo || "-",
+        description: r.description || "-",
+        location: r.location || "-",
+        observationDate: r.observationDate ?? "-",
+        observedBy: r.observedBy || "-",
       })),
     })
   }

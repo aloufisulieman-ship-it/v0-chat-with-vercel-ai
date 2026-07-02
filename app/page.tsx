@@ -18,10 +18,13 @@ import { incidentTypeLabels } from "@/lib/labels"
 
 export default async function DashboardPage() {
   const user = await requireUser()
-  const { incidents, inspections, permits, risks, actions } = await getDashboardData()
+  const { incidents, inspections, permits, risks, actions, observations } = await getDashboardData()
 
   const openIncidents = incidents.filter((i) => i.status !== "closed").length
-  const nearMisses = incidents.filter((i) => i.type === "near_miss").length
+  // الملاحظات الوشيكة = أشباه الحوادث + ملاحظات الجولة الميدانية.
+  const patrolObservations = observations.filter((o) => o.kind === "observation").length
+  const positiveObservations = observations.filter((o) => o.kind === "positive").length
+  const nearMisses = incidents.filter((i) => i.type === "near_miss").length + patrolObservations
   const openActions = actions.filter((a) => a.status !== "closed").length
   const highRisks = risks.filter((r) => (r.likelihood ?? 1) * (r.consequence ?? 1) >= 9).length
   const activePermits = permits.filter((p) => p.status === "active" || p.status === "approved").length
@@ -79,8 +82,9 @@ export default async function DashboardPage() {
         <KpiCard label="التصاريح النشطة" value={activePermits} icon={ShieldCheck} tone="primary" />
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
+      <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-7">
         <MiniStat label="ملاحظات وشيكة" value={nearMisses} />
+        <MiniStat label="ملاحظات إيجابية" value={positiveObservations} tone="positive" />
         <MiniStat label="الإجراءات المفتوحة" value={openActions} />
         <MiniStat label="مخاطر عالية" value={highRisks} />
         <MiniStat label="عمليات التفتيش" value={inspections.length} />
@@ -148,10 +152,18 @@ export default async function DashboardPage() {
   )
 }
 
-function MiniStat({ label, value }: { label: string; value: number }) {
+function MiniStat({ label, value, tone }: { label: string; value: number; tone?: "positive" }) {
   return (
-    <Card className="flex flex-col items-center justify-center gap-1 p-4 text-center">
-      <span className="text-2xl font-bold text-foreground">{value}</span>
+    <Card
+      className={
+        tone === "positive"
+          ? "flex flex-col items-center justify-center gap-1 border-primary/30 bg-primary/5 p-4 text-center"
+          : "flex flex-col items-center justify-center gap-1 p-4 text-center"
+      }
+    >
+      <span className={tone === "positive" ? "text-2xl font-bold text-primary" : "text-2xl font-bold text-foreground"}>
+        {value}
+      </span>
       <span className="text-xs text-muted-foreground">{label}</span>
     </Card>
   )
