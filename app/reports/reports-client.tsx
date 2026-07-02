@@ -31,6 +31,8 @@ const reportTypeOptions: { value: ReportType; label: string }[] = [
   { value: "incidents", label: "الحوادث" },
   { value: "violations", label: "المخالفات" },
   { value: "inspections", label: "التفتيش" },
+  { value: "observations", label: "الملاحظات الوشيكة" },
+  { value: "positives", label: "الملاحظات الإيجابية" },
   { value: "all", label: "تقرير شامل" },
 ]
 

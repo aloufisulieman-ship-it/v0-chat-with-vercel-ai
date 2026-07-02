@@ -22,10 +22,9 @@ export const statusLabels: Record<string, string> = {
   scheduled: "مجدول",
   pending: "بانتظار الموافقة",
   approved: "معتمد",
+  rejected: "مرفوض",
   active: "ساري",
   expired: "منتهٍ",
-  sufficient: "كافٍ",
-  low_stock: "مخزون منخفض",
 }
 export const statusOptions = [
   { value: "open", label: "مفتوح" },
@@ -63,29 +62,61 @@ export const incidentTypeOptions = [
 ]
 
 export const permitTypeLabels: Record<string, string> = {
-  hot_work: "أعمال ساخنة",
-  confined_space: "أماكن مغلقة",
-  electrical: "أعمال كهربائية",
-  excavation: "حفريات",
-  height: "العمل على ارتفاع",
+  construction: "تصريح عمل إنشائي",
+  forklift: "تصريح قيادة رافعة شوكية",
+  tuktuk: "تصريح قيادة توك توك",
+  visitor: "بطاقة زائر",
+  trainee: "بطاقة متدرب",
 }
 export const permitTypeOptions = [
-  { value: "hot_work", label: "أعمال ساخنة" },
-  { value: "confined_space", label: "أماكن مغلقة" },
-  { value: "electrical", label: "أعمال كهربائية" },
-  { value: "excavation", label: "حفريات" },
-  { value: "height", label: "العمل على ارتفاع" },
+  { value: "construction", label: "تصريح عمل إنشائي" },
+  { value: "forklift", label: "تصريح قيادة رافعة شوكية" },
+  { value: "tuktuk", label: "تصريح قيادة توك توك" },
+  { value: "visitor", label: "بطاقة زائر" },
+  { value: "trainee", label: "بطاقة متدرب" },
 ]
+// بادئة الترقيم التسلسلي لكل نوع تصريح (مثال: CWP-2026-001).
+export const permitTypePrefix: Record<string, string> = {
+  construction: "CWP",
+  forklift: "FLP",
+  tuktuk: "TTP",
+  visitor: "VIS",
+  trainee: "TRN",
+}
+// الحقول الديناميكية الإضافية لكل نوع تصريح.
+export const permitTypeExtraFields: Record<string, { name: string; label: string; placeholder?: string }[]> = {
+  construction: [
+    { name: "workDescription", label: "وصف العمل", placeholder: "مثال: صب أساسات المستودع" },
+    { name: "equipmentUsed", label: "المعدات المستخدمة", placeholder: "مثال: خلاطة خرسانة، سقالات" },
+  ],
+  forklift: [
+    { name: "driverName", label: "اسم السائق" },
+    { name: "internalLicenseNo", label: "رقم الرخصة الداخلية" },
+    { name: "equipmentNo", label: "رقم المعدة" },
+  ],
+  tuktuk: [
+    { name: "driverName", label: "اسم السائق" },
+    { name: "internalLicenseNo", label: "رقم الرخصة الداخلية" },
+    { name: "vehicleNo", label: "رقم المركبة" },
+  ],
+  visitor: [
+    { name: "visitorName", label: "اسم الزائر" },
+    { name: "visitorCompany", label: "الجهة" },
+    { name: "hostName", label: "الشخص المسؤول عن الاستقبال" },
+    { name: "visitDuration", label: "مدة الزيارة", placeholder: "مثال: 3 ساعات" },
+  ],
+  trainee: [
+    { name: "traineeName", label: "اسم المتدرب" },
+    { name: "traineeDepartment", label: "القسم" },
+    { name: "supervisorName", label: "المشرف المسؤول" },
+    { name: "trainingDuration", label: "مدة التدريب", placeholder: "مثال: أسبوعين" },
+  ],
+}
 
 export const violationStatusOptions = [
   { value: "open", label: "مفتوحة" },
   { value: "in_progress", label: "قيد المعالجة" },
   { value: "closed", label: "مغلقة" },
-]
-
-export const ppeStatusOptions = [
-  { value: "sufficient", label: "كافٍ" },
-  { value: "low_stock", label: "مخزون منخفض" },
 ]
 
 export const departmentOptions = [
@@ -107,7 +138,6 @@ export const moduleOptions = [
   { value: "risks", label: "تقييم المخاطر" },
   { value: "permits", label: "تصاريح العمل" },
   { value: "training", label: "التدريب" },
-  { value: "ppe", label: "معدات الوقاية" },
   { value: "violations", label: "المخالفات" },
   { value: "hr", label: "الموارد البشرية" },
   { value: "actions", label: "الإجراءات التصحيحية" },

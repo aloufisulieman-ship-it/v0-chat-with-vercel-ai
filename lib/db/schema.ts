@@ -121,13 +121,20 @@ export const inspection = pgTable("inspection", {
 export const permit = pgTable("permit", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
+  documentNo: text("documentNo").default(""),
   title: text("title").notNull(),
-  type: text("type").default("hot_work"),
+  type: text("type").default("construction"),
   location: text("location").default(""),
   requestedBy: text("requestedBy").default(""),
   status: text("status").default("pending"),
   validFrom: date("validFrom"),
   validTo: date("validTo"),
+  // حقول ديناميكية خاصة بكل نوع تصريح، مخزّنة كـ JSON.
+  details: text("details").default(""),
+  // بيانات اعتماد/رفض المدير.
+  approvedBy: text("approvedBy").default(""),
+  approvedAt: timestamp("approvedAt"),
+  rejectionReason: text("rejectionReason").default(""),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
@@ -170,18 +177,6 @@ export const trainingAttendee = pgTable("training_attendee", {
   cardCode: text("card_code").default(""),
   understood: text("understood").default("yes"),
   signature: text("signature").default(""),
-  createdAt: timestamp("createdAt").notNull().defaultNow(),
-})
-
-export const ppe = pgTable("ppe", {
-  id: serial("id").primaryKey(),
-  userId: text("userId").notNull(),
-  name: text("name").notNull(),
-  category: text("category").default(""),
-  inStock: integer("inStock").default(0),
-  assigned: integer("assigned").default(0),
-  minLevel: integer("minLevel").default(0),
-  status: text("status").default("sufficient"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
@@ -234,6 +229,23 @@ export const violation = pgTable("violation", {
   hrAction: text("hr_action").default(""),
   hrActionDate: date("hr_action_date"),
   hrNotes: text("hr_notes").default(""),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
+// ملاحظات وإيجابيات الجولة الميدانية.
+// kind: "observation" (ملاحظة/شبه حادثة) أو "positive" (ملاحظة إيجابية).
+export const observation = pgTable("observation", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  patrolId: text("patrolId").default(""),
+  kind: text("kind").notNull().default("observation"),
+  documentNo: text("documentNo").default(""),
+  description: text("description").notNull().default(""),
+  location: text("location").default(""),
+  observedBy: text("observedBy").default(""),
+  observationDate: date("observationDate"),
+  observationTime: text("observationTime").default(""),
+  status: text("status").default("open"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
