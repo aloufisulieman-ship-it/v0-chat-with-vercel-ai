@@ -129,7 +129,7 @@ const VIOLATION_TEMPLATES: ViolationTemplate[] = [
   { id: "C3", category: "crossing", severity: "moderate", text: "تجاهل إشارات التوقف عند الممر" },
   { id: "C4", category: "crossing", severity: "moderate", text: "ممر مشاة محجوب ببضائع أو مركبات" },
   { id: "C5", category: "crossing", severity: "minor", text: "مشاة يستخدمون هواتفهم عند العبور" },
-  { id: "S1", category: "shoes", severity: "moderate", text: "عامل في منطقة التحميل بدون حذاء سلامة" },
+  { id: "S1", category: "shoes", severity: "moderate", text: "عامل في منطقة التحميل بدون حذاء س��امة" },
   { id: "S2", category: "shoes", severity: "moderate", text: "عامل مستودع يرتدي أحذية عادية أثناء التشغيل" },
   { id: "S3", category: "shoes", severity: "minor", text: "عامل يرتدي أحذية سلامة تالفة" },
   { id: "S4", category: "shoes", severity: "moderate", text: "عامل فرز بدون حذاء واق من الثقل" },
@@ -161,8 +161,9 @@ const POSITIVE_TEMPLATES = [
 const LOCATIONS = [
   "البوابة الرئيسية",
   "البوابة الخلفية",
-  "ساحة التحميل الشمالية",
-  "ساحة التحميل الجنوبية",
+  "ساحة التحميل أ",
+  "ساحة التحميل ب",
+  "ساحة التحميل ج",
   "ممر الرافعات الرئيسي",
   "منطقة تقاطع المركبات",
   "مستودع A",
@@ -174,7 +175,6 @@ const LOCATIONS = [
   "منطقة التخزين البارد",
   "ممر المشاة الرئيسي",
   "ممر المشاة الجانبي",
-  "محطة الوقود",
   "موقف السيارات",
   "مكاتب الإدارة",
   "المطعم والاستراحة",
@@ -1210,7 +1210,7 @@ export function PatrolClient() {
 
           <div className="rounded-2xl p-4 space-y-3" style={{ background: "#fff", boxShadow: "0 2px 12px rgba(0,0,0,0.07)" }}>
             {[
-              { label: "ضابط السلامة", val: officerName, set: setOfficerName },
+              { label: "ضابط السلام��", val: officerName, set: setOfficerName },
               { label: "رقم المركبة", val: vehicleId, set: setVehicleId },
             ].map(({ label, val, set }) => (
               <div key={label}>
