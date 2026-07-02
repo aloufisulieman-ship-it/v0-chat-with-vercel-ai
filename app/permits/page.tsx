@@ -6,6 +6,7 @@ import { DataTable, type Column } from "@/components/data-table"
 import { StatusBadge } from "@/components/status-badge"
 import { PermitDialog } from "@/components/permit-dialog"
 import { RecordDetailsDialog } from "@/components/record-details-dialog"
+import { PermitApprovalActions } from "@/components/permit-approval-actions"
 import { DeleteButton } from "@/components/delete-button"
 import { requireModule } from "@/lib/session"
 import { getPermits, deletePermit, createPermit } from "@/app/actions/hse"
@@ -35,6 +36,10 @@ function parseDetails(raw: string | null): Record<string, string> {
 export default async function PermitsPage() {
   const user = await requireModule("permits")
   const permits = await getPermits()
+
+  // صلاحية اعتماد/رفض التصاريح: للمدير العام أو مفتش السلامة أو المشرف (admin).
+  const canApprove =
+    user.role === "admin" || user.department === "المدير العام" || user.department === "مفتش السلامة"
 
   const active = permits.filter((p) => p.status === "active" || p.status === "approved").length
   const pending = permits.filter((p) => p.status === "pending").length
@@ -74,6 +79,9 @@ export default async function PermitsPage() {
       className: "text-left",
       render: (r) => (
         <div className="flex items-center justify-end gap-1">
+          {canApprove && r.status === "pending" && (
+            <PermitApprovalActions permitId={r.id} approverName={user.name} />
+          )}
           <RecordDetailsDialog
             module="permits"
             recordId={r.id}
@@ -93,6 +101,18 @@ export default async function PermitsPage() {
               { label: "تاريخ الإصدار", value: r.validFrom ?? "-" },
               { label: "تاريخ الانتهاء", value: r.validTo ?? "-" },
               { label: "حالة الاعتماد", value: statusLabels[r.status ?? ""] ?? "-" },
+              ...(r.approvedBy
+                ? [
+                    { label: r.status === "rejected" ? "رفض بواسطة" : "اعتمد بواسطة", value: r.approvedBy },
+                    {
+                      label: r.status === "rejected" ? "تاريخ الرفض" : "تاريخ الاعتماد",
+                      value: r.approvedAt ? new Date(r.approvedAt).toLocaleString("ar") : "-",
+                    },
+                  ]
+                : []),
+              ...(r.status === "rejected" && r.rejectionReason
+                ? [{ label: "سبب الرفض", value: r.rejectionReason }]
+                : []),
             ]}
             initialAttachments={[]}
           />

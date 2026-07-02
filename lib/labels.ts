@@ -22,6 +22,7 @@ export const statusLabels: Record<string, string> = {
   scheduled: "مجدول",
   pending: "بانتظار الموافقة",
   approved: "معتمد",
+  rejected: "مرفوض",
   active: "ساري",
   expired: "منتهٍ",
 }

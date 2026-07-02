@@ -131,6 +131,10 @@ export const permit = pgTable("permit", {
   validTo: date("validTo"),
   // حقول ديناميكية خاصة بكل نوع تصريح، مخزّنة كـ JSON.
   details: text("details").default(""),
+  // بيانات اعتماد/رفض المدير.
+  approvedBy: text("approvedBy").default(""),
+  approvedAt: timestamp("approvedAt"),
+  rejectionReason: text("rejectionReason").default(""),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 

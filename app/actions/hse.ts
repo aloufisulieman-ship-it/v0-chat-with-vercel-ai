@@ -21,7 +21,7 @@ import {
 import { and, desc, eq } from "drizzle-orm"
 import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
-import { requireModuleUserId } from "@/lib/session"
+import { requireModuleUserId, requireUser } from "@/lib/session"
 import { severityLabels, statusLabels, permitTypePrefix, permitTypeExtraFields } from "@/lib/labels"
 import { put } from "@vercel/blob"
 
@@ -307,6 +307,43 @@ export async function deletePermit(id: number) {
   const userId = await requireModuleUserId("permits")
   await db.delete(permit).where(and(eq(permit.id, id), eq(permit.userId, userId)))
   revalidatePath("/permits")
+}
+
+// يحدد ما إذا كان المستخدم يملك صلاحية اعتماد/رفض التصاريح (مدير).
+function isPermitApprover(role: string, department: string): boolean {
+  return role === "admin" || department === "المدير العام" || department === "مفتش السلامة"
+}
+
+// اعتماد أو رفض تصريح عمل من قِبل المدير، مع تسجيل اسم المعتمِد والتاريخ والسبب.
+export async function updatePermitStatus(
+  permitId: number,
+  status: "approved" | "rejected",
+  approverName: string,
+  notes?: string,
+) {
+  const u = await requireUser()
+  if (!isPermitApprover(u.role, u.department)) {
+    throw new Error("ليس لديك صلاحية لاعتماد أو رفض التصاريح")
+  }
+  if (status !== "approved" && status !== "rejected") {
+    throw new Error("حالة غير صالحة")
+  }
+  if (status === "rejected" && !notes?.trim()) {
+    throw new Error("سبب الرفض مطلوب")
+  }
+
+  await db
+    .update(permit)
+    .set({
+      status,
+      approvedBy: approverName?.trim() || u.name,
+      approvedAt: new Date(),
+      rejectionReason: status === "rejected" ? (notes?.trim() ?? "") : "",
+    })
+    .where(eq(permit.id, permitId))
+
+  revalidatePath("/permits")
+  revalidatePath("/")
 }
 
 /* ---------------- Risks ---------------- */
