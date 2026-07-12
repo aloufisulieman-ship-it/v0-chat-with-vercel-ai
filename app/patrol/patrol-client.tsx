@@ -320,7 +320,7 @@ function SaveBadge({
   return <span className="text-xs text-gray-300">مسودة</span>
 }
 
-// ── Entry Card ───────────────────────────────────────────────────────────────���─
+// ── Entry Card ───────────────────────────────────────────────────────────────�����
 
 function EntryCard({
   entry,
@@ -1001,12 +1001,13 @@ function SummarySheet({
   session,
   onClose,
   onRetry,
+  onFinish,
 }: {
   session: PatrolSession
   onClose: () => void
   onRetry?: (id: string) => void
+  onFinish: () => void
 }) {
-  const router = useRouter()
   const [saving, setSaving] = useState(false)
   const violations = session.entries.filter((e) => e.type === "violation")
   const observations = session.entries.filter((e) => e.type === "observation")
@@ -1015,30 +1016,29 @@ function SummarySheet({
   const saved = session.entries.filter((e) => e.status === "saved").length
   const failed = session.entries.filter((e) => e.status === "error").length
 
-  // الحفظ النهائي: تحديث حالة سجل الجولة إلى "مكتملة" في التخزين ثم العودة للرئيسية.
-  // (كل البنود محفوظة مسبقاً في Neon لحظة تسجيلها عبر createViolationFull/createObservationFull.)
+  // التأكيد النهائي لإنهاء الجولة: تُسجَّل الجولة كمكتملة، ثم يُنتقل مباشرة
+  // لشاشة بدء جولة تفتيشية جديدة (كل البنود محفوظة مسبقاً في Neon لحظة تسجيلها).
   const handleSave = async () => {
     setSaving(true)
     try {
       const completed = { ...session, status: "completed", endTime: session.endTime || "" }
       localStorage.setItem("hse_patrol_v3", JSON.stringify(completed))
-      router.push("/")
+      onFinish()
     } finally {
       setSaving(false)
     }
   }
 
-  // الإغلاق عبر X: أغلق النافذة ثم ارجع للقائمة الرئيسية.
+  // الإغلاق عبر X: أغلق نافذة الملخص فقط والبقاء في الجولة الحالية.
   const handleClose = () => {
     onClose()
-    router.push("/")
   }
 
-  // الطباعة: افتح نافذة الطباعة ثم وجّه المستخدم للرئيسية بعد انتهائها/إغلاقها.
+  // الطباعة: افتح نافذة الطباعة ثم انتقل لشاشة بدء جولة جديدة بعد انتهائها/إغلاقها.
   const handlePrint = () => {
     const after = () => {
       window.removeEventListener("afterprint", after)
-      router.push("/")
+      onFinish()
     }
     window.addEventListener("afterprint", after)
     window.print()
@@ -1195,7 +1195,7 @@ function SummarySheet({
               className="flex-1 py-3.5 rounded-2xl font-black text-white flex items-center justify-center gap-2 disabled:opacity-60"
               style={{ background: "#16a34a" }}
             >
-              <CheckCircle2 size={16} /> {saving ? "جاري الحفظ..." : "حفظ"}
+              <CheckCircle2 size={16} /> {saving ? "جاري الإنهاء..." : "إنهاء الجولة"}
             </button>
           </div>
         </div>
@@ -1290,6 +1290,16 @@ export function PatrolClient() {
   const endSession = () => {
     setSession((s) => (s ? { ...s, endTime: nowTime(), notes } : s))
     setShowSummary(true)
+  }
+
+  // إنهاء الجولة الحالية والانتقال مباشرة لشاشة بدء جولة تفتيشية جديدة
+  // (بدل العودة للقائمة الرئيسية). البنود محفوظة مسبقاً في قاعدة البيانات لحظة تسجيلها.
+  const finishAndStartNew = () => {
+    localStorage.removeItem("hse_patrol_v3")
+    setShowSummary(false)
+    setShowAdd(false)
+    setNotes("")
+    setSession(null)
   }
 
   const violations = session?.entries.filter((e) => e.type === "violation").length ?? 0
@@ -1445,7 +1455,12 @@ export function PatrolClient() {
         <AddEntryModal onClose={() => setShowAdd(false)} onAdd={addEntry} officerName={session.officerName} />
       )}
       {showSummary && (
-        <SummarySheet session={{ ...session, notes }} onClose={() => setShowSummary(false)} onRetry={retryEntry} />
+        <SummarySheet
+          session={{ ...session, notes }}
+          onClose={() => setShowSummary(false)}
+          onRetry={retryEntry}
+          onFinish={finishAndStartNew}
+        />
       )}
     </div>
   )
