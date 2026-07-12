@@ -7,3 +7,4 @@ import { PatrolClient } from "./patrol-client"
 export default async function PatrolPage() {
   await requireModule("violations")
   return <PatrolClient />
+}
