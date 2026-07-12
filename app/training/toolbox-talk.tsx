@@ -55,7 +55,7 @@ const GROUPS: Group[] = [
 const DAY_NAMES = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"]
 
 const DEFAULT_CONDUCTOR = "سليمان العوفي"
-const DEFAULT_LOCATION = "السوق المركزي — بركاء"
+const DEFAULT_LOCATION = "السوق المركزي"
 
 const STORAGE_KEY = "mhs-toolbox-talks"
 

@@ -132,7 +132,7 @@ const VIOLATION_TEMPLATES: ViolationTemplate[] = [
   { id: "C3", category: "crossing", severity: "moderate", text: "تجاهل إشارات التوقف عند الممر" },
   { id: "C4", category: "crossing", severity: "moderate", text: "ممر مشاة محجوب ببضائع أو مركبات" },
   { id: "C5", category: "crossing", severity: "minor", text: "مشاة يستخدمون هواتفهم عند العبور" },
-  { id: "S1", category: "shoes", severity: "moderate", text: "عامل في منطقة التحميل بدون حذاء س����امة" },
+  { id: "S1", category: "shoes", severity: "moderate", text: "عامل في منطقة التحميل بدون حذاء سلامة" },
   { id: "S2", category: "shoes", severity: "moderate", text: "عامل مستودع يرتدي أحذية عادية أثناء التشغيل" },
   { id: "S3", category: "shoes", severity: "minor", text: "عامل يرتدي أحذية سلامة تالفة" },
   { id: "S4", category: "shoes", severity: "moderate", text: "عامل فرز بدون حذاء واق من الثقل" },
@@ -320,7 +320,7 @@ function SaveBadge({
   return <span className="text-xs text-gray-300">مسودة</span>
 }
 
-// ── Entry Card ─────────────────────────────────────────────────────────────────
+// ── Entry Card ───────────────────────────────────────────────────────────────���─
 
 function EntryCard({
   entry,
@@ -1315,13 +1315,13 @@ export function PatrolClient() {
               <ShieldAlert size={30} className="text-white" />
             </div>
             <h1 className="text-2xl font-black text-gray-900">جولة HSE الميدانية</h1>
-            <p className="text-gray-400 text-sm mt-1">السوق المركزي — ��ركاء · المخالفات تُحفظ تلقائياً</p>
+            <p className="text-gray-400 text-sm mt-1">السوق المركزي · المخالفات تُحفظ تلقائياً</p>
           </div>
 
           <div className="rounded-2xl p-4 space-y-3" style={{ background: "#fff", boxShadow: "0 2px 12px rgba(0,0,0,0.07)" }}>
             {[
-              { label: "ضابط السلام��", val: officerName, set: setOfficerName },
-              { label: "رقم المركبة", val: vehicleId, set: setVehicleId },
+              { label: "ضابط السلامة", val: officerName, set: setOfficerName },
+              { label: "رقم جولة التفتيش", val: vehicleId, set: setVehicleId },
             ].map(({ label, val, set }) => (
               <div key={label}>
                 <label className="text-xs font-bold text-gray-500 block mb-1">{label}</label>
@@ -1425,7 +1425,7 @@ export function PatrolClient() {
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={3}
-            placeholder="أي م��احظات عامة..."
+            placeholder="أي ملاحظات عامة..."
             className="w-full border border-gray-100 rounded-2xl px-4 py-3 text-sm resize-none"
             style={{ background: "#fff" }}
             dir="rtl"
