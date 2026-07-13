@@ -8,9 +8,6 @@ import { requireModule, requireModuleUserId } from "@/lib/session"
 import type { IncidentParty } from "@/lib/incident-types"
 import { normalizeHrStatus, type HrStatus } from "@/lib/hr-status"
 
-// القيمة المخزّنة للإجراء الداخلي عند التحويل إلى الموارد البشرية.
-const HR_TRANSFER_ACTION = "تحويل إلى الموارد البشرية"
-
 function str(v: FormDataEntryValue | null, fallback = "") {
   return v == null ? fallback : String(v)
 }
@@ -32,7 +29,8 @@ function hasEmployeeParty(partiesJson: string | null | undefined): boolean {
 
 /* ---------------- قراءة البنود المحوّلة ---------------- */
 
-// المخالفات الداخلية المحوّلة إلى الموارد البشرية.
+// كل المخالفات الداخلية تُعرض في مسار الموارد البشرية بغض النظر عن الحالة الرئيسية
+// أو قيمة internalAction — يُعتمد على hrStatus لتحديد المعالَجة/المغلقة في الصفحة.
 export async function getHrViolations() {
   const userId = await requireModuleUserId("hr")
   return db
@@ -42,7 +40,6 @@ export async function getHrViolations() {
       and(
         eq(violation.userId, userId),
         eq(violation.category, "internal"),
-        eq(violation.internalAction, HR_TRANSFER_ACTION),
       ),
     )
     .orderBy(desc(violation.createdAt))
@@ -59,11 +56,11 @@ export async function getHrIncidents() {
   return rows.filter((r) => hasEmployeeParty(r.parties))
 }
 
-// عدد البنود غير المعالجة (غير المغلقة) للشارة في القائمة الجانبية.
+// عدد البنود غير المعالجة (hrStatus غير مغلق) للشارة في القائمة الجانبية.
 export async function getHrPendingCount(): Promise<number> {
   const [violations, incidents] = await Promise.all([getHrViolations(), getHrIncidents()])
-  const pendingViolations = violations.filter((v) => v.status !== "closed").length
-  const pendingIncidents = incidents.filter((i) => i.status !== "closed").length
+  const pendingViolations = violations.filter((v) => normalizeHrStatus(v.hrStatus) !== "closed").length
+  const pendingIncidents = incidents.filter((i) => normalizeHrStatus(i.hrStatus) !== "closed").length
   return pendingViolations + pendingIncidents
 }
 
