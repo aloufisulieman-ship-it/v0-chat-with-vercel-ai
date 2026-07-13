@@ -19,12 +19,14 @@ import { requireUser } from "@/lib/session"
 import { getDashboardData } from "@/app/actions/hse"
 import { incidentTypeLabels } from "@/lib/labels"
 import { categoryLabels } from "@/lib/violation-category"
+import { effectiveViolationStatus, isViolationClosed } from "@/lib/violation-status"
 
 export default async function DashboardPage() {
   const user = await requireUser()
   const { incidents, inspections, permits, risks, actions, observations, violations } = await getDashboardData()
 
-  const openViolations = violations.filter((v) => v.status !== "closed").length
+  // مفتوحة = غير مغلقة وفق الحالة الفعلية (مسار الإحالة) لا الحالة المخزّنة.
+  const openViolations = violations.filter((v) => !isViolationClosed(v)).length
   const recentViolations = violations.slice(0, 5)
 
   const openIncidents = incidents.filter((i) => i.status !== "closed").length
@@ -190,7 +192,7 @@ export default async function DashboardPage() {
                       {v.violationDate ?? "-"}
                     </td>
                     <td className="py-3">
-                      <StatusBadge status={v.status ?? "open"} />
+                      <StatusBadge status={effectiveViolationStatus(v)} />
                     </td>
                   </tr>
                 ))}

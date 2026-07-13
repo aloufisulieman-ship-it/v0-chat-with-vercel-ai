@@ -8,6 +8,7 @@ import { requireModule } from "@/lib/session"
 import { getViolations, deleteViolation } from "@/app/actions/hse"
 import { statusLabels } from "@/lib/labels"
 import { categoryLabels } from "@/lib/violation-category"
+import { effectiveViolationStatus, isViolationClosed } from "@/lib/violation-status"
 import { FileWarning, Clock, CheckCircle2 } from "lucide-react"
 import { MissingOriginalField } from "@/components/missing-original-field"
 import { HrStatusBadge } from "@/components/hr-status-badge"
@@ -33,8 +34,9 @@ export default async function ViolationsPage() {
   const violations = await getViolations()
   const isAdmin = user.role === "admin"
 
-  const open = violations.filter((v) => v.status === "open" || v.status === "in_progress").length
-  const closed = violations.filter((v) => v.status === "closed").length
+  // العدادات تعتمد الحالة الفعلية (وفق مسار الإحالة) لا الحالة المخزّنة.
+  const closed = violations.filter((v) => isViolationClosed(v)).length
+  const open = violations.length - closed
 
   const columns: Column<Violation>[] = [
     { key: "employeeName", header: "الموظف", render: (r) => <span className="font-medium">{r.employeeName}</span> },
@@ -42,7 +44,7 @@ export default async function ViolationsPage() {
     { key: "description", header: "وصف المخالفة", render: (r) => r.description ? <span className="text-muted-foreground line-clamp-1 max-w-xs">{r.description}</span> : <MissingOriginalField value={null} /> },
     { key: "place", header: "المكان", render: (r) => <MissingOriginalField value={r.place} /> },
     { key: "violationDate", header: "التاريخ", render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.violationDate ?? "-"}</span> },
-    { key: "status", header: "الحالة", render: (r) => <StatusBadge status={r.status ?? "open"} /> },
+    { key: "status", header: "الحالة", render: (r) => <StatusBadge status={effectiveViolationStatus(r)} /> },
     { key: "entryMode", header: "المصدر", render: (r) => <EntryModeBadge entryMode={r.entryMode} /> },
     {
       key: "referral", header: "الإحالة",
@@ -76,7 +78,7 @@ export default async function ViolationsPage() {
               { label: "وصف المخالفة", value: r.description || NOT_IN_SOURCE },
               { label: "الشهود", value: r.witnesses || "-" },
               { label: "الإجراء المقترح", value: r.proposedAction || "-" },
-              { label: "الحالة", value: statusLabels[r.status ?? ""] ?? "-" },
+              { label: "الحالة", value: statusLabels[effectiveViolationStatus(r)] ?? "-" },
             ]}
             signatures={[
               { label: "توقيع المخالف", value: r.violatorSignature || "" },

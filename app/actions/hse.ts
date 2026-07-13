@@ -23,6 +23,7 @@ import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
 import { requireModuleUserId, requireUser } from "@/lib/session"
 import { severityLabels, statusLabels, permitTypePrefix, permitTypeExtraFields } from "@/lib/labels"
+import { effectiveViolationStatus } from "@/lib/violation-status"
 import { put } from "@vercel/blob"
 
 // Convert a base64 data URL (e.g. "data:image/png;base64,....") into a Blob.
@@ -921,7 +922,7 @@ export async function getReportData(
         violationType: r.violationType || "-",
         violationDate: r.violationDate ?? "-",
         category: r.category === "external" ? "خارجية" : "داخلية",
-        status: statusLabels[r.status ?? ""] ?? r.status ?? "-",
+        status: statusLabels[effectiveViolationStatus(r)] ?? "-",
       })),
     })
   }
