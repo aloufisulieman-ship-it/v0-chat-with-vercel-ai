@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/hooks/use-toast"
 import { createViolationFull } from "@/app/actions/hse"
 import { violationStatusOptions } from "@/lib/labels"
+import { compressImage } from "@/lib/image-compress"
 import {
   categoryOptions,
   internalActionOptions,
@@ -88,8 +89,21 @@ function SignaturePad({ label, value, onChange }: { label: string; value: string
   }
 
   function end() {
+    if (!drawing) return
     setDrawing(false)
-    onChange(canvasRef.current!.toDataURL())
+
+    const source = canvasRef.current!
+    // Canvas التوقيع محدود أصلاً إلى 340x120. نعيد رسمه على خلفية بيضاء
+    // قبل تصديره كـ JPEG مضغوط لتجنب حمولة PNG الكبيرة أو الخلفية الشفافة.
+    const output = document.createElement("canvas")
+    output.width = Math.min(source.width, 500)
+    output.height = Math.min(source.height, 200)
+    const ctx = output.getContext("2d")
+    if (!ctx) return
+    ctx.fillStyle = "#ffffff"
+    ctx.fillRect(0, 0, output.width, output.height)
+    ctx.drawImage(source, 0, 0, output.width, output.height)
+    onChange(output.toDataURL("image/jpeg", 0.7))
   }
 
   function clear() {
@@ -170,23 +184,47 @@ export function ViolationFormDialog() {
     setManagerSignature("")
   }
 
-  function handleDocUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? [])
-    files.forEach((f) => {
+  async function fileToDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
       const reader = new FileReader()
-      reader.onload = () => setManualDocs((prev) => [...prev, { name: f.name, dataUrl: reader.result as string }])
-      reader.readAsDataURL(f)
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = () => reject(new Error("تعذّر قراءة الملف"))
+      reader.readAsDataURL(file)
     })
-    e.target.value = ""
   }
 
-  function handleImageCapture(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? [])
-    files.forEach((f) => {
-      const reader = new FileReader()
-      reader.onload = () => setImages((prev) => [...prev, reader.result as string])
-      reader.readAsDataURL(f)
-    })
+  async function handleDocUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const input = e.currentTarget
+    const files = Array.from(input.files ?? [])
+    input.value = ""
+
+    try {
+      const docs = await Promise.all(
+        files.map(async (file) => ({
+          name: file.name,
+          // اضغط النماذج المصورة فقط؛ PDF وWord يبقيان بصيغتهما الأصلية.
+          dataUrl: file.type.startsWith("image/")
+            ? await compressImage(file, 1200, 0.7)
+            : await fileToDataUrl(file),
+        })),
+      )
+      setManualDocs((prev) => [...prev, ...docs])
+    } catch {
+      toast({ title: "تعذّر تجهيز الملف", variant: "destructive" })
+    }
+  }
+
+  async function handleImageCapture(e: React.ChangeEvent<HTMLInputElement>) {
+    const input = e.currentTarget
+    const files = Array.from(input.files ?? [])
+    input.value = ""
+
+    try {
+      const compressed = await Promise.all(files.map((file) => compressImage(file, 1200, 0.7)))
+      setImages((prev) => [...prev, ...compressed])
+    } catch {
+      toast({ title: "تعذّر ضغط الصورة", variant: "destructive" })
+    }
   }
 
   function handleSave() {
@@ -194,7 +232,7 @@ export function ViolationFormDialog() {
       try {
         const fd = new FormData()
         Object.entries(form).forEach(([k, v]) => fd.append(k, v))
-        // ادمج الإجراء مع التفاصيل الإضافية (المبلغ أو النص الحر) في قيمة واحدة
+        // ادمج ا��إجراء مع التفاصيل الإضافية (المبلغ أو النص الحر) في قيمة واحدة
         let internalActionValue = form.internalAction
         if (form.internalAction === FINE_ACTION && form.actionDetail.trim()) {
           internalActionValue = `${FINE_ACTION}: ${form.actionDetail.trim()} ريال سعودي`
