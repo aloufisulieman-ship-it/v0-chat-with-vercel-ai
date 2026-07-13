@@ -406,7 +406,7 @@ export async function createTrainingFull(formData: FormData) {
   const userId = await requireModuleUserId("training")
 
   const title = str(formData.get("title")).trim()
-  if (!title) throw new Error("اسم الدورة مطلوب")
+  if (!title) throw new Error("��سم الدورة مطلوب")
 
   const trainerSignature = str(formData.get("trainerSignature"))
 
@@ -597,6 +597,11 @@ export async function createViolationFull(formData: FormData) {
   const employeeName = str(formData.get("employeeName")).trim()
   if (!employeeName) throw new Error("اسم الموظف مطلوب")
 
+  // مسار إحالة حصري حسب التصنيف: الداخلية → الموارد البشرية، الخارجية → المالية.
+  // تُضبط حالة الجهة المعنية فقط، ويبقى الحقل المعاكس null دائماً.
+  const category = str(formData.get("category"), "internal")
+  const isExternal = category === "external"
+
   // Pass every column explicitly so nothing falls back to a DB default.
   const [inserted] = await db
     .insert(violation)
@@ -608,7 +613,7 @@ export async function createViolationFull(formData: FormData) {
       employeeNo: str(formData.get("employeeNo")),
       nationality: str(formData.get("nationality")),
       violationType: str(formData.get("violationType")),
-      category: str(formData.get("category"), "internal"),
+      category,
       entryMode: str(formData.get("entryMode"), "electronic"),
       internalAction: str(formData.get("internalAction")),
       violationDate: dateOrNull(formData.get("violationDate")),
@@ -619,6 +624,8 @@ export async function createViolationFull(formData: FormData) {
       evidences: str(formData.get("evidences")),
       proposedAction: str(formData.get("proposedAction")),
       status: str(formData.get("status"), "open"),
+      hrStatus: isExternal ? null : "pending",
+      financeStatus: isExternal ? "pending" : null,
       editorSignature: str(formData.get("editorSignature")),
       violatorSignature: str(formData.get("violatorSignature")),
       managerSignature: str(formData.get("managerSignature")),
@@ -684,6 +691,30 @@ export async function updateViolation(formData: FormData) {
   const employeeName = str(formData.get("employeeName")).trim()
   if (!employeeName) throw new Error("اسم الموظف مطلوب")
 
+  // مسار إحالة حصري حسب التصنيف. نقرأ الحالة القائمة للجهة الصحيحة لنحافظ عليها،
+  // ونمسح دائماً الحقل (والإغلاق) الخاص بالجهة المعاكسة لضمان عدم اجتماع الاثنين.
+  const category = str(formData.get("category"), "internal")
+  const isExternal = category === "external"
+  const [current] = await db
+    .select({ hrStatus: violation.hrStatus, financeStatus: violation.financeStatus })
+    .from(violation)
+    .where(eq(violation.id, id))
+    .limit(1)
+
+  const referral = isExternal
+    ? {
+        financeStatus: current?.financeStatus ?? "pending",
+        // مسح جهة الموارد البشرية بالكامل.
+        hrStatus: null, hrAction: "", hrActionDate: null, hrNotes: "",
+        hrClosedBy: "", hrClosedAt: null, hrAttachmentUrl: "",
+      }
+    : {
+        hrStatus: current?.hrStatus ?? "pending",
+        // مسح جهة المالية بالكامل.
+        financeStatus: null, settlementNumber: "", paymentReceiptUrl: "",
+        financeClosedBy: "", financeClosedAt: null,
+      }
+
   await db
     .update(violation)
     .set({
@@ -692,7 +723,7 @@ export async function updateViolation(formData: FormData) {
       employeeNo: str(formData.get("employeeNo")),
       nationality: str(formData.get("nationality")),
       violationType: str(formData.get("violationType")),
-      category: str(formData.get("category"), "internal"),
+      category,
       entryMode: str(formData.get("entryMode"), "electronic"),
       internalAction: str(formData.get("internalAction")),
       violationDate: dateOrNull(formData.get("violationDate")),
@@ -702,6 +733,7 @@ export async function updateViolation(formData: FormData) {
       witnesses: str(formData.get("witnesses")),
       proposedAction: str(formData.get("proposedAction")),
       status: str(formData.get("status"), "open"),
+      ...referral,
     })
     .where(eq(violation.id, id))
 
