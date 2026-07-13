@@ -8,14 +8,15 @@ import { getHrViolations, getHrIncidents, updateHrViolation, updateHrIncident } 
 import { statusLabels, severityLabels } from "@/lib/labels"
 import { categoryLabels } from "@/lib/violation-category"
 import { formatParties } from "@/lib/incident-types"
+import { normalizeHrStatus, parseHrAttachments } from "@/lib/hr-status"
 import { HrActionCard } from "./hr-action-card"
 
 export default async function HrPage() {
   const user = await requireModule("hr")
   const [violations, incidents] = await Promise.all([getHrViolations(), getHrIncidents()])
 
-  const pendingViolations = violations.filter((v) => v.status !== "closed").length
-  const pendingIncidents = incidents.filter((i) => i.status !== "closed").length
+  const pendingViolations = violations.filter((v) => normalizeHrStatus(v.hrStatus) !== "closed").length
+  const pendingIncidents = incidents.filter((i) => normalizeHrStatus(i.hrStatus) !== "closed").length
 
   return (
     <AppShell
@@ -44,7 +45,10 @@ export default async function HrPage() {
                 id={v.id}
                 action={updateHrViolation}
                 refLabel={`v-${v.id}`}
-                status={v.status ?? "open"}
+                hrStatus={v.hrStatus}
+                initialAttachments={parseHrAttachments(v.hrAttachmentUrl)}
+                closedBy={v.hrClosedBy ?? ""}
+                closedAt={v.hrClosedAt ? v.hrClosedAt.toISOString() : ""}
                 rows={[
                   { label: "رقم المخالفة", value: <span dir="ltr" className="font-mono text-xs">{v.documentNo || "-"}</span> },
                   { label: "اسم الموظف", value: v.employeeName },
@@ -105,7 +109,10 @@ export default async function HrPage() {
                 id={i.id}
                 action={updateHrIncident}
                 refLabel={`i-${i.id}`}
-                status={i.status ?? "open"}
+                hrStatus={i.hrStatus}
+                initialAttachments={parseHrAttachments(i.hrAttachmentUrl)}
+                closedBy={i.hrClosedBy ?? ""}
+                closedAt={i.hrClosedAt ? i.hrClosedAt.toISOString() : ""}
                 rows={[
                   { label: "رقم الحادثة", value: <span dir="ltr" className="font-mono text-xs">{i.documentNo || "-"}</span> },
                   { label: "النوع", value: i.title },

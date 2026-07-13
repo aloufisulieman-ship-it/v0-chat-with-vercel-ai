@@ -23,6 +23,7 @@ import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
 import { requireModuleUserId, requireUser } from "@/lib/session"
 import { severityLabels, statusLabels, permitTypePrefix, permitTypeExtraFields } from "@/lib/labels"
+import { effectiveViolationStatus } from "@/lib/violation-status"
 import { put } from "@vercel/blob"
 
 // Convert a base64 data URL (e.g. "data:image/png;base64,....") into a Blob.
@@ -405,7 +406,7 @@ export async function createTrainingFull(formData: FormData) {
   const userId = await requireModuleUserId("training")
 
   const title = str(formData.get("title")).trim()
-  if (!title) throw new Error("اسم الدورة مطلوب")
+  if (!title) throw new Error("��سم الدورة مطلوب")
 
   const trainerSignature = str(formData.get("trainerSignature"))
 
@@ -596,6 +597,11 @@ export async function createViolationFull(formData: FormData) {
   const employeeName = str(formData.get("employeeName")).trim()
   if (!employeeName) throw new Error("اسم الموظف مطلوب")
 
+  // مسار إحالة حصري حسب التصنيف: الداخلية → الموارد البشرية، الخارجية → المالية.
+  // تُضبط حالة الجهة المعنية فقط، ويبقى الحقل المعاكس null دائماً.
+  const category = str(formData.get("category"), "internal")
+  const isExternal = category === "external"
+
   // Pass every column explicitly so nothing falls back to a DB default.
   const [inserted] = await db
     .insert(violation)
@@ -607,7 +613,8 @@ export async function createViolationFull(formData: FormData) {
       employeeNo: str(formData.get("employeeNo")),
       nationality: str(formData.get("nationality")),
       violationType: str(formData.get("violationType")),
-      category: str(formData.get("category"), "internal"),
+      category,
+      entryMode: str(formData.get("entryMode"), "electronic"),
       internalAction: str(formData.get("internalAction")),
       violationDate: dateOrNull(formData.get("violationDate")),
       violationTime: str(formData.get("violationTime")),
@@ -617,6 +624,8 @@ export async function createViolationFull(formData: FormData) {
       evidences: str(formData.get("evidences")),
       proposedAction: str(formData.get("proposedAction")),
       status: str(formData.get("status"), "open"),
+      hrStatus: isExternal ? null : "pending",
+      financeStatus: isExternal ? "pending" : null,
       editorSignature: str(formData.get("editorSignature")),
       violatorSignature: str(formData.get("violatorSignature")),
       managerSignature: str(formData.get("managerSignature")),
@@ -638,6 +647,19 @@ export async function createViolationFull(formData: FormData) {
     // ignore malformed image payloads; the violation itself is already saved
   }
 
+  // للمخالفات اليدوية: احفظ النموذج الورقي الممسوح (PDF/صورة/مستند) كمرفق
+  // بنوع "manual_form" ليظهر في نافذة التفاصيل للتحميل.
+  try {
+    const docs = JSON.parse(str(formData.get("manualDocs"), "[]")) as string[]
+    for (let i = 0; i < docs.length; i++) {
+      if (typeof docs[i] === "string" && docs[i].startsWith("data:")) {
+        await saveDataUrlAttachment(userId, "violations", recordId, "manual_form", docs[i], `manual-form-${i + 1}`)
+      }
+    }
+  } catch {
+    // ignore malformed document payloads; the violation itself is already saved
+  }
+
   // Persist the three drawn signatures as role-named attachments so they
   // render once in the official signatures section (no duplication in fields).
   const signaturePairs: { value: string; kind: string; name: string }[] = [
@@ -654,6 +676,81 @@ export async function createViolationFull(formData: FormData) {
   revalidatePath("/violations")
   revalidatePath("/")
   return { documentNo }
+}
+
+// تعديل يدوي كامل للمخالفة — مقتصر على مدير النظام (admin) فقط.
+// يسمح بتصحيح أي حقل ورفع نماذج ورقية ممسوحة إضافية للمخالفات اليدوية.
+export async function updateViolation(formData: FormData) {
+  const userId = await getUserId()
+  const userRows = await db.select({ role: user.role }).from(user).where(eq(user.id, userId)).limit(1)
+  if (userRows[0]?.role !== "admin") throw new Error("التعديل اليدوي متاح لمدير النظام فقط")
+
+  const id = Number(formData.get("id"))
+  if (!Number.isFinite(id)) throw new Error("معرّف غير صالح")
+
+  const employeeName = str(formData.get("employeeName")).trim()
+  if (!employeeName) throw new Error("اسم الموظف مطلوب")
+
+  // مسار إحالة حصري حسب التصنيف. نقرأ الحالة القائمة للجهة الصحيحة لنحافظ عليها،
+  // ونمسح دائماً الحقل (والإغلاق) الخاص بالجهة المعاكسة لضمان عدم اجتماع الاثنين.
+  const category = str(formData.get("category"), "internal")
+  const isExternal = category === "external"
+  const [current] = await db
+    .select({ hrStatus: violation.hrStatus, financeStatus: violation.financeStatus })
+    .from(violation)
+    .where(eq(violation.id, id))
+    .limit(1)
+
+  const referral = isExternal
+    ? {
+        financeStatus: current?.financeStatus ?? "pending",
+        // مسح جهة الموارد البشرية بالكامل.
+        hrStatus: null, hrAction: "", hrActionDate: null, hrNotes: "",
+        hrClosedBy: "", hrClosedAt: null, hrAttachmentUrl: "",
+      }
+    : {
+        hrStatus: current?.hrStatus ?? "pending",
+        // مسح جهة المالية بالكامل.
+        financeStatus: null, settlementNumber: "", paymentReceiptUrl: "",
+        financeClosedBy: "", financeClosedAt: null,
+      }
+
+  await db
+    .update(violation)
+    .set({
+      companyName: str(formData.get("companyName")),
+      employeeName,
+      employeeNo: str(formData.get("employeeNo")),
+      nationality: str(formData.get("nationality")),
+      violationType: str(formData.get("violationType")),
+      category,
+      entryMode: str(formData.get("entryMode"), "electronic"),
+      internalAction: str(formData.get("internalAction")),
+      violationDate: dateOrNull(formData.get("violationDate")),
+      violationTime: str(formData.get("violationTime")),
+      place: str(formData.get("place")),
+      description: str(formData.get("description")),
+      witnesses: str(formData.get("witnesses")),
+      proposedAction: str(formData.get("proposedAction")),
+      status: str(formData.get("status"), "open"),
+      ...referral,
+    })
+    .where(eq(violation.id, id))
+
+  // إرفاق نماذج ورقية ممسوحة إضافية إن وُجدت.
+  try {
+    const docs = JSON.parse(str(formData.get("manualDocs"), "[]")) as string[]
+    for (let i = 0; i < docs.length; i++) {
+      if (typeof docs[i] === "string" && docs[i].startsWith("data:")) {
+        await saveDataUrlAttachment(userId, "violations", id, "manual_form", docs[i], `manual-form-edit-${Date.now()}-${i + 1}`)
+      }
+    }
+  } catch {
+    // ignore malformed document payloads; the edit itself is already saved
+  }
+
+  revalidatePath("/violations")
+  revalidatePath("/")
 }
 
 export async function deleteViolation(id: number) {
@@ -857,7 +954,7 @@ export async function getReportData(
         violationType: r.violationType || "-",
         violationDate: r.violationDate ?? "-",
         category: r.category === "external" ? "خارجية" : "داخلية",
-        status: statusLabels[r.status ?? ""] ?? r.status ?? "-",
+        status: statusLabels[effectiveViolationStatus(r)] ?? "-",
       })),
     })
   }

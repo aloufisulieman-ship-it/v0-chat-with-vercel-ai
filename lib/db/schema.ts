@@ -102,6 +102,12 @@ export const incident = pgTable("incident", {
   hrAction: text("hr_action").default(""),
   hrActionDate: date("hr_action_date"),
   hrNotes: text("hr_notes").default(""),
+  // مسار الإحالة للموارد البشرية: pending | in_review | closed (null يُعامل كـ pending).
+  hrStatus: text("hr_status"),
+  hrClosedBy: text("hr_closed_by").default(""),
+  hrClosedAt: timestamp("hr_closed_at"),
+  // مرفقات قرار الموارد البشرية (JSON array من data URLs، بنفس آلية الصور/التواقيع).
+  hrAttachmentUrl: text("hr_attachment_url").default(""),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
@@ -214,6 +220,8 @@ export const violation = pgTable("violation", {
   nationality: text("nationality").default(""),
   violationType: text("violationType").default(""),
   category: text("category").default("internal"),
+  // مصدر إدخال المخالفة: electronic (عبر النظام) | manual (نموذج ورقي ممسوح).
+  entryMode: text("entry_mode").notNull().default("electronic"),
   internalAction: text("internal_action").default(""),
   violationDate: date("violationDate"),
   violationTime: text("violationTime").default(""),
@@ -229,6 +237,19 @@ export const violation = pgTable("violation", {
   hrAction: text("hr_action").default(""),
   hrActionDate: date("hr_action_date"),
   hrNotes: text("hr_notes").default(""),
+  // مسار الإحالة للموارد البشرية: pending | in_review | closed (null يُعامل كـ pending).
+  hrStatus: text("hr_status"),
+  hrClosedBy: text("hr_closed_by").default(""),
+  hrClosedAt: timestamp("hr_closed_at"),
+  // مرفقات قرار الموارد البشرية (JSON array من data URLs، بنفس آلية الصور/التواقيع).
+  hrAttachmentUrl: text("hr_attachment_url").default(""),
+  // مسار الإحالة إلى المالية للمخالفات الخارجية: pending | in_review | closed (null يُعامل كـ pending).
+  financeStatus: text("finance_status"),
+  settlementNumber: text("settlement_number").default(""),
+  // إيصال الدفع مخزّن كـ data URL واحد (بنفس آلية رفع الملفات في النظام).
+  paymentReceiptUrl: text("payment_receipt_url").default(""),
+  financeClosedBy: text("finance_closed_by").default(""),
+  financeClosedAt: timestamp("finance_closed_at"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 

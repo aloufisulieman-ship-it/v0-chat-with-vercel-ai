@@ -1,0 +1,16 @@
+import { Monitor, FileText } from "lucide-react"
+
+// شارة تميّز مصدر إدخال المخالفة: يدوية (نموذج ورقي) أو إلكترونية (عبر النظام).
+export function EntryModeBadge({ entryMode }: { entryMode: string | null | undefined }) {
+  const isManual = entryMode === "manual"
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+        isManual ? "bg-amber-100 text-amber-800" : "bg-muted text-muted-foreground"
+      }`}
+    >
+      {isManual ? <FileText className="size-3" /> : <Monitor className="size-3" />}
+      {isManual ? "يدوية" : "إلكترونية"}
+    </span>
+  )
+}

@@ -2,13 +2,11 @@
 
 import { db } from "@/lib/db"
 import { violation, incident } from "@/lib/db/schema"
-import { and, desc, eq } from "drizzle-orm"
+import { desc, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
-import { requireModuleUserId } from "@/lib/session"
+import { requireModule, requireModuleUserId } from "@/lib/session"
 import type { IncidentParty } from "@/lib/incident-types"
-
-// القيمة المخزّنة للإجراء الداخلي عند التحويل إلى الموارد البشرية.
-const HR_TRANSFER_ACTION = "تحويل إلى الموارد البشرية"
+import { normalizeHrStatus, type HrStatus } from "@/lib/hr-status"
 
 function str(v: FormDataEntryValue | null, fallback = "") {
   return v == null ? fallback : String(v)
@@ -31,58 +29,73 @@ function hasEmployeeParty(partiesJson: string | null | undefined): boolean {
 
 /* ---------------- قراءة البنود المحوّلة ---------------- */
 
-// المخالفات الداخلية المحوّلة إلى الموارد البشرية.
+// قائمة مراجعة شاملة: من له صلاحية "hr" يرى كل المخالفات الداخلية بغض النظر عن
+// منشئها أو الحالة الرئيسية أو internalAction — يُعتمد على hrStatus للمعالَجة/الإغلاق.
 export async function getHrViolations() {
-  const userId = await requireModuleUserId("hr")
+  await requireModuleUserId("hr")
   return db
     .select()
     .from(violation)
-    .where(
-      and(
-        eq(violation.userId, userId),
-        eq(violation.category, "internal"),
-        eq(violation.internalAction, HR_TRANSFER_ACTION),
-      ),
-    )
+    .where(eq(violation.category, "internal"))
     .orderBy(desc(violation.createdAt))
 }
 
-// الحوادث الداخلية التي يكون أحد أطرافها المتضررة "موظف".
+// كل الحوادث التي يكون أحد أطرافها المتضررة "موظف" (بغض النظر عن منشئها).
 export async function getHrIncidents() {
-  const userId = await requireModuleUserId("hr")
+  await requireModuleUserId("hr")
   const rows = await db
     .select()
     .from(incident)
-    .where(eq(incident.userId, userId))
     .orderBy(desc(incident.createdAt))
   return rows.filter((r) => hasEmployeeParty(r.parties))
 }
 
-// عدد البنود غير المعالجة (غير المغلقة) للشارة في القائمة الجانبية.
+// عدد البنود غير المعالجة (hrStatus غير مغلق) للشارة في القائمة الجانبية.
 export async function getHrPendingCount(): Promise<number> {
   const [violations, incidents] = await Promise.all([getHrViolations(), getHrIncidents()])
-  const pendingViolations = violations.filter((v) => v.status !== "closed").length
-  const pendingIncidents = incidents.filter((i) => i.status !== "closed").length
+  const pendingViolations = violations.filter((v) => normalizeHrStatus(v.hrStatus) !== "closed").length
+  const pendingIncidents = incidents.filter((i) => normalizeHrStatus(i.hrStatus) !== "closed").length
   return pendingViolations + pendingIncidents
 }
 
 /* ---------------- تسجيل إجراء الموارد البشرية ---------------- */
 
+// يبني قيم التحديث المشتركة لمسار HR من بيانات النموذج،
+// مع فرض إلزامية "الإجراء المتخذ" عند الإغلاق وتسجيل من أغلق ومتى.
+function buildHrUpdate(formData: FormData, closerName: string) {
+  const hrStatus = normalizeHrStatus(str(formData.get("hrStatus"), "pending")) as HrStatus
+  const hrAction = str(formData.get("hrAction"))
+  const attachment = str(formData.get("hrAttachment")) // JSON array من data URLs
+
+  if (hrStatus === "closed" && !hrAction.trim()) {
+    throw new Error("الإجراء المتخذ إلزامي عند إغلاق الحالة")
+  }
+
+  // مزامنة حالة السجل الرئيسية مع مسار HR للحفاظ على مؤشرات مفتوح/مغلق.
+  const mainStatus = hrStatus === "closed" ? "closed" : hrStatus === "in_review" ? "in_progress" : "open"
+
+  return {
+    hrAction,
+    hrActionDate: dateOrNull(formData.get("hrActionDate")),
+    hrNotes: str(formData.get("hrNotes")),
+    hrStatus,
+    hrAttachmentUrl: attachment,
+    status: mainStatus,
+    // سجّل المُغلِق والتاريخ عند الإغلاق فقط؛ وامسحهما إذا أُعيد فتح الحالة.
+    hrClosedBy: hrStatus === "closed" ? closerName : "",
+    hrClosedAt: hrStatus === "closed" ? new Date() : null,
+  }
+}
+
 export async function updateHrViolation(formData: FormData) {
-  const userId = await requireModuleUserId("hr")
+  const closer = await requireModule("hr")
   const id = Number(formData.get("id"))
   if (!Number.isFinite(id)) throw new Error("معرّف غير صالح")
-  const markDone = str(formData.get("markDone")) === "1"
 
   await db
     .update(violation)
-    .set({
-      hrAction: str(formData.get("hrAction")),
-      hrActionDate: dateOrNull(formData.get("hrActionDate")),
-      hrNotes: str(formData.get("hrNotes")),
-      ...(markDone ? { status: "closed" } : {}),
-    })
-    .where(and(eq(violation.id, id), eq(violation.userId, userId)))
+    .set(buildHrUpdate(formData, closer.name))
+    .where(eq(violation.id, id))
 
   revalidatePath("/hr")
   revalidatePath("/violations")
@@ -90,20 +103,14 @@ export async function updateHrViolation(formData: FormData) {
 }
 
 export async function updateHrIncident(formData: FormData) {
-  const userId = await requireModuleUserId("hr")
+  const closer = await requireModule("hr")
   const id = Number(formData.get("id"))
   if (!Number.isFinite(id)) throw new Error("معرّف غير صالح")
-  const markDone = str(formData.get("markDone")) === "1"
 
   await db
     .update(incident)
-    .set({
-      hrAction: str(formData.get("hrAction")),
-      hrActionDate: dateOrNull(formData.get("hrActionDate")),
-      hrNotes: str(formData.get("hrNotes")),
-      ...(markDone ? { status: "closed" } : {}),
-    })
-    .where(and(eq(incident.id, id), eq(incident.userId, userId)))
+    .set(buildHrUpdate(formData, closer.name))
+    .where(eq(incident.id, id))
 
   revalidatePath("/hr")
   revalidatePath("/incidents")

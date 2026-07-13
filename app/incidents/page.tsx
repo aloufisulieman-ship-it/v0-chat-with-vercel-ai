@@ -8,7 +8,9 @@ import { DeleteButton } from "@/components/delete-button"
 import { requireModule } from "@/lib/session"
 import { getIncidents, deleteIncident } from "@/app/actions/hse"
 import { severityLabels, statusLabels } from "@/lib/labels"
-import { formatParties } from "@/lib/incident-types"
+import { formatParties, hasEmployeeParty } from "@/lib/incident-types"
+import { HrStatusBadge } from "@/components/hr-status-badge"
+import { HrClosureBlock } from "@/components/hr-closure-block"
 import { IncidentFormDialog } from "./incident-form"
 
 type Incident = Awaited<ReturnType<typeof getIncidents>>[number]
@@ -31,6 +33,10 @@ export default async function IncidentsPage() {
     { key: "severity", header: "الخطورة", render: (r) => <SeverityBadge severity={r.severity ?? "low"} /> },
     { key: "status", header: "الحالة", render: (r) => <StatusBadge status={r.status ?? "open"} /> },
     { key: "incidentDate", header: "التاريخ", render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.incidentDate ?? "-"}</span> },
+    {
+      key: "hr", header: "الموارد البشرية",
+      render: (r) => (hasEmployeeParty(r.parties) ? <HrStatusBadge hrStatus={r.hrStatus} /> : <span className="text-xs text-muted-foreground">—</span>),
+    },
     {
       key: "actions",
       header: "",
@@ -71,6 +77,18 @@ export default async function IncidentsPage() {
               { label: "توقيع المدير العام", value: r.gmSignature || "" },
             ]}
             initialAttachments={[]}
+            extraSection={
+              hasEmployeeParty(r.parties) ? (
+                <HrClosureBlock
+                  hrStatus={r.hrStatus}
+                  hrAction={r.hrAction}
+                  hrActionDate={r.hrActionDate}
+                  closedBy={r.hrClosedBy}
+                  closedAt={r.hrClosedAt}
+                  attachmentsRaw={r.hrAttachmentUrl}
+                />
+              ) : undefined
+            }
           />
           <DeleteButton id={r.id} action={deleteIncident} />
         </div>

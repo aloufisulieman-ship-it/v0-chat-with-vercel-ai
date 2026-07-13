@@ -8,8 +8,19 @@ import { requireModule } from "@/lib/session"
 import { getViolations, deleteViolation } from "@/app/actions/hse"
 import { statusLabels } from "@/lib/labels"
 import { categoryLabels } from "@/lib/violation-category"
+import { effectiveViolationStatus, isViolationClosed } from "@/lib/violation-status"
 import { FileWarning, Clock, CheckCircle2 } from "lucide-react"
+import { MissingOriginalField } from "@/components/missing-original-field"
+import { HrStatusBadge } from "@/components/hr-status-badge"
+import { HrClosureBlock } from "@/components/hr-closure-block"
+import { FinanceStatusBadge } from "@/components/finance-status-badge"
+import { FinanceClosureBlock } from "@/components/finance-closure-block"
+import { EntryModeBadge } from "@/components/entry-mode-badge"
 import { ViolationFormDialog } from "./violation-form"
+import { ViolationEditDialog } from "./violation-edit-dialog"
+
+// النص الظاهر في نافذة التفاصيل للحقول غير الموجودة أصلاً بالسجل المستورد.
+const NOT_IN_SOURCE = "غير متوفر بالسجل الأصلي"
 
 type Violation = Awaited<ReturnType<typeof getViolations>>[number]
 
@@ -21,17 +32,29 @@ async function handleDelete(id: number) {
 export default async function ViolationsPage() {
   const user = await requireModule("violations")
   const violations = await getViolations()
+  const isAdmin = user.role === "admin"
 
-  const open = violations.filter((v) => v.status === "open" || v.status === "in_progress").length
-  const closed = violations.filter((v) => v.status === "closed").length
+  // العدادات تعتمد الحالة الفعلية (وفق مسار الإحالة) لا الحالة المخزّنة.
+  const closed = violations.filter((v) => isViolationClosed(v)).length
+  const open = violations.length - closed
 
   const columns: Column<Violation>[] = [
     { key: "employeeName", header: "الموظف", render: (r) => <span className="font-medium">{r.employeeName}</span> },
     { key: "employeeNo", header: "الرقم الوظيفي", render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.employeeNo || "-"}</span> },
-    { key: "description", header: "وصف المخالفة", render: (r) => <span className="text-muted-foreground line-clamp-1 max-w-xs">{r.description || "-"}</span> },
-    { key: "place", header: "المكان", render: (r) => <span className="text-muted-foreground">{r.place || "-"}</span> },
+    { key: "description", header: "وصف المخالفة", render: (r) => r.description ? <span className="text-muted-foreground line-clamp-1 max-w-xs">{r.description}</span> : <MissingOriginalField value={null} /> },
+    { key: "place", header: "المكان", render: (r) => <MissingOriginalField value={r.place} /> },
     { key: "violationDate", header: "التاريخ", render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.violationDate ?? "-"}</span> },
-    { key: "status", header: "الحالة", render: (r) => <StatusBadge status={r.status ?? "open"} /> },
+    { key: "status", header: "الحالة", render: (r) => <StatusBadge status={effectiveViolationStatus(r)} /> },
+    { key: "entryMode", header: "المصدر", render: (r) => <EntryModeBadge entryMode={r.entryMode} /> },
+    {
+      key: "referral", header: "الإحالة",
+      render: (r) =>
+        r.category === "external" ? (
+          <FinanceStatusBadge financeStatus={r.financeStatus} />
+        ) : (
+          <HrStatusBadge hrStatus={r.hrStatus} />
+        ),
+    },
     {
       key: "actions", header: "", className: "text-left",
       render: (r) => (
@@ -51,11 +74,11 @@ export default async function ViolationsPage() {
               { label: "الإجراء الداخلي", value: r.internalAction || "-" },
               { label: "التاريخ", value: r.violationDate ?? "-" },
               { label: "الوقت", value: r.violationTime || "-" },
-              { label: "المكان", value: r.place || "-" },
-              { label: "وصف المخالفة", value: r.description || "-" },
+              { label: "المكان", value: r.place || NOT_IN_SOURCE },
+              { label: "وصف المخالفة", value: r.description || NOT_IN_SOURCE },
               { label: "الشهود", value: r.witnesses || "-" },
               { label: "الإجراء المقترح", value: r.proposedAction || "-" },
-              { label: "الحالة", value: statusLabels[r.status ?? ""] ?? "-" },
+              { label: "الحالة", value: statusLabels[effectiveViolationStatus(r)] ?? "-" },
             ]}
             signatures={[
               { label: "توقيع المخالف", value: r.violatorSignature || "" },
@@ -63,7 +86,28 @@ export default async function ViolationsPage() {
               { label: "توقيع مدير السلامة", value: r.managerSignature || "" },
             ]}
             initialAttachments={[]}
+            extraSection={
+              r.category === "external" ? (
+                <FinanceClosureBlock
+                  financeStatus={r.financeStatus}
+                  settlementNumber={r.settlementNumber}
+                  closedBy={r.financeClosedBy}
+                  closedAt={r.financeClosedAt}
+                  receiptUrl={r.paymentReceiptUrl}
+                />
+              ) : (
+                <HrClosureBlock
+                  hrStatus={r.hrStatus}
+                  hrAction={r.hrAction}
+                  hrActionDate={r.hrActionDate}
+                  closedBy={r.hrClosedBy}
+                  closedAt={r.hrClosedAt}
+                  attachmentsRaw={r.hrAttachmentUrl}
+                />
+              )
+            }
           />
+          {isAdmin && <ViolationEditDialog violation={r} />}
           <DeleteButton id={r.id} action={handleDelete} />
         </div>
       ),
