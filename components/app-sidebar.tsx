@@ -13,6 +13,7 @@ import {
   ClipboardList,
   FolderKanban,
   Ban,
+  Banknote,
   Footprints,
   CheckSquare,
   BarChart3,
@@ -40,6 +41,7 @@ const nav: { href: string; label: string; icon: typeof LayoutDashboard; module: 
   { href: "/violations", label: "المخالفات", icon: Ban, module: "violations" },
   { href: "/patrol", label: "الجولة التفتيشية", icon: Footprints, module: "violations" },
   { href: "/hr", label: "الموارد البشرية", icon: UserCog, module: "hr" },
+  { href: "/finance", label: "المالية", icon: Banknote, module: "finance" },
   { href: "/actions", label: "الإجراءات التصحيحية", icon: CheckSquare, module: "actions" },
   { href: "/audits", label: "التدقيق", icon: ClipboardList, module: "audits" },
   { href: "/documents", label: "الوثائق", icon: FolderKanban, module: "documents" },
@@ -81,6 +83,18 @@ export function AppSidebar({
     { refreshInterval: 30000 },
   )
   const hrCount = hrData?.count ?? 0
+
+  // شارة الإشعار: عدد المخالفات الخارجية غير المعالجة لدى المالية.
+  const financeVisible = visible.some((item) => item.href === "/finance")
+  const { data: financeData } = useSWR<{ count: number }>(
+    financeVisible ? "/api/finance/pending-count" : null,
+    fetcher,
+    { refreshInterval: 30000 },
+  )
+  const financeCount = financeData?.count ?? 0
+
+  // خريطة عدّادات الإشعارات حسب المسار.
+  const countByHref: Record<string, number> = { "/hr": hrCount, "/finance": financeCount }
 
   async function handleSignOut() {
     await authClient.signOut()
@@ -127,6 +141,7 @@ export function AppSidebar({
             {items.map((item) => {
               const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)
               const Icon = item.icon
+              const badgeCount = countByHref[item.href] ?? 0
               return (
                 <li key={item.href}>
                   <Link
@@ -141,7 +156,7 @@ export function AppSidebar({
                   >
                     <Icon className="size-5 shrink-0" />
                     <span className="flex-1">{item.label}</span>
-                    {item.href === "/hr" && hrCount > 0 && (
+                    {badgeCount > 0 && (
                       <span
                         className={cn(
                           "flex min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-bold",
@@ -149,9 +164,9 @@ export function AppSidebar({
                             ? "bg-sidebar-primary-foreground text-sidebar-primary"
                             : "bg-destructive text-destructive-foreground",
                         )}
-                        aria-label={`${hrCount} بنود جديدة`}
+                        aria-label={`${badgeCount} بنود جديدة`}
                       >
-                        {hrCount}
+                        {badgeCount}
                       </span>
                     )}
                   </Link>

@@ -12,6 +12,8 @@ import { FileWarning, Clock, CheckCircle2 } from "lucide-react"
 import { MissingOriginalField } from "@/components/missing-original-field"
 import { HrStatusBadge } from "@/components/hr-status-badge"
 import { HrClosureBlock } from "@/components/hr-closure-block"
+import { FinanceStatusBadge } from "@/components/finance-status-badge"
+import { FinanceClosureBlock } from "@/components/finance-closure-block"
 import { ViolationFormDialog } from "./violation-form"
 
 // النص الظاهر في نافذة التفاصيل للحقول غير الموجودة أصلاً بالسجل المستورد.
@@ -39,8 +41,13 @@ export default async function ViolationsPage() {
     { key: "violationDate", header: "التاريخ", render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.violationDate ?? "-"}</span> },
     { key: "status", header: "الحالة", render: (r) => <StatusBadge status={r.status ?? "open"} /> },
     {
-      key: "hr", header: "الموارد البشرية",
-      render: (r) => (r.category === "internal" ? <HrStatusBadge hrStatus={r.hrStatus} /> : <span className="text-xs text-muted-foreground">—</span>),
+      key: "referral", header: "الإحالة",
+      render: (r) =>
+        r.category === "external" ? (
+          <FinanceStatusBadge financeStatus={r.financeStatus} />
+        ) : (
+          <HrStatusBadge hrStatus={r.hrStatus} />
+        ),
     },
     {
       key: "actions", header: "", className: "text-left",
@@ -74,7 +81,15 @@ export default async function ViolationsPage() {
             ]}
             initialAttachments={[]}
             extraSection={
-              r.category === "internal" ? (
+              r.category === "external" ? (
+                <FinanceClosureBlock
+                  financeStatus={r.financeStatus}
+                  settlementNumber={r.settlementNumber}
+                  closedBy={r.financeClosedBy}
+                  closedAt={r.financeClosedAt}
+                  receiptUrl={r.paymentReceiptUrl}
+                />
+              ) : (
                 <HrClosureBlock
                   hrStatus={r.hrStatus}
                   hrAction={r.hrAction}
@@ -83,7 +98,7 @@ export default async function ViolationsPage() {
                   closedAt={r.hrClosedAt}
                   attachmentsRaw={r.hrAttachmentUrl}
                 />
-              ) : undefined
+              )
             }
           />
           <DeleteButton id={r.id} action={handleDelete} />

@@ -140,6 +140,7 @@ export const moduleOptions = [
   { value: "training", label: "التدريب" },
   { value: "violations", label: "المخالفات" },
   { value: "hr", label: "الموارد البشرية" },
+  { value: "finance", label: "المالية" },
   { value: "actions", label: "الإجراءات التصحيحية" },
   { value: "audits", label: "التدقيق" },
   { value: "documents", label: "الوثائق" },
