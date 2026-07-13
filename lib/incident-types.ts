@@ -73,6 +73,17 @@ export function formatParty(p: IncidentParty): string {
   return parts.join(" — ")
 }
 
+// هل يضم الحادث طرفاً متضرراً جهته "موظف"؟ (تُستخدم لتحديد الحوادث الداخلية المُحالة لـ HR)
+export function hasEmployeeParty(json: string | null | undefined): boolean {
+  if (!json) return false
+  try {
+    const arr = JSON.parse(json) as IncidentParty[]
+    return Array.isArray(arr) && arr.some((p) => p?.affiliation === "employee")
+  } catch {
+    return false
+  }
+}
+
 export function formatParties(json: string | null | undefined): string {
   if (!json) return "-"
   try {

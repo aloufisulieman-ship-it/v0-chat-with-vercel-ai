@@ -256,7 +256,7 @@ export function ViolationFormDialog() {
               <Input value={form.violationTime} onChange={e => setForm(f => ({ ...f, violationTime: e.target.value }))} placeholder="مثال: 10:30 صباحاً" />
             </div>
             <div className="flex flex-col gap-1">
-              <Label>المكان</Label>
+              <Label>المكان <span className="text-destructive">*</span></Label>
               <Input value={form.place} onChange={e => setForm(f => ({ ...f, place: e.target.value }))} placeholder="موقع المخالفة" />
             </div>
             <div className="flex flex-col gap-1">
@@ -337,8 +337,8 @@ export function ViolationFormDialog() {
               </>
             )}
             <div className="flex flex-col gap-1 sm:col-span-2">
-              <Label>وصف تفصيلي (اختياري)</Label>
-              <Textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} placeholder="تفاصيل إضافية..." />
+              <Label>وصف المخالفة <span className="text-destructive">*</span></Label>
+              <Textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} placeholder="اوصف المخالفة بالتفصيل..." />
             </div>
             <div className="flex flex-col gap-1 sm:col-span-2">
               <Label>الشهود</Label>
@@ -394,7 +394,7 @@ export function ViolationFormDialog() {
           </Button>
           {step < 3 ? (
             <Button type="button" onClick={() => setStep(s => s + 1)}
-              disabled={step === 1 && (!form.employeeName || !form.violationType)}
+              disabled={step === 1 && (!form.employeeName || !form.violationType || !form.place.trim() || !form.description.trim())}
               className="gap-1">
               التالي <ChevronLeft className="size-4" />
             </Button>

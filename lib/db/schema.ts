@@ -102,6 +102,12 @@ export const incident = pgTable("incident", {
   hrAction: text("hr_action").default(""),
   hrActionDate: date("hr_action_date"),
   hrNotes: text("hr_notes").default(""),
+  // مسار الإحالة للموارد البشرية: pending | in_review | closed (null يُعامل كـ pending).
+  hrStatus: text("hr_status"),
+  hrClosedBy: text("hr_closed_by").default(""),
+  hrClosedAt: timestamp("hr_closed_at"),
+  // مرفقات قرار الموارد البشرية (JSON array من data URLs، بنفس آلية الصور/التواقيع).
+  hrAttachmentUrl: text("hr_attachment_url").default(""),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
@@ -229,6 +235,12 @@ export const violation = pgTable("violation", {
   hrAction: text("hr_action").default(""),
   hrActionDate: date("hr_action_date"),
   hrNotes: text("hr_notes").default(""),
+  // مسار الإحالة للموارد البشرية: pending | in_review | closed (null يُعامل كـ pending).
+  hrStatus: text("hr_status"),
+  hrClosedBy: text("hr_closed_by").default(""),
+  hrClosedAt: timestamp("hr_closed_at"),
+  // مرفقات قرار الموارد البشرية (JSON array من data URLs، بنفس آلية الصور/التواقيع).
+  hrAttachmentUrl: text("hr_attachment_url").default(""),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
