@@ -14,7 +14,9 @@ import { HrStatusBadge } from "@/components/hr-status-badge"
 import { HrClosureBlock } from "@/components/hr-closure-block"
 import { FinanceStatusBadge } from "@/components/finance-status-badge"
 import { FinanceClosureBlock } from "@/components/finance-closure-block"
+import { EntryModeBadge } from "@/components/entry-mode-badge"
 import { ViolationFormDialog } from "./violation-form"
+import { ViolationEditDialog } from "./violation-edit-dialog"
 
 // النص الظاهر في نافذة التفاصيل للحقول غير الموجودة أصلاً بالسجل المستورد.
 const NOT_IN_SOURCE = "غير متوفر بالسجل الأصلي"
@@ -29,6 +31,7 @@ async function handleDelete(id: number) {
 export default async function ViolationsPage() {
   const user = await requireModule("violations")
   const violations = await getViolations()
+  const isAdmin = user.role === "admin"
 
   const open = violations.filter((v) => v.status === "open" || v.status === "in_progress").length
   const closed = violations.filter((v) => v.status === "closed").length
@@ -40,6 +43,7 @@ export default async function ViolationsPage() {
     { key: "place", header: "المكان", render: (r) => <MissingOriginalField value={r.place} /> },
     { key: "violationDate", header: "التاريخ", render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.violationDate ?? "-"}</span> },
     { key: "status", header: "الحالة", render: (r) => <StatusBadge status={r.status ?? "open"} /> },
+    { key: "entryMode", header: "المصدر", render: (r) => <EntryModeBadge entryMode={r.entryMode} /> },
     {
       key: "referral", header: "الإحالة",
       render: (r) =>
@@ -101,6 +105,7 @@ export default async function ViolationsPage() {
               )
             }
           />
+          {isAdmin && <ViolationEditDialog violation={r} />}
           <DeleteButton id={r.id} action={handleDelete} />
         </div>
       ),

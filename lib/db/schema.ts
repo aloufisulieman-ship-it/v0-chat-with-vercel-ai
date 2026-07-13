@@ -220,6 +220,8 @@ export const violation = pgTable("violation", {
   nationality: text("nationality").default(""),
   violationType: text("violationType").default(""),
   category: text("category").default("internal"),
+  // مصدر إدخال المخالفة: electronic (عبر النظام) | manual (نموذج ورقي ممسوح).
+  entryMode: text("entry_mode").notNull().default("electronic"),
   internalAction: text("internal_action").default(""),
   violationDate: date("violationDate"),
   violationTime: text("violationTime").default(""),

@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState, useTransition } from "react"
-import { ImagePlus, Trash2, Loader2, PenLine, FileImage } from "lucide-react"
+import { ImagePlus, Trash2, Loader2, PenLine, FileImage, FileText, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { SignaturePad } from "@/components/signature-pad"
 import { RoleSignatures } from "@/components/role-signatures"
@@ -37,6 +37,7 @@ export function AttachmentsManager({
   const inputRef = useRef<HTMLInputElement | null>(null)
 
   const photos = items.filter((i) => i.kind === "photo")
+  const manualDocs = items.filter((i) => i.kind === "manual_form")
   const signatures = items.filter((i) => i.kind === "signature")
   const useRoles = !!signatureRoles && signatureRoles.length > 0
 
@@ -172,6 +173,59 @@ export function AttachmentsManager({
           </div>
         )}
       </section>
+
+      {/* النماذج الورقية الممسوحة للمخالفات اليدوية (PDF/صور/مستندات) */}
+      {manualDocs.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <h4 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <FileText className="size-4 text-muted-foreground" />
+            النموذج الورقي (يدوي)
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+              {manualDocs.length}
+            </span>
+          </h4>
+          <ul className="flex flex-col gap-2">
+            {manualDocs.map((d) => {
+              const isImage = d.contentType.startsWith("image/")
+              return (
+                <li key={d.id} className="flex items-center gap-3 rounded-lg border border-border p-2">
+                  {isImage ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={fileUrl(d.pathname) || "/placeholder.svg"}
+                      alt={d.filename}
+                      className="size-12 shrink-0 rounded object-cover"
+                      crossOrigin="anonymous"
+                    />
+                  ) : (
+                    <span className="flex size-12 shrink-0 items-center justify-center rounded bg-muted">
+                      <FileText className="size-5 text-muted-foreground" />
+                    </span>
+                  )}
+                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">{d.filename}</span>
+                  <a
+                    href={fileUrl(d.pathname)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+                  >
+                    <Download className="size-3.5" /> فتح
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => remove(d.id)}
+                    disabled={isPending}
+                    className="rounded-md p-1.5 text-destructive hover:bg-destructive/10"
+                    aria-label="حذف الملف"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      )}
 
       {/* Role-named official signatures (violations, incidents, ...) */}
       {!hideSignatures && useRoles && (

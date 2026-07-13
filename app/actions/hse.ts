@@ -608,6 +608,7 @@ export async function createViolationFull(formData: FormData) {
       nationality: str(formData.get("nationality")),
       violationType: str(formData.get("violationType")),
       category: str(formData.get("category"), "internal"),
+      entryMode: str(formData.get("entryMode"), "electronic"),
       internalAction: str(formData.get("internalAction")),
       violationDate: dateOrNull(formData.get("violationDate")),
       violationTime: str(formData.get("violationTime")),
@@ -638,6 +639,19 @@ export async function createViolationFull(formData: FormData) {
     // ignore malformed image payloads; the violation itself is already saved
   }
 
+  // للمخالفات اليدوية: احفظ النموذج الورقي الممسوح (PDF/صورة/مستند) كمرفق
+  // بنوع "manual_form" ليظهر في نافذة التفاصيل للتحميل.
+  try {
+    const docs = JSON.parse(str(formData.get("manualDocs"), "[]")) as string[]
+    for (let i = 0; i < docs.length; i++) {
+      if (typeof docs[i] === "string" && docs[i].startsWith("data:")) {
+        await saveDataUrlAttachment(userId, "violations", recordId, "manual_form", docs[i], `manual-form-${i + 1}`)
+      }
+    }
+  } catch {
+    // ignore malformed document payloads; the violation itself is already saved
+  }
+
   // Persist the three drawn signatures as role-named attachments so they
   // render once in the official signatures section (no duplication in fields).
   const signaturePairs: { value: string; kind: string; name: string }[] = [
@@ -654,6 +668,56 @@ export async function createViolationFull(formData: FormData) {
   revalidatePath("/violations")
   revalidatePath("/")
   return { documentNo }
+}
+
+// تعديل يدوي كامل للمخالفة — مقتصر على مدير النظام (admin) فقط.
+// يسمح بتصحيح أي حقل ورفع نماذج ورقية ممسوحة إضافية للمخالفات اليدوية.
+export async function updateViolation(formData: FormData) {
+  const userId = await getUserId()
+  const userRows = await db.select({ role: user.role }).from(user).where(eq(user.id, userId)).limit(1)
+  if (userRows[0]?.role !== "admin") throw new Error("التعديل اليدوي متاح لمدير النظام فقط")
+
+  const id = Number(formData.get("id"))
+  if (!Number.isFinite(id)) throw new Error("معرّف غير صالح")
+
+  const employeeName = str(formData.get("employeeName")).trim()
+  if (!employeeName) throw new Error("اسم الموظف مطلوب")
+
+  await db
+    .update(violation)
+    .set({
+      companyName: str(formData.get("companyName")),
+      employeeName,
+      employeeNo: str(formData.get("employeeNo")),
+      nationality: str(formData.get("nationality")),
+      violationType: str(formData.get("violationType")),
+      category: str(formData.get("category"), "internal"),
+      entryMode: str(formData.get("entryMode"), "electronic"),
+      internalAction: str(formData.get("internalAction")),
+      violationDate: dateOrNull(formData.get("violationDate")),
+      violationTime: str(formData.get("violationTime")),
+      place: str(formData.get("place")),
+      description: str(formData.get("description")),
+      witnesses: str(formData.get("witnesses")),
+      proposedAction: str(formData.get("proposedAction")),
+      status: str(formData.get("status"), "open"),
+    })
+    .where(eq(violation.id, id))
+
+  // إرفاق نماذج ورقية ممسوحة إضافية إن وُجدت.
+  try {
+    const docs = JSON.parse(str(formData.get("manualDocs"), "[]")) as string[]
+    for (let i = 0; i < docs.length; i++) {
+      if (typeof docs[i] === "string" && docs[i].startsWith("data:")) {
+        await saveDataUrlAttachment(userId, "violations", id, "manual_form", docs[i], `manual-form-edit-${Date.now()}-${i + 1}`)
+      }
+    }
+  } catch {
+    // ignore malformed document payloads; the edit itself is already saved
+  }
+
+  revalidatePath("/violations")
+  revalidatePath("/")
 }
 
 export async function deleteViolation(id: number) {
