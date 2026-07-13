@@ -2,7 +2,7 @@
 
 import { db } from "@/lib/db"
 import { violation, incident } from "@/lib/db/schema"
-import { and, desc, eq } from "drizzle-orm"
+import { desc, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { requireModule, requireModuleUserId } from "@/lib/session"
 import type { IncidentParty } from "@/lib/incident-types"
@@ -29,29 +29,23 @@ function hasEmployeeParty(partiesJson: string | null | undefined): boolean {
 
 /* ---------------- قراءة البنود المحوّلة ---------------- */
 
-// كل المخالفات الداخلية تُعرض في مسار الموارد البشرية بغض النظر عن الحالة الرئيسية
-// أو قيمة internalAction — يُعتمد على hrStatus لتحديد المعالَجة/المغلقة في الصفحة.
+// قائمة مراجعة شاملة: من له صلاحية "hr" يرى كل المخالفات الداخلية بغض النظر عن
+// منشئها أو الحالة الرئيسية أو internalAction — يُعتمد على hrStatus للمعالَجة/الإغلاق.
 export async function getHrViolations() {
-  const userId = await requireModuleUserId("hr")
+  await requireModuleUserId("hr")
   return db
     .select()
     .from(violation)
-    .where(
-      and(
-        eq(violation.userId, userId),
-        eq(violation.category, "internal"),
-      ),
-    )
+    .where(eq(violation.category, "internal"))
     .orderBy(desc(violation.createdAt))
 }
 
-// الحوادث الداخلية التي يكون أحد أطرافها المتضررة "موظف".
+// كل الحوادث التي يكون أحد أطرافها المتضررة "موظف" (بغض النظر عن منشئها).
 export async function getHrIncidents() {
-  const userId = await requireModuleUserId("hr")
+  await requireModuleUserId("hr")
   const rows = await db
     .select()
     .from(incident)
-    .where(eq(incident.userId, userId))
     .orderBy(desc(incident.createdAt))
   return rows.filter((r) => hasEmployeeParty(r.parties))
 }
@@ -101,7 +95,7 @@ export async function updateHrViolation(formData: FormData) {
   await db
     .update(violation)
     .set(buildHrUpdate(formData, closer.name))
-    .where(and(eq(violation.id, id), eq(violation.userId, closer.id)))
+    .where(eq(violation.id, id))
 
   revalidatePath("/hr")
   revalidatePath("/violations")
@@ -116,7 +110,7 @@ export async function updateHrIncident(formData: FormData) {
   await db
     .update(incident)
     .set(buildHrUpdate(formData, closer.name))
-    .where(and(eq(incident.id, id), eq(incident.userId, closer.id)))
+    .where(eq(incident.id, id))
 
   revalidatePath("/hr")
   revalidatePath("/incidents")

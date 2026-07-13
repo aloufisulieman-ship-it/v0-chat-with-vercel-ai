@@ -2,7 +2,7 @@
 
 import { db } from "@/lib/db"
 import { violation } from "@/lib/db/schema"
-import { and, desc, eq } from "drizzle-orm"
+import { desc, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { requireModule, requireModuleUserId } from "@/lib/session"
 import { normalizeFinanceStatus, type FinanceStatus } from "@/lib/finance-status"
@@ -13,13 +13,14 @@ function str(v: FormDataEntryValue | null, fallback = "") {
 
 /* ---------------- قراءة المخالفات الخارجية المحوّلة للمالية ---------------- */
 
-// المخالفات الخارجية تُحال تلقائياً إلى المالية (بمجرد كون التصنيف "external").
+// قائمة مراجعة شاملة: من له صلاحية "finance" يرى كل المخالفات الخارجية بغض النظر
+// عن منشئها (المخالفة الخارجية تُحال تلقائياً للمالية بمجرد كون التصنيف "external").
 export async function getFinanceViolations() {
-  const userId = await requireModuleUserId("finance")
+  await requireModuleUserId("finance")
   return db
     .select()
     .from(violation)
-    .where(and(eq(violation.userId, userId), eq(violation.category, "external")))
+    .where(eq(violation.category, "external"))
     .orderBy(desc(violation.createdAt))
 }
 
@@ -65,7 +66,7 @@ export async function updateFinanceViolation(formData: FormData) {
   await db
     .update(violation)
     .set(buildFinanceUpdate(formData, closer.name))
-    .where(and(eq(violation.id, id), eq(violation.userId, closer.id)))
+    .where(eq(violation.id, id))
 
   revalidatePath("/finance")
   revalidatePath("/violations")
