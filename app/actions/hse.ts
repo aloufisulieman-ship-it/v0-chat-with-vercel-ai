@@ -406,7 +406,7 @@ export async function createTrainingFull(formData: FormData) {
   const userId = await requireModuleUserId("training")
 
   const title = str(formData.get("title")).trim()
-  if (!title) throw new Error("��سم الدورة مطلوب")
+  if (!title) throw new Error("����سم الدورة مطلوب")
 
   const trainerSignature = str(formData.get("trainerSignature"))
 
@@ -599,7 +599,10 @@ export async function createViolationFull(formData: FormData) {
 
   // مسار إحالة حصري حسب التصنيف: الداخلية → الموارد البشرية، الخارجية → المالية.
   // تُضبط حالة الجهة المعنية فقط، ويبقى الحقل المعاكس null دائماً.
-  const category = str(formData.get("category"), "internal")
+  const category = str(formData.get("category"))
+  if (category !== "internal" && category !== "external") {
+    throw new Error("يجب تحديد تصنيف المخالفة: داخلية أو خارجية")
+  }
   const isExternal = category === "external"
 
   // Pass every column explicitly so nothing falls back to a DB default.

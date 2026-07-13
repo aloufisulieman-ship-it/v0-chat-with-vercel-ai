@@ -12,7 +12,6 @@ import { toast } from "@/hooks/use-toast"
 import { createViolationFull } from "@/app/actions/hse"
 import { violationStatusOptions } from "@/lib/labels"
 import {
-  classifyViolation,
   categoryOptions,
   internalActionOptions,
   FINE_ACTION,
@@ -143,7 +142,7 @@ export function ViolationFormDialog() {
   const [form, setForm] = useState({
     employeeName: "", employeeNo: "", nationality: "", companyName: "",
     documentNo: "MHS-IMS-PR-HSE-647", violationDate: "", violationTime: "",
-    place: "", violationType: "", category: "internal", internalAction: "", actionDetail: "",
+    place: "", violationType: "", category: "", internalAction: "", actionDetail: "",
     description: "", witnesses: "",
     evidences: "", proposedAction: "", status: "open", entryMode: "electronic",
   })
@@ -160,7 +159,7 @@ export function ViolationFormDialog() {
     setForm({
       employeeName: "", employeeNo: "", nationality: "", companyName: "",
       documentNo: "MHS-IMS-PR-HSE-647", violationDate: "", violationTime: "",
-      place: "", violationType: "", category: "internal", internalAction: "", actionDetail: "",
+      place: "", violationType: "", category: "", internalAction: "", actionDetail: "",
       description: "", witnesses: "",
       evidences: "", proposedAction: "", status: "open", entryMode: "electronic",
     })
@@ -323,12 +322,23 @@ export function ViolationFormDialog() {
               </Select>
             </div>
             <div className="flex flex-col gap-1 sm:col-span-2">
+              <Label>التصنيف <span className="text-destructive">*</span></Label>
+              <Select
+                value={form.category}
+                onValueChange={v => setForm(f => ({ ...f, category: v, internalAction: "", actionDetail: "" }))}
+              >
+                <SelectTrigger><SelectValue placeholder="اختر التصنيف: داخلية أو خارجية..." /></SelectTrigger>
+                <SelectContent>
+                  {categoryOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">يحدد التصنيف جهة الإحالة تلقائياً: الداخلية للموارد البشرية، والخارجية للمالية.</p>
+            </div>
+            <div className="flex flex-col gap-1 sm:col-span-2">
               <Label>نوع المخالفة <span className="text-destructive">*</span></Label>
               <Select
                 value={form.violationType}
-                onValueChange={v =>
-                  setForm(f => ({ ...f, violationType: v, category: classifyViolation(v), internalAction: "" }))
-                }
+                onValueChange={v => setForm(f => ({ ...f, violationType: v, internalAction: "", actionDetail: "" }))}
               >
                 <SelectTrigger><SelectValue placeholder="اختر نوع المخالفة..." /></SelectTrigger>
                 <SelectContent className="max-h-72">
@@ -336,21 +346,9 @@ export function ViolationFormDialog() {
                 </SelectContent>
               </Select>
             </div>
-            {form.violationType && (
+            {form.violationType && form.category && (
               <>
-                <div className="flex flex-col gap-1">
-                  <Label>التصنيف</Label>
-                  <Select
-                    value={form.category}
-                    onValueChange={v => setForm(f => ({ ...f, category: v, internalAction: "" }))}
-                  >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {categoryOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-1 sm:col-span-2">
                   <Label>الإجراء الداخلي</Label>
                   <Select
                     value={form.internalAction}
@@ -448,7 +446,7 @@ export function ViolationFormDialog() {
           </Button>
           {step < 3 ? (
             <Button type="button" onClick={() => setStep(s => s + 1)}
-              disabled={step === 1 && (!form.employeeName || !form.violationType || !form.place.trim() || !form.description.trim() || (form.entryMode === "manual" && manualDocs.length === 0))}
+              disabled={step === 1 && (!form.employeeName || !form.category || !form.violationType || !form.place.trim() || !form.description.trim() || (form.entryMode === "manual" && manualDocs.length === 0))}
               className="gap-1">
               التالي <ChevronLeft className="size-4" />
             </Button>
