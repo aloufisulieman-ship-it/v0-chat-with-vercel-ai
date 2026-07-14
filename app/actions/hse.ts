@@ -139,6 +139,11 @@ export async function createIncidentFull(formData: FormData) {
   const title = str(formData.get("title")).trim()
   if (!title) throw new Error("نوع الحادثة مطلوب")
 
+  const routedTo = str(formData.get("routedTo"))
+  if (routedTo !== "hr" && routedTo !== "finance") {
+    throw new Error("يجب اختيار جهة تحويل الحادثة: الموارد البشرية أو المالية")
+  }
+
   // Auto document number: INC-YYYY-### (sequence resets each year).
   const year = new Date().getFullYear()
   const existing = await db
@@ -160,6 +165,9 @@ export async function createIncidentFull(formData: FormData) {
       userId,
       documentNo,
       title,
+      routedTo,
+      hrStatus: routedTo === "hr" ? "pending" : null,
+      financeStatus: routedTo === "finance" ? "pending" : null,
       type: str(formData.get("type"), "أخرى"),
       severity: str(formData.get("severity"), "low"),
       status: str(formData.get("status"), "open"),
@@ -227,6 +235,8 @@ export async function createIncidentFull(formData: FormData) {
   }
 
   revalidatePath("/incidents")
+  revalidatePath("/hr")
+  revalidatePath("/finance")
   revalidatePath("/")
   return { documentNo }
 }
@@ -406,7 +416,7 @@ export async function createTrainingFull(formData: FormData) {
   const userId = await requireModuleUserId("training")
 
   const title = str(formData.get("title")).trim()
-  if (!title) throw new Error("����سم الدورة مطلوب")
+  if (!title) throw new Error("������سم الدورة مطلوب")
 
   const trainerSignature = str(formData.get("trainerSignature"))
 

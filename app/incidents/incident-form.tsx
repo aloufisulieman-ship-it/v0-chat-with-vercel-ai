@@ -107,7 +107,7 @@ export function IncidentFormDialog({ defaultReporter = "" }: { defaultReporter?:
   const [isPending, startTransition] = useTransition()
 
   const initialForm = {
-    title: "", location: "", severity: "low", status: "open",
+    title: "", routedTo: "", location: "", severity: "low", status: "open",
     incidentDate: "", incidentTime: "",
     description: "", directCauses: "", rootCauses: "",
     propertyDamage: "", damageCost: "", immediateActions: "",
@@ -208,6 +208,17 @@ export function IncidentFormDialog({ defaultReporter = "" }: { defaultReporter?:
 
         {step === 1 && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-1 sm:col-span-2">
+              <Label>تحويل الحادثة إلى <span className="text-destructive">*</span></Label>
+              <Select value={form.routedTo} onValueChange={v => setForm(f => ({ ...f, routedTo: v }))}>
+                <SelectTrigger><SelectValue placeholder="اختر جهة التحويل..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="hr">الموارد البشرية (HR)</SelectItem>
+                  <SelectItem value="finance">المالية (Finance)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">ستظهر الحادثة في قائمة الجهة المختارة فقط.</p>
+            </div>
             <div className="flex flex-col gap-1 sm:col-span-2">
               <Label>نوع الحادثة <span className="text-destructive">*</span></Label>
               <Select value={form.title} onValueChange={v => setForm(f => ({ ...f, title: v }))}>
@@ -430,7 +441,7 @@ export function IncidentFormDialog({ defaultReporter = "" }: { defaultReporter?:
             {step === 1 ? "إلغاء" : "السابق"}
           </Button>
           {step < 3 ? (
-            <Button type="button" onClick={() => setStep(s => s + 1)} disabled={step === 1 && !form.title} className="gap-1">
+            <Button type="button" onClick={() => setStep(s => s + 1)} disabled={step === 1 && (!form.title || !form.routedTo)} className="gap-1">
               التالي <ChevronLeft className="size-4" />
             </Button>
           ) : (

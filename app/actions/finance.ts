@@ -1,8 +1,8 @@
 "use server"
 
 import { db } from "@/lib/db"
-import { violation } from "@/lib/db/schema"
-import { desc, eq } from "drizzle-orm"
+import { incident, violation } from "@/lib/db/schema"
+import { and, desc, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { requireModule, requireModuleUserId } from "@/lib/session"
 import { normalizeFinanceStatus, type FinanceStatus } from "@/lib/finance-status"
@@ -24,10 +24,22 @@ export async function getFinanceViolations() {
     .orderBy(desc(violation.createdAt))
 }
 
-// عدد المخالفات الخارجية غير المغلقة، لشارة الإشعار في القائمة الجانبية.
+// الحوادث المحوّلة صراحةً إلى المالية فقط، بغض النظر عن منشئها.
+export async function getFinanceIncidents() {
+  await requireModuleUserId("finance")
+  return db
+    .select()
+    .from(incident)
+    .where(eq(incident.routedTo, "finance"))
+    .orderBy(desc(incident.createdAt))
+}
+
+// عدد المخالفات والحوادث المالية غير المغلقة، لشارة الإشعار في القائمة الجانبية.
 export async function getFinancePendingCount(): Promise<number> {
-  const violations = await getFinanceViolations()
-  return violations.filter((v) => normalizeFinanceStatus(v.financeStatus) !== "closed").length
+  const [violations, incidents] = await Promise.all([getFinanceViolations(), getFinanceIncidents()])
+  const pendingViolations = violations.filter((v) => normalizeFinanceStatus(v.financeStatus) !== "closed").length
+  const pendingIncidents = incidents.filter((i) => normalizeFinanceStatus(i.financeStatus) !== "closed").length
+  return pendingViolations + pendingIncidents
 }
 
 /* ---------------- تسجيل إجراء المالية / إغلاق الحالة ---------------- */
@@ -70,5 +82,20 @@ export async function updateFinanceViolation(formData: FormData) {
 
   revalidatePath("/finance")
   revalidatePath("/violations")
+  revalidatePath("/")
+}
+
+export async function updateFinanceIncident(formData: FormData) {
+  const closer = await requireModule("finance")
+  const id = Number(formData.get("id"))
+  if (!Number.isFinite(id)) throw new Error("معرّف غير صالح")
+
+  await db
+    .update(incident)
+    .set(buildFinanceUpdate(formData, closer.name))
+    .where(and(eq(incident.id, id), eq(incident.routedTo, "finance")))
+
+  revalidatePath("/finance")
+  revalidatePath("/incidents")
   revalidatePath("/")
 }

@@ -2,10 +2,9 @@
 
 import { db } from "@/lib/db"
 import { violation, incident } from "@/lib/db/schema"
-import { desc, eq } from "drizzle-orm"
+import { and, desc, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { requireModule, requireModuleUserId } from "@/lib/session"
-import type { IncidentParty } from "@/lib/incident-types"
 import { normalizeHrStatus, type HrStatus } from "@/lib/hr-status"
 
 function str(v: FormDataEntryValue | null, fallback = "") {
@@ -14,17 +13,6 @@ function str(v: FormDataEntryValue | null, fallback = "") {
 function dateOrNull(v: FormDataEntryValue | null) {
   const s = v ? String(v) : ""
   return s ? s : null
-}
-
-// هل يضم الحادث طرفاً متضرراً جهته "موظف"؟
-function hasEmployeeParty(partiesJson: string | null | undefined): boolean {
-  if (!partiesJson) return false
-  try {
-    const arr = JSON.parse(partiesJson) as IncidentParty[]
-    return Array.isArray(arr) && arr.some((p) => p?.affiliation === "employee")
-  } catch {
-    return false
-  }
 }
 
 /* ---------------- قراءة البنود المحوّلة ---------------- */
@@ -40,14 +28,14 @@ export async function getHrViolations() {
     .orderBy(desc(violation.createdAt))
 }
 
-// كل الحوادث التي يكون أحد أطرافها المتضررة "موظف" (بغض النظر عن منشئها).
+// الحوادث المحوّلة صراحةً إلى الموارد البشرية فقط، بغض النظر عن منشئها.
 export async function getHrIncidents() {
   await requireModuleUserId("hr")
-  const rows = await db
+  return db
     .select()
     .from(incident)
+    .where(eq(incident.routedTo, "hr"))
     .orderBy(desc(incident.createdAt))
-  return rows.filter((r) => hasEmployeeParty(r.parties))
 }
 
 // عدد البنود غير المعالجة (hrStatus غير مغلق) للشارة في القائمة الجانبية.
@@ -110,7 +98,7 @@ export async function updateHrIncident(formData: FormData) {
   await db
     .update(incident)
     .set(buildHrUpdate(formData, closer.name))
-    .where(eq(incident.id, id))
+    .where(and(eq(incident.id, id), eq(incident.routedTo, "hr")))
 
   revalidatePath("/hr")
   revalidatePath("/incidents")

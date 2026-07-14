@@ -99,6 +99,8 @@ export const incident = pgTable("incident", {
   hrSignature: text("hr_signature").default(""),
   gmSignature: text("gm_signature").default(""),
   managerSignature: text("manager_signature").default(""),
+  // جهة التحويل التشغيلية: hr | finance. تبقى null للحوادث القديمة غير الموجّهة.
+  routedTo: text("routed_to"),
   hrAction: text("hr_action").default(""),
   hrActionDate: date("hr_action_date"),
   hrNotes: text("hr_notes").default(""),
@@ -108,6 +110,12 @@ export const incident = pgTable("incident", {
   hrClosedAt: timestamp("hr_closed_at"),
   // مرفقات قرار الموارد البشرية (JSON array من data URLs، بنفس آلية الصور/التواقيع).
   hrAttachmentUrl: text("hr_attachment_url").default(""),
+  // مسار الإغلاق المالي للحوادث المحوّلة إلى المالية.
+  financeStatus: text("finance_status"),
+  settlementNumber: text("settlement_number").default(""),
+  paymentReceiptUrl: text("payment_receipt_url").default(""),
+  financeClosedBy: text("finance_closed_by").default(""),
+  financeClosedAt: timestamp("finance_closed_at"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
