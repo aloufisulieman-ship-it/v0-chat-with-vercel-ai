@@ -24,6 +24,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "@/hooks/use-toast"
+import type { EmployeeRecord } from "./employee-registry"
 
 // ===== Worker groups & weekly schedule =====
 // JS getDay(): 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
@@ -61,9 +62,11 @@ const STORAGE_KEY = "mhs-toolbox-talks"
 
 type AttendeeRow = {
   id: string
+  employeeId: string
   name: string
   jobTitle: string
   company: string
+  cardCode: string
   signature: string
 }
 
@@ -80,7 +83,11 @@ type ToolboxSession = {
 }
 
 function newRow(): AttendeeRow {
-  return { id: crypto.randomUUID(), name: "", jobTitle: "", company: "MHS", signature: "" }
+  return { id: crypto.randomUUID(), employeeId: "", name: "", jobTitle: "", company: "MHS", cardCode: "", signature: "" }
+}
+
+function normalizeAttendee(row: AttendeeRow): AttendeeRow {
+  return { ...row, employeeId: row.employeeId ?? "", cardCode: row.cardCode ?? "" }
 }
 
 // ===== localStorage helpers =====
@@ -89,7 +96,9 @@ function loadSessions(): ToolboxSession[] {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
     const parsed = raw ? JSON.parse(raw) : []
-    return Array.isArray(parsed) ? parsed : []
+    return Array.isArray(parsed)
+      ? parsed.map((session) => ({ ...session, attendees: Array.isArray(session.attendees) ? session.attendees.map(normalizeAttendee) : [] }))
+      : []
   } catch {
     return []
   }
@@ -195,7 +204,7 @@ function SignaturePad({ value, onChange }: { value: string; onChange: (v: string
   )
 }
 
-export function ToolboxTalkTab() {
+export function ToolboxTalkTab({ employees }: { employees: EmployeeRecord[] }) {
   const today = new Date()
   const todayDow = today.getDay()
   const todayStr = today.toISOString().slice(0, 10)
@@ -216,8 +225,24 @@ export function ToolboxTalkTab() {
   const group = GROUPS.find((g) => g.id === groupId)!
   const scheduledToday = group.days.includes(todayDow)
 
+  const activeEmployees = employees.filter((employee) => employee.active)
+  const designations = Array.from(new Set(activeEmployees.map((employee) => employee.designation))).sort((a, b) => a.localeCompare(b, "ar"))
+
   function updateRow(id: string, key: keyof AttendeeRow, value: string) {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, [key]: value } : r)))
+  }
+
+  function selectEmployee(rowId: string, employeeId: string) {
+    const employee = activeEmployees.find((item) => item.employeeId === employeeId)
+    if (!employee) return
+    setRows((prev) => prev.map((row) => row.id === rowId ? {
+      ...row,
+      employeeId: employee.employeeId,
+      name: employee.name,
+      jobTitle: employee.designation,
+      company: "MHS",
+      cardCode: employee.cardCode ?? "",
+    } : row))
   }
 
   function handlePhoto(e: React.ChangeEvent<HTMLInputElement>) {
@@ -471,8 +496,10 @@ export function ToolboxTalkTab() {
                 <thead>
                   <tr className="bg-muted">
                     <th className="border border-border px-2 py-2 text-center font-semibold">#</th>
-                    <th className="border border-border px-3 py-2 text-right font-semibold">الاسم</th>
                     <th className="border border-border px-3 py-2 text-right font-semibold">المسمى الوظيفي</th>
+                    <th className="border border-border px-3 py-2 text-right font-semibold">الموظف</th>
+                    <th className="border border-border px-3 py-2 text-right font-semibold">الرقم الوظيفي</th>
+                    <th className="border border-border px-3 py-2 text-right font-semibold">البطاقة/الكود</th>
                     <th className="border border-border px-3 py-2 text-right font-semibold">الشركة</th>
                     <th className="border border-border px-3 py-2 text-center font-semibold">التوقيع</th>
                     <th className="border border-border px-2 py-2 text-center font-semibold">حذف</th>
@@ -483,11 +510,20 @@ export function ToolboxTalkTab() {
                     <tr key={r.id} className="even:bg-muted/40">
                       <td className="border border-border px-2 py-2 text-center text-muted-foreground">{i + 1}</td>
                       <td className="border border-border p-1">
-                        <Input value={r.name} onChange={(e) => updateRow(r.id, "name", e.target.value)} placeholder="الاسم الكامل" className="h-8 border-0 shadow-none focus-visible:ring-0" />
+                        <select value={r.jobTitle} onChange={(e) => updateRow(r.id, "jobTitle", e.target.value)} className="h-8 w-40 rounded-md border-0 bg-transparent px-2 text-sm outline-none">
+                          <option value="">اختر المسمى...</option>
+                          {designations.map((designation) => <option key={designation} value={designation}>{designation}</option>)}
+                        </select>
                       </td>
                       <td className="border border-border p-1">
-                        <Input value={r.jobTitle} onChange={(e) => updateRow(r.id, "jobTitle", e.target.value)} placeholder="الوظيفة" className="h-8 border-0 shadow-none focus-visible:ring-0" />
+                        <select value={r.employeeId} onChange={(e) => selectEmployee(r.id, e.target.value)} className="h-8 w-48 rounded-md border-0 bg-transparent px-2 text-sm outline-none">
+                          <option value="">اختر الموظف...</option>
+                          {activeEmployees.filter((employee) => !r.jobTitle || employee.designation === r.jobTitle).map((employee) => <option key={employee.id} value={employee.employeeId}>{employee.name}</option>)}
+                        </select>
+                        <Input value={r.name} onChange={(e) => updateRow(r.id, "name", e.target.value)} placeholder="أو إدخال الاسم يدوياً" className="mt-1 h-8 border-0 shadow-none focus-visible:ring-0" />
                       </td>
+                      <td className="border border-border p-1"><Input value={r.employeeId} onChange={(e) => updateRow(r.id, "employeeId", e.target.value)} placeholder="الرقم الوظيفي" className="h-8 min-w-28 border-0 font-mono shadow-none focus-visible:ring-0" dir="ltr" /></td>
+                      <td className="border border-border p-1"><Input value={r.cardCode} onChange={(e) => updateRow(r.id, "cardCode", e.target.value)} placeholder="البطاقة" className="h-8 min-w-28 border-0 shadow-none focus-visible:ring-0" dir="ltr" /></td>
                       <td className="border border-border p-1">
                         <Input value={r.company} onChange={(e) => updateRow(r.id, "company", e.target.value)} placeholder="MHS" className="h-8 border-0 shadow-none focus-visible:ring-0" />
                       </td>

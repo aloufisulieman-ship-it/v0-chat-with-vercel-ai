@@ -9,6 +9,7 @@ import {
   permit,
   risk,
   training,
+  employee,
   trainingAttendee,
   correctiveAction,
   audit,
@@ -471,6 +472,50 @@ export async function createTrainingFull(formData: FormData) {
 
   revalidatePath("/training")
   return { trainingId }
+}
+
+export async function getEmployees() {
+  const userId = await requireModuleUserId("training")
+  return db.select().from(employee).where(eq(employee.userId, userId)).orderBy(employee.designation, employee.name)
+}
+
+function employeeValues(formData: FormData) {
+  const employeeId = str(formData.get("employeeId")).trim()
+  const name = str(formData.get("name")).trim()
+  const designation = str(formData.get("designation")).trim()
+  if (!employeeId || !name || !designation) {
+    throw new Error("الرقم الوظيفي والاسم والمسمى الوظيفي حقول مطلوبة")
+  }
+  return {
+    employeeId,
+    name,
+    designation,
+    cardCode: str(formData.get("cardCode")).trim(),
+    active: formData.get("active") !== "false",
+    updatedAt: new Date(),
+  }
+}
+
+export async function createEmployee(formData: FormData) {
+  const userId = await requireModuleUserId("training")
+  await db.insert(employee).values({ userId, ...employeeValues(formData) })
+  revalidatePath("/training")
+}
+
+export async function updateEmployee(formData: FormData) {
+  const userId = await requireModuleUserId("training")
+  const id = Number(formData.get("id"))
+  if (!Number.isFinite(id)) throw new Error("معرّف الموظف غير صالح")
+  await db.update(employee).set(employeeValues(formData)).where(and(eq(employee.id, id), eq(employee.userId, userId)))
+  revalidatePath("/training")
+}
+
+export async function deleteEmployee(formData: FormData) {
+  const userId = await requireModuleUserId("training")
+  const id = Number(formData.get("id"))
+  if (!Number.isFinite(id)) throw new Error("معرّف الموظف غير صالح")
+  await db.delete(employee).where(and(eq(employee.id, id), eq(employee.userId, userId)))
+  revalidatePath("/training")
 }
 
 export async function getTrainingAttendees(trainingId: number) {

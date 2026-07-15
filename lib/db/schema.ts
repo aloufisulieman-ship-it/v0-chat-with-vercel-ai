@@ -179,6 +179,19 @@ export const training = pgTable("training", {
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
+// سجل الموظفين المرجعي المستخدم في جلسات التدريب وToolbox Talk.
+export const employee = pgTable("employees", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  employeeId: text("employee_id").notNull(),
+  name: text("name").notNull(),
+  designation: text("designation").notNull(),
+  cardCode: text("card_code").default(""),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
 // سجل حضور كل متدرب لدورة تدريبية (نموذج MHS-IMS-FR-HSE-2)
 export const trainingAttendee = pgTable("training_attendee", {
   id: serial("id").primaryKey(),
