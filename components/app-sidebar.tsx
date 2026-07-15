@@ -38,6 +38,7 @@ const nav: { href: string; label: string; icon: typeof LayoutDashboard; module: 
   { href: "/risks", label: "تقييم المخاطر", icon: ShieldAlert, module: "risks" },
   { href: "/permits", label: "تصاريح العمل", icon: FileSignature, module: "permits" },
   { href: "/training", label: "التدريب", icon: GraduationCap, module: "training" },
+  { href: "/employees", label: "سجل الموظفين", icon: Users, module: "training" },
   { href: "/violations", label: "المخالفات", icon: Ban, module: "violations" },
   { href: "/patrol", label: "الجولة التفتيشية", icon: Footprints, module: "violations" },
   { href: "/hr", label: "الموارد البشرية", icon: UserCog, module: "hr" },

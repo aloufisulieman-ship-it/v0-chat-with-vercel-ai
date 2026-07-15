@@ -10,7 +10,7 @@ import { ToolboxTalkTab } from "./toolbox-talk"
 import { EmployeeRegistry } from "./employee-registry"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { requireModule } from "@/lib/session"
-import { getTrainings, getAllTrainingAttendees, getEmployees, deleteTraining } from "@/app/actions/hse"
+import { getTrainings, getAllTrainingAttendees, getEmployees, getToolboxSessions, deleteTraining } from "@/app/actions/hse"
 import { statusLabels } from "@/lib/labels"
 
 type Training = Awaited<ReturnType<typeof getTrainings>>[number]
@@ -121,10 +121,11 @@ function AttendanceTable({ rows }: { rows: Attendee[] }) {
 
 export default async function TrainingPage() {
   const user = await requireModule("training")
-  const [trainings, attendeesByTraining, employees] = await Promise.all([
+  const [trainings, attendeesByTraining, employees, toolboxSessions] = await Promise.all([
     getTrainings(),
     getAllTrainingAttendees(),
     getEmployees(),
+    getToolboxSessions(),
   ])
 
   const totalAttendees = trainings.reduce((a, b) => a + (b.attendees ?? 0), 0)
@@ -196,7 +197,7 @@ export default async function TrainingPage() {
         </TabsContent>
 
         <TabsContent value="toolbox">
-          <ToolboxTalkTab employees={employees} />
+          <ToolboxTalkTab employees={employees} initialSessions={toolboxSessions} />
         </TabsContent>
 
         <TabsContent value="employees">

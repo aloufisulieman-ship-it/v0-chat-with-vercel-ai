@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/hooks/use-toast"
 import { createViolationFull } from "@/app/actions/hse"
+import type { EmployeeRecord } from "@/app/training/employee-registry"
 import { violationStatusOptions } from "@/lib/labels"
 import { compressImage } from "@/lib/image-compress"
 import {
@@ -148,13 +149,13 @@ function SignaturePad({ label, value, onChange }: { label: string; value: string
   )
 }
 
-export function ViolationFormDialog() {
+export function ViolationFormDialog({ employees = [] }: { employees?: EmployeeRecord[] }) {
   const [open, setOpen] = useState(false)
   const [step, setStep] = useState(1)
   const [isPending, startTransition] = useTransition()
 
   const [form, setForm] = useState({
-    employeeName: "", employeeNo: "", nationality: "", companyName: "",
+    employeeRefId: "", employeeName: "", employeeNo: "", nationality: "", companyName: "",
     documentNo: "MHS-IMS-PR-HSE-647", violationDate: "", violationTime: "",
     place: "", violationType: "", category: "", internalAction: "", actionDetail: "",
     description: "", witnesses: "",
@@ -171,7 +172,7 @@ export function ViolationFormDialog() {
   function resetForm() {
     setStep(1)
     setForm({
-      employeeName: "", employeeNo: "", nationality: "", companyName: "",
+      employeeRefId: "", employeeName: "", employeeNo: "", nationality: "", companyName: "",
       documentNo: "MHS-IMS-PR-HSE-647", violationDate: "", violationTime: "",
       place: "", violationType: "", category: "", internalAction: "", actionDetail: "",
       description: "", witnesses: "",
@@ -322,13 +323,28 @@ export function ViolationFormDialog() {
                 </div>
               )}
             </div>
+            <div className="flex flex-col gap-1 sm:col-span-2">
+              <Label htmlFor="violation-employee">اختيار من سجل الموظفين</Label>
+              <select
+                id="violation-employee"
+                value={form.employeeRefId}
+                onChange={(event) => {
+                  const selected = employees.find((item) => String(item.id) === event.target.value)
+                  setForm((current) => selected ? ({ ...current, employeeRefId: String(selected.id), employeeName: selected.name, employeeNo: selected.employeeId, nationality: selected.nationality, companyName: selected.company }) : ({ ...current, employeeRefId: "" }))
+                }}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+              >
+                <option value="">إدخال يدوي / سجل تاريخي</option>
+                {employees.filter((item) => item.active).map((employee) => <option key={employee.id} value={employee.id}>{employee.name} — {employee.employeeId}</option>)}
+              </select>
+            </div>
             <div className="flex flex-col gap-1">
               <Label>اسم الموظف <span className="text-destructive">*</span></Label>
               <Input value={form.employeeName} onChange={e => setForm(f => ({ ...f, employeeName: e.target.value }))} placeholder="الاسم الكامل" />
             </div>
             <div className="flex flex-col gap-1">
               <Label>الرقم الوظيفي</Label>
-              <Input value={form.employeeNo} onChange={e => setForm(f => ({ ...f, employeeNo: e.target.value }))} placeholder="مثال: 1024" dir="ltr" />
+              <Input value={form.employeeNo} onChange={e => setForm(f => ({ ...f, employeeNo: e.target.value }))} placeholder="مث��ل: 1024" dir="ltr" />
             </div>
             <div className="flex flex-col gap-1">
               <Label>الجنسية</Label>

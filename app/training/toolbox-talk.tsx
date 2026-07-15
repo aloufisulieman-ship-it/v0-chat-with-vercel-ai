@@ -1,6 +1,8 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
+import { deleteToolboxSession, importToolboxSessions, saveToolboxSession } from "@/app/actions/hse"
 import {
   CalendarDays,
   CheckCircle2,
@@ -72,6 +74,7 @@ type AttendeeRow = {
 
 type ToolboxSession = {
   id: string
+  databaseId?: number
   groupId: Group["id"]
   topic: string
   conductor: string
@@ -204,7 +207,22 @@ function SignaturePad({ value, onChange }: { value: string; onChange: (v: string
   )
 }
 
-export function ToolboxTalkTab({ employees }: { employees: EmployeeRecord[] }) {
+type StoredToolboxSession = {
+  id: number
+  documentNo: string
+  date: string
+  location: string
+  topic: string
+  speaker: string
+  summary: string
+  photos: string[]
+  createdAt: Date
+  attendees: AttendeeRow[]
+}
+
+export function ToolboxTalkTab({ employees, initialSessions }: { employees: EmployeeRecord[]; initialSessions: StoredToolboxSession[] }) {
+  const router = useRouter()
+  const [pending, startTransition] = useTransition()
   const today = new Date()
   const todayDow = today.getDay()
   const todayStr = today.toISOString().slice(0, 10)
@@ -216,11 +234,43 @@ export function ToolboxTalkTab({ employees }: { employees: EmployeeRecord[] }) {
   const [date, setDate] = useState(todayStr)
   const [photo, setPhoto] = useState("")
   const [rows, setRows] = useState<AttendeeRow[]>([newRow()])
-  const [sessions, setSessions] = useState<ToolboxSession[]>([])
+  const [sessions, setSessions] = useState<ToolboxSession[]>(() => initialSessions.map((session) => ({
+    id: session.documentNo,
+    databaseId: session.id,
+    groupId: session.summary === "loading" ? "loading" : "forklift",
+    topic: session.topic,
+    conductor: session.speaker,
+    location: session.location,
+    date: session.date,
+    photo: session.photos[0] ?? "",
+    attendees: session.attendees.map(normalizeAttendee),
+    createdAt: new Date(session.createdAt).toISOString(),
+  })))
 
   useEffect(() => {
-    setSessions(loadSessions())
-  }, [])
+    if (window.localStorage.getItem(`${STORAGE_KEY}:imported`) === "true") return
+    const legacy = loadSessions()
+    if (legacy.length === 0) {
+      window.localStorage.setItem(`${STORAGE_KEY}:imported`, "true")
+      return
+    }
+    startTransition(async () => {
+      await importToolboxSessions(legacy.map((session) => ({
+        id: session.id,
+        sourceKey: `local-${session.id}`,
+        documentNo: session.id,
+        date: session.date,
+        location: session.location,
+        topic: session.topic,
+        speaker: session.conductor,
+        summary: session.groupId,
+        photos: session.photo ? [session.photo] : [],
+        attendees: session.attendees,
+      })))
+      window.localStorage.setItem(`${STORAGE_KEY}:imported`, "true")
+      router.refresh()
+    })
+  }, [router])
 
   const group = GROUPS.find((g) => g.id === groupId)!
   const scheduledToday = group.days.includes(todayDow)
@@ -268,27 +318,36 @@ export function ToolboxTalkTab({ employees }: { employees: EmployeeRecord[] }) {
       return
     }
     const filled = rows.filter((r) => r.name.trim() !== "")
-    if (filled.length === 0) {
-      toast({ title: "أضف حاضراً واحداً على الأقل", variant: "destructive" })
+    if (filled.length === 0 || filled.some((row) => !row.employeeId.trim())) {
+      toast({ title: "الاسم والرقم الوظيفي مطلوبان لكل حاضر", variant: "destructive" })
       return
     }
-    const current = loadSessions()
-    const session: ToolboxSession = {
-      id: nextSessionId(current),
-      groupId,
-      topic: topic.trim(),
-      conductor: conductor.trim() || DEFAULT_CONDUCTOR,
-      location: location.trim() || DEFAULT_LOCATION,
-      date,
-      photo,
-      attendees: filled,
-      createdAt: new Date().toISOString(),
-    }
-    const updated = [session, ...current]
-    saveSessions(updated)
-    setSessions(updated)
-    toast({ title: "تم حفظ الجلسة", description: `رقم السجل: ${session.id}` })
-    resetForm()
+    startTransition(async () => {
+      const result = await saveToolboxSession({
+        date,
+        location: location.trim() || DEFAULT_LOCATION,
+        topic: topic.trim(),
+        speaker: conductor.trim() || DEFAULT_CONDUCTOR,
+        summary: groupId,
+        photos: photo ? [photo] : [],
+        attendees: filled,
+      })
+      setSessions((current) => [{
+        id: result.documentNo,
+        databaseId: result.id,
+        groupId,
+        topic: topic.trim(),
+        conductor: conductor.trim() || DEFAULT_CONDUCTOR,
+        location: location.trim() || DEFAULT_LOCATION,
+        date,
+        photo,
+        attendees: filled,
+        createdAt: new Date().toISOString(),
+      }, ...current])
+      toast({ title: "تم حفظ الجلسة", description: `رقم السجل: ${result.documentNo}` })
+      resetForm()
+      router.refresh()
+    })
   }
 
   // Builds an Arabic RTL printable HTML document and triggers the print dialog.
@@ -371,11 +430,14 @@ export function ToolboxTalkTab({ employees }: { employees: EmployeeRecord[] }) {
     win.document.close()
   }
 
-  function deleteSession(id: string) {
-    const updated = loadSessions().filter((s) => s.id !== id)
-    saveSessions(updated)
-    setSessions(updated)
-    toast({ title: "تم حذف السجل" })
+  function deleteSession(session: ToolboxSession) {
+    if (!session.databaseId) return
+    startTransition(async () => {
+      await deleteToolboxSession(session.databaseId!)
+      setSessions((current) => current.filter((item) => item.databaseId !== session.databaseId))
+      toast({ title: "تم حذف السجل" })
+      router.refresh()
+    })
   }
 
   return (
@@ -553,8 +615,8 @@ export function ToolboxTalkTab({ employees }: { employees: EmployeeRecord[] }) {
           <Button variant="outline" onClick={resetForm} className="gap-1">
             إعادة تعيين
           </Button>
-          <Button onClick={handleSave} className="gap-2">
-            <Save className="size-4" /> حفظ الجلسة
+<Button onClick={handleSave} disabled={pending} className="gap-2">
+              <Save className="size-4" /> {pending ? "جارٍ الحفظ..." : "حفظ الجلسة"}
           </Button>
         </div>
       </TabsContent>
@@ -592,7 +654,7 @@ export function ToolboxTalkTab({ employees }: { employees: EmployeeRecord[] }) {
                     </Button>
                     <button
                       type="button"
-                      onClick={() => deleteSession(s.id)}
+                      onClick={() => deleteSession(s)}
                       className="text-destructive hover:opacity-80"
                       aria-label="حذف السجل"
                     >

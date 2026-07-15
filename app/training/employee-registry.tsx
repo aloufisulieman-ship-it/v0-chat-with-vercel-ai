@@ -17,6 +17,10 @@ export type EmployeeRecord = {
   employeeId: string
   name: string
   designation: string
+  department: string
+  company: string
+  nationality: string
+  profileStatus: string
   cardCode: string | null
   active: boolean
 }
@@ -53,7 +57,10 @@ function EmployeeDialog({ employee }: { employee?: EmployeeRecord }) {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2"><Label htmlFor={`employee-id-${employee?.id ?? "new"}`}>الرقم الوظيفي</Label><Input id={`employee-id-${employee?.id ?? "new"}`} name="employeeId" defaultValue={employee?.employeeId} required /></div>
             <div className="flex flex-col gap-2"><Label htmlFor={`employee-name-${employee?.id ?? "new"}`}>الاسم</Label><Input id={`employee-name-${employee?.id ?? "new"}`} name="name" defaultValue={employee?.name} required /></div>
-            <div className="flex flex-col gap-2"><Label htmlFor={`employee-job-${employee?.id ?? "new"}`}>المسمى الوظيفي</Label><Input id={`employee-job-${employee?.id ?? "new"}`} name="designation" defaultValue={employee?.designation} required /></div>
+            <div className="flex flex-col gap-2"><Label htmlFor={`employee-job-${employee?.id ?? "new"}`}>المسمى الوظيفي</Label><Input id={`employee-job-${employee?.id ?? "new"}`} name="designation" defaultValue={employee?.designation} /></div>
+            <div className="flex flex-col gap-2"><Label htmlFor={`employee-department-${employee?.id ?? "new"}`}>القسم</Label><Input id={`employee-department-${employee?.id ?? "new"}`} name="department" defaultValue={employee?.department} /></div>
+            <div className="flex flex-col gap-2"><Label htmlFor={`employee-company-${employee?.id ?? "new"}`}>الشركة</Label><Input id={`employee-company-${employee?.id ?? "new"}`} name="company" defaultValue={employee?.company || "MHS"} /></div>
+            <div className="flex flex-col gap-2"><Label htmlFor={`employee-nationality-${employee?.id ?? "new"}`}>الجنسية</Label><Input id={`employee-nationality-${employee?.id ?? "new"}`} name="nationality" defaultValue={employee?.nationality} /></div>
             <div className="flex flex-col gap-2"><Label htmlFor={`employee-card-${employee?.id ?? "new"}`}>رقم البطاقة/الكود</Label><Input id={`employee-card-${employee?.id ?? "new"}`} name="cardCode" defaultValue={employee?.cardCode ?? ""} /></div>
           </div>
           <div className="flex items-center justify-between rounded-lg border border-border p-3">
@@ -91,12 +98,12 @@ export function EmployeeRegistry({ employees }: { employees: EmployeeRecord[] })
       </div>
       <div className="overflow-hidden rounded-lg border border-border">
         <Table>
-          <TableHeader><TableRow><TableHead>الرقم الوظيفي</TableHead><TableHead>الاسم</TableHead><TableHead>المسمى الوظيفي</TableHead><TableHead>البطاقة/الكود</TableHead><TableHead>الحالة</TableHead><TableHead className="text-left">إجراءات</TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead>الرقم الوظيفي</TableHead><TableHead>الاسم</TableHead><TableHead>المسمى الوظيفي</TableHead><TableHead>القسم</TableHead><TableHead>الشركة</TableHead><TableHead>حالة الملف</TableHead><TableHead>الحالة</TableHead><TableHead className="text-left">إجراءات</TableHead></TableRow></TableHeader>
           <TableBody>
             {employees.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="h-32 text-center"><div className="flex flex-col items-center gap-2 text-muted-foreground"><UserRound className="size-6" /><span>لا يوجد موظفون. أضف أول موظف للبدء.</span></div></TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="h-32 text-center"><div className="flex flex-col items-center gap-2 text-muted-foreground"><UserRound className="size-6" /><span>لا يوجد موظفون. أضف أول موظف للبدء.</span></div></TableCell></TableRow>
             ) : employees.map((employee) => (
-              <TableRow key={employee.id}><TableCell dir="ltr" className="font-mono text-xs">{employee.employeeId}</TableCell><TableCell className="font-medium">{employee.name}</TableCell><TableCell>{employee.designation}</TableCell><TableCell dir="ltr">{employee.cardCode || "-"}</TableCell><TableCell><Badge variant={employee.active ? "default" : "secondary"}>{employee.active ? "نشط" : "غير نشط"}</Badge></TableCell><TableCell><div className="flex justify-end gap-1"><EmployeeDialog employee={employee} /><DeleteEmployeeButton employee={employee} /></div></TableCell></TableRow>
+              <TableRow key={employee.id}><TableCell dir="ltr" className="font-mono text-xs">{employee.employeeId}</TableCell><TableCell className="font-medium">{employee.name}</TableCell><TableCell>{employee.designation || "-"}</TableCell><TableCell>{employee.department || "-"}</TableCell><TableCell>{employee.company || "MHS"}</TableCell><TableCell><Badge variant={employee.profileStatus === "complete" ? "outline" : "destructive"}>{employee.profileStatus === "complete" ? "مكتمل" : "غير مكتمل"}</Badge></TableCell><TableCell><Badge variant={employee.active ? "default" : "secondary"}>{employee.active ? "نشط" : "غير نشط"}</Badge></TableCell><TableCell><div className="flex justify-end gap-1"><EmployeeDialog employee={employee} /><DeleteEmployeeButton employee={employee} /></div></TableCell></TableRow>
             ))}
           </TableBody>
         </Table>
