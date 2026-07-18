@@ -10,9 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/hooks/use-toast"
 import { createViolationFull } from "@/app/actions/hse"
+import type { EmployeeRecord } from "@/app/training/employee-registry"
 import { violationStatusOptions } from "@/lib/labels"
+import { compressImage } from "@/lib/image-compress"
 import {
-  classifyViolation,
   categoryOptions,
   internalActionOptions,
   FINE_ACTION,
@@ -89,8 +90,21 @@ function SignaturePad({ label, value, onChange }: { label: string; value: string
   }
 
   function end() {
+    if (!drawing) return
     setDrawing(false)
-    onChange(canvasRef.current!.toDataURL())
+
+    const source = canvasRef.current!
+    // Canvas التوقيع محدود أصلاً إلى 340x120. نعيد رسمه على خلفية بيضاء
+    // قبل تصديره كـ JPEG مضغوط لتجنب حمولة PNG الكبيرة أو الخلفية الشفافة.
+    const output = document.createElement("canvas")
+    output.width = Math.min(source.width, 500)
+    output.height = Math.min(source.height, 200)
+    const ctx = output.getContext("2d")
+    if (!ctx) return
+    ctx.fillStyle = "#ffffff"
+    ctx.fillRect(0, 0, output.width, output.height)
+    ctx.drawImage(source, 0, 0, output.width, output.height)
+    onChange(output.toDataURL("image/jpeg", 0.7))
   }
 
   function clear() {
@@ -135,15 +149,15 @@ function SignaturePad({ label, value, onChange }: { label: string; value: string
   )
 }
 
-export function ViolationFormDialog() {
+export function ViolationFormDialog({ employees = [] }: { employees?: EmployeeRecord[] }) {
   const [open, setOpen] = useState(false)
   const [step, setStep] = useState(1)
   const [isPending, startTransition] = useTransition()
 
   const [form, setForm] = useState({
-    employeeName: "", employeeNo: "", nationality: "", companyName: "",
+    employeeRefId: "", employeeName: "", employeeNo: "", nationality: "", companyName: "",
     documentNo: "MHS-IMS-PR-HSE-647", violationDate: "", violationTime: "",
-    place: "", violationType: "", category: "internal", internalAction: "", actionDetail: "",
+    place: "", violationType: "", category: "", internalAction: "", actionDetail: "",
     description: "", witnesses: "",
     evidences: "", proposedAction: "", status: "open", entryMode: "electronic",
   })
@@ -158,9 +172,9 @@ export function ViolationFormDialog() {
   function resetForm() {
     setStep(1)
     setForm({
-      employeeName: "", employeeNo: "", nationality: "", companyName: "",
+      employeeRefId: "", employeeName: "", employeeNo: "", nationality: "", companyName: "",
       documentNo: "MHS-IMS-PR-HSE-647", violationDate: "", violationTime: "",
-      place: "", violationType: "", category: "internal", internalAction: "", actionDetail: "",
+      place: "", violationType: "", category: "", internalAction: "", actionDetail: "",
       description: "", witnesses: "",
       evidences: "", proposedAction: "", status: "open", entryMode: "electronic",
     })
@@ -171,23 +185,47 @@ export function ViolationFormDialog() {
     setManagerSignature("")
   }
 
-  function handleDocUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? [])
-    files.forEach((f) => {
+  async function fileToDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
       const reader = new FileReader()
-      reader.onload = () => setManualDocs((prev) => [...prev, { name: f.name, dataUrl: reader.result as string }])
-      reader.readAsDataURL(f)
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = () => reject(new Error("تعذّر قراءة الملف"))
+      reader.readAsDataURL(file)
     })
-    e.target.value = ""
   }
 
-  function handleImageCapture(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? [])
-    files.forEach((f) => {
-      const reader = new FileReader()
-      reader.onload = () => setImages((prev) => [...prev, reader.result as string])
-      reader.readAsDataURL(f)
-    })
+  async function handleDocUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const input = e.currentTarget
+    const files = Array.from(input.files ?? [])
+    input.value = ""
+
+    try {
+      const docs = await Promise.all(
+        files.map(async (file) => ({
+          name: file.name,
+          // اضغط النماذج المصورة فقط؛ PDF وWord يبقيان بصيغتهما الأصلية.
+          dataUrl: file.type.startsWith("image/")
+            ? await compressImage(file, 1200, 0.7)
+            : await fileToDataUrl(file),
+        })),
+      )
+      setManualDocs((prev) => [...prev, ...docs])
+    } catch {
+      toast({ title: "تعذّر تجهيز الملف", variant: "destructive" })
+    }
+  }
+
+  async function handleImageCapture(e: React.ChangeEvent<HTMLInputElement>) {
+    const input = e.currentTarget
+    const files = Array.from(input.files ?? [])
+    input.value = ""
+
+    try {
+      const compressed = await Promise.all(files.map((file) => compressImage(file, 1200, 0.7)))
+      setImages((prev) => [...prev, ...compressed])
+    } catch {
+      toast({ title: "تعذّر ضغط الصورة", variant: "destructive" })
+    }
   }
 
   function handleSave() {
@@ -195,7 +233,7 @@ export function ViolationFormDialog() {
       try {
         const fd = new FormData()
         Object.entries(form).forEach(([k, v]) => fd.append(k, v))
-        // ادمج الإجراء مع التفاصيل الإضافية (المبلغ أو النص الحر) في قيمة واحدة
+        // ادمج ا��إجراء مع التفاصيل الإضافية (المبلغ أو النص الحر) في قيمة واحدة
         let internalActionValue = form.internalAction
         if (form.internalAction === FINE_ACTION && form.actionDetail.trim()) {
           internalActionValue = `${FINE_ACTION}: ${form.actionDetail.trim()} ريال سعودي`
@@ -285,13 +323,28 @@ export function ViolationFormDialog() {
                 </div>
               )}
             </div>
+            <div className="flex flex-col gap-1 sm:col-span-2">
+              <Label htmlFor="violation-employee">اختيار من سجل الموظفين</Label>
+              <select
+                id="violation-employee"
+                value={form.employeeRefId}
+                onChange={(event) => {
+                  const selected = employees.find((item) => String(item.id) === event.target.value)
+                  setForm((current) => selected ? ({ ...current, employeeRefId: String(selected.id), employeeName: selected.name, employeeNo: selected.employeeId, nationality: selected.nationality, companyName: selected.company }) : ({ ...current, employeeRefId: "" }))
+                }}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+              >
+                <option value="">إدخال يدوي / سجل تاريخي</option>
+                {employees.filter((item) => item.active).map((employee) => <option key={employee.id} value={employee.id}>{employee.name} — {employee.employeeId}</option>)}
+              </select>
+            </div>
             <div className="flex flex-col gap-1">
               <Label>اسم الموظف <span className="text-destructive">*</span></Label>
               <Input value={form.employeeName} onChange={e => setForm(f => ({ ...f, employeeName: e.target.value }))} placeholder="الاسم الكامل" />
             </div>
             <div className="flex flex-col gap-1">
               <Label>الرقم الوظيفي</Label>
-              <Input value={form.employeeNo} onChange={e => setForm(f => ({ ...f, employeeNo: e.target.value }))} placeholder="مثال: 1024" dir="ltr" />
+              <Input value={form.employeeNo} onChange={e => setForm(f => ({ ...f, employeeNo: e.target.value }))} placeholder="مث��ل: 1024" dir="ltr" />
             </div>
             <div className="flex flex-col gap-1">
               <Label>الجنسية</Label>
@@ -323,12 +376,23 @@ export function ViolationFormDialog() {
               </Select>
             </div>
             <div className="flex flex-col gap-1 sm:col-span-2">
+              <Label>التصنيف <span className="text-destructive">*</span></Label>
+              <Select
+                value={form.category}
+                onValueChange={v => setForm(f => ({ ...f, category: v, internalAction: "", actionDetail: "" }))}
+              >
+                <SelectTrigger><SelectValue placeholder="اختر التصنيف: داخلية أو خارجية..." /></SelectTrigger>
+                <SelectContent>
+                  {categoryOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">يحدد التصنيف جهة الإحالة تلقائياً: الداخلية للموارد البشرية، والخارجية للمالية.</p>
+            </div>
+            <div className="flex flex-col gap-1 sm:col-span-2">
               <Label>نوع المخالفة <span className="text-destructive">*</span></Label>
               <Select
                 value={form.violationType}
-                onValueChange={v =>
-                  setForm(f => ({ ...f, violationType: v, category: classifyViolation(v), internalAction: "" }))
-                }
+                onValueChange={v => setForm(f => ({ ...f, violationType: v, internalAction: "", actionDetail: "" }))}
               >
                 <SelectTrigger><SelectValue placeholder="اختر نوع المخالفة..." /></SelectTrigger>
                 <SelectContent className="max-h-72">
@@ -336,21 +400,9 @@ export function ViolationFormDialog() {
                 </SelectContent>
               </Select>
             </div>
-            {form.violationType && (
+            {form.violationType && form.category && (
               <>
-                <div className="flex flex-col gap-1">
-                  <Label>التصنيف</Label>
-                  <Select
-                    value={form.category}
-                    onValueChange={v => setForm(f => ({ ...f, category: v, internalAction: "" }))}
-                  >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {categoryOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-1 sm:col-span-2">
                   <Label>الإجراء الداخلي</Label>
                   <Select
                     value={form.internalAction}
@@ -448,7 +500,7 @@ export function ViolationFormDialog() {
           </Button>
           {step < 3 ? (
             <Button type="button" onClick={() => setStep(s => s + 1)}
-              disabled={step === 1 && (!form.employeeName || !form.violationType || !form.place.trim() || !form.description.trim() || (form.entryMode === "manual" && manualDocs.length === 0))}
+              disabled={step === 1 && (!form.employeeName || !form.category || !form.violationType || !form.place.trim() || !form.description.trim() || (form.entryMode === "manual" && manualDocs.length === 0))}
               className="gap-1">
               التالي <ChevronLeft className="size-4" />
             </Button>

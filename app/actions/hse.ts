@@ -9,6 +9,9 @@ import {
   permit,
   risk,
   training,
+  employee,
+  toolboxSession,
+  toolboxAttendee,
   trainingAttendee,
   correctiveAction,
   audit,
@@ -139,6 +142,11 @@ export async function createIncidentFull(formData: FormData) {
   const title = str(formData.get("title")).trim()
   if (!title) throw new Error("نوع الحادثة مطلوب")
 
+  const routedTo = str(formData.get("routedTo"))
+  if (routedTo !== "hr" && routedTo !== "finance") {
+    throw new Error("يجب اختيار جهة تحويل الحادثة: الموارد البشرية أو المالية")
+  }
+
   // Auto document number: INC-YYYY-### (sequence resets each year).
   const year = new Date().getFullYear()
   const existing = await db
@@ -160,6 +168,9 @@ export async function createIncidentFull(formData: FormData) {
       userId,
       documentNo,
       title,
+      routedTo,
+      hrStatus: routedTo === "hr" ? "pending" : null,
+      financeStatus: routedTo === "finance" ? "pending" : null,
       type: str(formData.get("type"), "أخرى"),
       severity: str(formData.get("severity"), "low"),
       status: str(formData.get("status"), "open"),
@@ -227,6 +238,8 @@ export async function createIncidentFull(formData: FormData) {
   }
 
   revalidatePath("/incidents")
+  revalidatePath("/hr")
+  revalidatePath("/finance")
   revalidatePath("/")
   return { documentNo }
 }
@@ -406,7 +419,7 @@ export async function createTrainingFull(formData: FormData) {
   const userId = await requireModuleUserId("training")
 
   const title = str(formData.get("title")).trim()
-  if (!title) throw new Error("��سم الدورة مطلوب")
+  if (!title) throw new Error("������سم الدورة مطلوب")
 
   const trainerSignature = str(formData.get("trainerSignature"))
 
@@ -461,6 +474,170 @@ export async function createTrainingFull(formData: FormData) {
 
   revalidatePath("/training")
   return { trainingId }
+}
+
+export async function getEmployees() {
+  const userId = await getUserId()
+  return db.select().from(employee).where(eq(employee.userId, userId)).orderBy(employee.designation, employee.name)
+}
+
+function employeeValues(formData: FormData) {
+  const employeeId = str(formData.get("employeeId")).trim()
+  const name = str(formData.get("name")).trim()
+  const designation = str(formData.get("designation")).trim()
+  if (!employeeId || !name) throw new Error("الرقم الوظيفي والاسم حقول مطلوبة")
+  return {
+    employeeId,
+    name,
+    designation,
+    department: str(formData.get("department")).trim(),
+    company: str(formData.get("company"), "MHS").trim() || "MHS",
+    nationality: str(formData.get("nationality")).trim(),
+    profileStatus: designation ? "complete" : "incomplete",
+    cardCode: str(formData.get("cardCode")).trim(),
+    active: formData.get("active") !== "false",
+    updatedAt: new Date(),
+  }
+}
+
+export async function createEmployee(formData: FormData) {
+  const userId = await getUserId()
+  await db.insert(employee).values({ userId, ...employeeValues(formData) })
+  revalidatePath("/employees")
+  revalidatePath("/training")
+  revalidatePath("/violations")
+}
+
+export async function updateEmployee(formData: FormData) {
+  const userId = await getUserId()
+  const id = Number(formData.get("id"))
+  if (!Number.isFinite(id)) throw new Error("معرّف الموظف غير صالح")
+  await db.update(employee).set(employeeValues(formData)).where(and(eq(employee.id, id), eq(employee.userId, userId)))
+  revalidatePath("/employees")
+  revalidatePath("/training")
+  revalidatePath("/violations")
+}
+
+export async function deleteEmployee(formData: FormData) {
+  const userId = await getUserId()
+  const id = Number(formData.get("id"))
+  if (!Number.isFinite(id)) throw new Error("معرّف الموظف غير صالح")
+  await db.delete(employee).where(and(eq(employee.id, id), eq(employee.userId, userId)))
+  revalidatePath("/employees")
+  revalidatePath("/training")
+  revalidatePath("/violations")
+}
+
+type ToolboxAttendeeInput = {
+  employeeRefId?: number | null
+  employeeId?: string
+  name?: string
+  jobTitle?: string
+  designation?: string
+  company?: string
+  cardCode?: string
+  signature?: string
+}
+
+type ToolboxSessionInput = {
+  id?: string | number
+  sourceKey?: string
+  documentNo?: string
+  date?: string
+  time?: string
+  location?: string
+  topic?: string
+  speaker?: string
+  summary?: string
+  photos?: string[]
+  attendees?: ToolboxAttendeeInput[]
+}
+
+async function nextToolboxDocumentNo(userId: string, dateValue?: string) {
+  const year = (dateValue || new Date().toISOString()).slice(0, 4)
+  const rows = await db.select({ documentNo: toolboxSession.documentNo }).from(toolboxSession).where(eq(toolboxSession.userId, userId))
+  const max = rows.reduce((value, row) => {
+    const match = row.documentNo.match(new RegExp(`^TB-${year}-(\\d+)$`))
+    return Math.max(value, match ? Number(match[1]) : 0)
+  }, 0)
+  return `TB-${year}-${String(max + 1).padStart(3, "0")}`
+}
+
+async function resolveToolboxEmployee(userId: string, attendee: ToolboxAttendeeInput) {
+  const employeeId = (attendee.employeeId ?? "").trim()
+  const name = (attendee.name ?? "").trim()
+  if (!name || !employeeId) throw new Error("الاسم والرقم الوظيفي مطلوبان لكل حاضر")
+  const [existing] = await db.select().from(employee).where(and(eq(employee.userId, userId), eq(employee.employeeId, employeeId))).limit(1)
+  if (existing) return existing
+  const [created] = await db.insert(employee).values({
+    userId,
+    employeeId,
+    name,
+    designation: (attendee.designation ?? attendee.jobTitle ?? "").trim(),
+    company: (attendee.company ?? "MHS").trim() || "MHS",
+    cardCode: (attendee.cardCode ?? "").trim(),
+    profileStatus: (attendee.designation ?? attendee.jobTitle ?? "").trim() ? "complete" : "incomplete",
+  }).returning()
+  return created
+}
+
+export async function getToolboxSessions() {
+  const userId = await requireModuleUserId("training")
+  const sessions = await db.select().from(toolboxSession).where(eq(toolboxSession.userId, userId)).orderBy(desc(toolboxSession.createdAt))
+  const attendees = await db.select().from(toolboxAttendee).where(eq(toolboxAttendee.userId, userId)).orderBy(toolboxAttendee.id)
+  return sessions.map((session) => ({
+    ...session,
+    photos: JSON.parse(session.photos || "[]") as string[],
+    attendees: attendees.filter((item) => item.sessionId === session.id).map((item) => ({
+      id: String(item.id), employeeRefId: item.employeeRefId, employeeId: item.employeeId, name: item.name,
+      jobTitle: item.designation, company: item.company, cardCode: item.cardCode, signature: item.signature,
+    })),
+  }))
+}
+
+async function persistToolboxSession(userId: string, input: ToolboxSessionInput) {
+  const sourceKey = input.sourceKey || `server-${crypto.randomUUID()}`
+  const [existing] = await db.select().from(toolboxSession).where(and(eq(toolboxSession.userId, userId), eq(toolboxSession.sourceKey, sourceKey))).limit(1)
+  if (existing) return existing
+  const documentNo = input.documentNo || await nextToolboxDocumentNo(userId, input.date)
+  const [created] = await db.insert(toolboxSession).values({
+    userId, sourceKey, documentNo, date: input.date ?? "", time: input.time ?? "", location: input.location ?? "",
+    topic: input.topic ?? "", speaker: input.speaker ?? "", summary: input.summary ?? "", photos: JSON.stringify(input.photos ?? []),
+  }).returning()
+  const attendeeRows = input.attendees ?? []
+  for (const attendee of attendeeRows) {
+    const linked = await resolveToolboxEmployee(userId, attendee)
+    await db.insert(toolboxAttendee).values({
+      userId, sessionId: created.id, employeeRefId: linked.id, employeeId: linked.employeeId,
+      name: attendee.name?.trim() || linked.name, designation: attendee.designation ?? attendee.jobTitle ?? linked.designation,
+      company: attendee.company || linked.company || "MHS", cardCode: attendee.cardCode ?? linked.cardCode ?? "", signature: attendee.signature ?? "",
+    })
+  }
+  return created
+}
+
+export async function saveToolboxSession(input: ToolboxSessionInput) {
+  const userId = await requireModuleUserId("training")
+  const created = await persistToolboxSession(userId, input)
+  revalidatePath("/training")
+  revalidatePath("/employees")
+  return { id: created.id, documentNo: created.documentNo }
+}
+
+export async function importToolboxSessions(inputs: ToolboxSessionInput[]) {
+  const userId = await requireModuleUserId("training")
+  for (const input of inputs) await persistToolboxSession(userId, { ...input, sourceKey: input.sourceKey || `local-${input.id}` })
+  revalidatePath("/training")
+  revalidatePath("/employees")
+}
+
+export async function deleteToolboxSession(id: number) {
+  const userId = await requireModuleUserId("training")
+  const [owned] = await db.select({ id: toolboxSession.id }).from(toolboxSession).where(and(eq(toolboxSession.id, id), eq(toolboxSession.userId, userId))).limit(1)
+  if (!owned) throw new Error("الجلسة غير موجودة")
+  await db.delete(toolboxAttendee).where(and(eq(toolboxAttendee.sessionId, id), eq(toolboxAttendee.userId, userId)))
+  await db.delete(toolboxSession).where(and(eq(toolboxSession.id, id), eq(toolboxSession.userId, userId)))
+  revalidatePath("/training")
 }
 
 export async function getTrainingAttendees(trainingId: number) {
@@ -596,10 +773,17 @@ export async function createViolationFull(formData: FormData) {
 
   const employeeName = str(formData.get("employeeName")).trim()
   if (!employeeName) throw new Error("اسم الموظف مطلوب")
+  const requestedEmployeeRefId = Number(formData.get("employeeRefId"))
+  const employeeRefId = Number.isFinite(requestedEmployeeRefId) && requestedEmployeeRefId > 0
+    ? (await db.select({ id: employee.id }).from(employee).where(and(eq(employee.id, requestedEmployeeRefId), eq(employee.userId, userId))).limit(1))[0]?.id ?? null
+    : null
 
   // مسار إحالة حصري حسب التصنيف: الداخلية → الموارد البشرية، الخارجية → المالية.
   // تُضبط حالة الجهة المعنية فقط، ويبقى الحقل المعاكس null دائماً.
-  const category = str(formData.get("category"), "internal")
+  const category = str(formData.get("category"))
+  if (category !== "internal" && category !== "external") {
+    throw new Error("يجب تحديد تصنيف المخالفة: داخلية أو خارجية")
+  }
   const isExternal = category === "external"
 
   // Pass every column explicitly so nothing falls back to a DB default.
@@ -609,6 +793,7 @@ export async function createViolationFull(formData: FormData) {
       userId,
       documentNo,
       companyName: str(formData.get("companyName")),
+      employeeRefId,
       employeeName,
       employeeNo: str(formData.get("employeeNo")),
       nationality: str(formData.get("nationality")),

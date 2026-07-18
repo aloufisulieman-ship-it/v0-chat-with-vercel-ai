@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/hooks/use-toast"
 import { updateViolation } from "@/app/actions/hse"
 import { violationStatusOptions } from "@/lib/labels"
+import { compressImage } from "@/lib/image-compress"
 import { categoryOptions, type ViolationCategory } from "@/lib/violation-category"
 
 type ViolationRow = {
@@ -57,14 +58,33 @@ export function ViolationEditDialog({ violation }: { violation: ViolationRow }) 
   // نماذج ورقية ممسوحة إضافية تُرفع أثناء التعديل.
   const [manualDocs, setManualDocs] = useState<{ name: string; dataUrl: string }[]>([])
 
-  function handleDocUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? [])
-    files.forEach((f) => {
+  async function fileToDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
       const reader = new FileReader()
-      reader.onload = () => setManualDocs((prev) => [...prev, { name: f.name, dataUrl: reader.result as string }])
-      reader.readAsDataURL(f)
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = () => reject(new Error("تعذّر قراءة الملف"))
+      reader.readAsDataURL(file)
     })
-    e.target.value = ""
+  }
+
+  async function handleDocUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const input = e.currentTarget
+    const files = Array.from(input.files ?? [])
+    input.value = ""
+
+    try {
+      const docs = await Promise.all(
+        files.map(async (file) => ({
+          name: file.name,
+          dataUrl: file.type.startsWith("image/")
+            ? await compressImage(file, 1200, 0.7)
+            : await fileToDataUrl(file),
+        })),
+      )
+      setManualDocs((prev) => [...prev, ...docs])
+    } catch {
+      toast({ title: "تعذّر تجهيز الملف", variant: "destructive" })
+    }
   }
 
   function handleSave() {
@@ -157,7 +177,7 @@ export function ViolationEditDialog({ violation }: { violation: ViolationRow }) 
             <Input value={form.companyName} onChange={e => setForm(f => ({ ...f, companyName: e.target.value }))} />
           </div>
           <div className="flex flex-col gap-1">
-            <Label>التاريخ</Label>
+            <Label>التاري��</Label>
             <Input type="date" value={form.violationDate} onChange={e => setForm(f => ({ ...f, violationDate: e.target.value }))} dir="ltr" />
           </div>
           <div className="flex flex-col gap-1">

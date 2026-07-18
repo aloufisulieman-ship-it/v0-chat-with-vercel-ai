@@ -7,9 +7,10 @@ import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { TrainingFormDialog } from "./training-form"
 import { ToolboxTalkTab } from "./toolbox-talk"
+import { EmployeeRegistry } from "./employee-registry"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { requireModule } from "@/lib/session"
-import { getTrainings, getAllTrainingAttendees, deleteTraining } from "@/app/actions/hse"
+import { getTrainings, getAllTrainingAttendees, getEmployees, getToolboxSessions, deleteTraining } from "@/app/actions/hse"
 import { statusLabels } from "@/lib/labels"
 
 type Training = Awaited<ReturnType<typeof getTrainings>>[number]
@@ -120,8 +121,12 @@ function AttendanceTable({ rows }: { rows: Attendee[] }) {
 
 export default async function TrainingPage() {
   const user = await requireModule("training")
-  const trainings = await getTrainings()
-  const attendeesByTraining = await getAllTrainingAttendees()
+  const [trainings, attendeesByTraining, employees, toolboxSessions] = await Promise.all([
+    getTrainings(),
+    getAllTrainingAttendees(),
+    getEmployees(),
+    getToolboxSessions(),
+  ])
 
   const totalAttendees = trainings.reduce((a, b) => a + (b.attendees ?? 0), 0)
   const completed = trainings.filter((t) => t.status === "closed").length
@@ -168,7 +173,7 @@ export default async function TrainingPage() {
   return (
     <AppShell
       title="التدريب والتأهيل"
-      subtitle="إدارة الدورات التدريبية وسجلات التأهيل للموظفين"
+      subtitle="إدارة الدو��ات التدريبية وسجلات التأهيل للموظفين"
       user={user}
       action={<TrainingFormDialog />}
     >
@@ -183,6 +188,7 @@ export default async function TrainingPage() {
         <TabsList>
           <TabsTrigger value="training">برنامج التدريب</TabsTrigger>
           <TabsTrigger value="toolbox">الحديث التوعوي اليومي</TabsTrigger>
+          <TabsTrigger value="employees">سجل الموظفين</TabsTrigger>
         </TabsList>
 
         <TabsContent value="training">
@@ -191,7 +197,11 @@ export default async function TrainingPage() {
         </TabsContent>
 
         <TabsContent value="toolbox">
-          <ToolboxTalkTab />
+          <ToolboxTalkTab employees={employees} initialSessions={toolboxSessions} />
+        </TabsContent>
+
+        <TabsContent value="employees">
+          <EmployeeRegistry employees={employees} />
         </TabsContent>
       </Tabs>
     </AppShell>

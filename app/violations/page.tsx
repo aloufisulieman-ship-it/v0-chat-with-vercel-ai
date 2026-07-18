@@ -5,7 +5,7 @@ import { StatusBadge } from "@/components/status-badge"
 import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { requireModule } from "@/lib/session"
-import { getViolations, deleteViolation } from "@/app/actions/hse"
+import { getViolations, getEmployees, deleteViolation } from "@/app/actions/hse"
 import { statusLabels } from "@/lib/labels"
 import { categoryLabels } from "@/lib/violation-category"
 import { effectiveViolationStatus, isViolationClosed } from "@/lib/violation-status"
@@ -31,7 +31,7 @@ async function handleDelete(id: number) {
 
 export default async function ViolationsPage() {
   const user = await requireModule("violations")
-  const violations = await getViolations()
+  const [violations, employees] = await Promise.all([getViolations(), getEmployees()])
   const isAdmin = user.role === "admin"
 
   // العدادات تعتمد الحالة الفعلية (وفق مسار الإحالة) لا الحالة المخزّنة.
@@ -119,7 +119,7 @@ export default async function ViolationsPage() {
       title="إدارة المخالفات"
       subtitle="تسجيل ومتابعة المخالفات وفق النموذج الرسمي (MHS-IMS-PR-HSE-647)"
       user={user}
-      action={<ViolationFormDialog />}
+      action={<ViolationFormDialog employees={employees} />}
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <KpiCard label="إجمالي المخالفات" value={violations.length} icon={FileWarning} tone="blue" />

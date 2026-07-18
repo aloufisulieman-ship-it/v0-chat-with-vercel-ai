@@ -8,9 +8,11 @@ import { DeleteButton } from "@/components/delete-button"
 import { requireModule } from "@/lib/session"
 import { getIncidents, deleteIncident } from "@/app/actions/hse"
 import { severityLabels, statusLabels } from "@/lib/labels"
-import { formatParties, hasEmployeeParty } from "@/lib/incident-types"
+import { formatParties } from "@/lib/incident-types"
 import { HrStatusBadge } from "@/components/hr-status-badge"
 import { HrClosureBlock } from "@/components/hr-closure-block"
+import { FinanceStatusBadge } from "@/components/finance-status-badge"
+import { FinanceClosureBlock } from "@/components/finance-closure-block"
 import { IncidentFormDialog } from "./incident-form"
 
 type Incident = Awaited<ReturnType<typeof getIncidents>>[number]
@@ -34,8 +36,12 @@ export default async function IncidentsPage() {
     { key: "status", header: "الحالة", render: (r) => <StatusBadge status={r.status ?? "open"} /> },
     { key: "incidentDate", header: "التاريخ", render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.incidentDate ?? "-"}</span> },
     {
-      key: "hr", header: "الموارد البشرية",
-      render: (r) => (hasEmployeeParty(r.parties) ? <HrStatusBadge hrStatus={r.hrStatus} /> : <span className="text-xs text-muted-foreground">—</span>),
+      key: "routedTo", header: "جهة التحويل",
+      render: (r) => r.routedTo === "hr"
+        ? <HrStatusBadge hrStatus={r.hrStatus} />
+        : r.routedTo === "finance"
+          ? <FinanceStatusBadge financeStatus={r.financeStatus} />
+          : <span className="text-xs text-muted-foreground">غير موجّهة</span>,
     },
     {
       key: "actions",
@@ -52,6 +58,7 @@ export default async function IncidentsPage() {
             fields={[
               { label: "رقم الحادثة", value: r.documentNo || "-" },
               { label: "نوع الحادثة", value: r.title },
+              { label: "جهة التحويل", value: r.routedTo === "hr" ? "الموارد البشرية" : r.routedTo === "finance" ? "المالية" : "غير موجّهة" },
               { label: "الموقع", value: r.location || "-" },
               { label: "تاريخ الحادثة", value: r.incidentDate ?? "-" },
               { label: "وقت الحادثة", value: r.incidentTime || "-" },
@@ -78,7 +85,7 @@ export default async function IncidentsPage() {
             ]}
             initialAttachments={[]}
             extraSection={
-              hasEmployeeParty(r.parties) ? (
+              r.routedTo === "hr" ? (
                 <HrClosureBlock
                   hrStatus={r.hrStatus}
                   hrAction={r.hrAction}
@@ -86,6 +93,14 @@ export default async function IncidentsPage() {
                   closedBy={r.hrClosedBy}
                   closedAt={r.hrClosedAt}
                   attachmentsRaw={r.hrAttachmentUrl}
+                />
+              ) : r.routedTo === "finance" ? (
+                <FinanceClosureBlock
+                  financeStatus={r.financeStatus}
+                  settlementNumber={r.settlementNumber}
+                  receiptUrl={r.paymentReceiptUrl}
+                  closedBy={r.financeClosedBy}
+                  closedAt={r.financeClosedAt}
                 />
               ) : undefined
             }

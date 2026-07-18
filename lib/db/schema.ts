@@ -99,6 +99,8 @@ export const incident = pgTable("incident", {
   hrSignature: text("hr_signature").default(""),
   gmSignature: text("gm_signature").default(""),
   managerSignature: text("manager_signature").default(""),
+  // جهة التحويل التشغيلية: hr | finance. تبقى null للحوادث القديمة غير الموجّهة.
+  routedTo: text("routed_to"),
   hrAction: text("hr_action").default(""),
   hrActionDate: date("hr_action_date"),
   hrNotes: text("hr_notes").default(""),
@@ -108,6 +110,12 @@ export const incident = pgTable("incident", {
   hrClosedAt: timestamp("hr_closed_at"),
   // مرفقات قرار الموارد البشرية (JSON array من data URLs، بنفس آلية الصور/التواقيع).
   hrAttachmentUrl: text("hr_attachment_url").default(""),
+  // مسار الإغلاق المالي للحوادث المحوّلة إلى المالية.
+  financeStatus: text("finance_status"),
+  settlementNumber: text("settlement_number").default(""),
+  paymentReceiptUrl: text("payment_receipt_url").default(""),
+  financeClosedBy: text("finance_closed_by").default(""),
+  financeClosedAt: timestamp("finance_closed_at"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
@@ -171,6 +179,53 @@ export const training = pgTable("training", {
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
+// سجل الموظفين المرجعي المستخدم في جلسات التدريب وToolbox Talk.
+export const employee = pgTable("employees", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  employeeId: text("employee_id").notNull(),
+  name: text("name").notNull(),
+  designation: text("designation").notNull().default(""),
+  department: text("department").notNull().default(""),
+  company: text("company").notNull().default("MHS"),
+  nationality: text("nationality").notNull().default(""),
+  profileStatus: text("profile_status").notNull().default("complete"),
+  cardCode: text("card_code").default(""),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export const toolboxSession = pgTable("toolbox_session", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  sourceKey: text("source_key").notNull(),
+  documentNo: text("document_no").notNull(),
+  date: text("date").notNull().default(""),
+  time: text("time").notNull().default(""),
+  location: text("location").notNull().default(""),
+  topic: text("topic").notNull().default(""),
+  speaker: text("speaker").notNull().default(""),
+  summary: text("summary").notNull().default(""),
+  photos: text("photos").notNull().default("[]"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export const toolboxAttendee = pgTable("toolbox_attendee", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  sessionId: integer("session_id").notNull(),
+  employeeRefId: integer("employee_ref_id"),
+  employeeId: text("employee_id").notNull().default(""),
+  name: text("name").notNull(),
+  designation: text("designation").notNull().default(""),
+  company: text("company").notNull().default("MHS"),
+  cardCode: text("card_code").notNull().default(""),
+  signature: text("signature").notNull().default(""),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
 // سجل حضور كل متدرب لدورة تدريبية (نموذج MHS-IMS-FR-HSE-2)
 export const trainingAttendee = pgTable("training_attendee", {
   id: serial("id").primaryKey(),
@@ -215,6 +270,7 @@ export const violation = pgTable("violation", {
   userId: text("userId").notNull(),
   documentNo: text("documentNo").default("MHS-IMS-PR-HSE-647"),
   companyName: text("companyName").default(""),
+  employeeRefId: integer("employee_ref_id"),
   employeeName: text("employeeName").notNull(),
   employeeNo: text("employeeNo").default(""),
   nationality: text("nationality").default(""),
