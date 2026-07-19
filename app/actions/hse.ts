@@ -16,6 +16,7 @@ import {
   correctiveAction,
   audit,
   document,
+  documentVersion,
   violation,
   observation,
   attachment,
@@ -27,7 +28,7 @@ import { revalidatePath } from "next/cache"
 import { requireModuleUserId, requireUser } from "@/lib/session"
 import { severityLabels, statusLabels, permitTypePrefix, permitTypeExtraFields } from "@/lib/labels"
 import { effectiveViolationStatus } from "@/lib/violation-status"
-import { put } from "@vercel/blob"
+import { del, put } from "@vercel/blob"
 
 // Convert a base64 data URL (e.g. "data:image/png;base64,....") into a Blob.
 function dataUrlToBlob(dataUrl: string): { blob: Blob; ext: string } | null {
@@ -722,26 +723,44 @@ export async function deleteAudit(id: number) {
 }
 
 /* ---------------- Documents ---------------- */
-export async function getDocuments() {
-  const userId = await getUserId()
-  return db.select().from(document).where(eq(document.userId, userId)).orderBy(desc(document.createdAt))
+async function requireDocumentAdmin() {
+  const currentUser = await requireUser()
+  if (currentUser.role !== "admin") throw new Error("هذا الإجراء متاح للمدير فقط")
+  return currentUser
 }
-export async function createDocument(formData: FormData) {
+
+export async function getDocuments() {
   const userId = await requireModuleUserId("documents")
-  await db.insert(document).values({
-    userId,
-    title: str(formData.get("title")),
-    category: str(formData.get("category")),
-    version: str(formData.get("version"), "1.0"),
-    owner: str(formData.get("owner")),
+  const documents = await db.select().from(document).where(eq(document.userId, userId)).orderBy(desc(document.updatedAt))
+  const versions = await db.select().from(documentVersion).where(eq(documentVersion.userId, userId)).orderBy(desc(documentVersion.versionNumber))
+  return documents.map((item) => ({ ...item, versions: versions.filter((version) => version.documentId === item.id) }))
+}
+
+export async function updateDocumentMetadata(formData: FormData) {
+  const currentUser = await requireDocumentAdmin()
+  const id = Number(formData.get("id"))
+  if (!Number.isFinite(id)) throw new Error("معرّف الوثيقة غير صالح")
+  await db.update(document).set({
+    title: str(formData.get("title")).trim(),
+    category: str(formData.get("category")).trim(),
+    owner: str(formData.get("owner")).trim(),
     status: str(formData.get("status"), "active"),
     reviewDate: dateOrNull(formData.get("reviewDate")),
-  })
+    description: str(formData.get("description")).trim(),
+    updatedAt: new Date(),
+  }).where(and(eq(document.id, id), eq(document.userId, currentUser.id)))
   revalidatePath("/documents")
 }
+
 export async function deleteDocument(id: number) {
-  const userId = await requireModuleUserId("documents")
-  await db.delete(document).where(and(eq(document.id, id), eq(document.userId, userId)))
+  const currentUser = await requireDocumentAdmin()
+  const [owned] = await db.select().from(document).where(and(eq(document.id, id), eq(document.userId, currentUser.id))).limit(1)
+  if (!owned) throw new Error("الوثيقة غير موجودة")
+  const versions = await db.select().from(documentVersion).where(and(eq(documentVersion.documentId, id), eq(documentVersion.userId, currentUser.id)))
+  const paths = Array.from(new Set([owned.blobPathname, ...versions.map((version) => version.blobPathname)].filter(Boolean)))
+  if (paths.length) await del(paths)
+  await db.delete(documentVersion).where(and(eq(documentVersion.documentId, id), eq(documentVersion.userId, currentUser.id)))
+  await db.delete(document).where(and(eq(document.id, id), eq(document.userId, currentUser.id)))
   revalidatePath("/documents")
 }
 
