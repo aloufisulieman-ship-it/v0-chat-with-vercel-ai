@@ -17,13 +17,26 @@ import { IncidentTrendChart, IncidentTypeChart, SeverityChart } from "@/componen
 import { StatusBadge, SeverityBadge } from "@/components/status-badge"
 import { requireUser } from "@/lib/session"
 import { getDashboardData } from "@/app/actions/hse"
+import { mockDashboardData } from "@/lib/dashboard-mock"
 import { incidentTypeLabels } from "@/lib/labels"
 import { categoryLabels } from "@/lib/violation-category"
 import { effectiveViolationStatus, isViolationClosed } from "@/lib/violation-status"
 
 export default async function DashboardPage() {
   const user = await requireUser()
-  const { incidents, inspections, permits, risks, actions, observations, violations } = await getDashboardData()
+  const real = await getDashboardData()
+  // عند عدم وجود بيانات فعلية بعد، تُعرض بيانات تجريبية واقعية غير صفرية.
+  const isEmpty =
+    real.incidents.length === 0 &&
+    real.violations.length === 0 &&
+    real.inspections.length === 0 &&
+    real.permits.length === 0 &&
+    real.risks.length === 0 &&
+    real.actions.length === 0 &&
+    real.observations.length === 0
+  const { incidents, inspections, permits, risks, actions, observations, violations } = (
+    isEmpty ? (mockDashboardData as unknown as typeof real) : real
+  )
 
   // مفتوحة = غير مغلقة وفق الحالة الفعلية (مسار الإحالة) لا الحالة المخزّنة.
   const openViolations = violations.filter((v) => !isViolationClosed(v)).length

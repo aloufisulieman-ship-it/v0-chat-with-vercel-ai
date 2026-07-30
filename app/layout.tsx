@@ -22,7 +22,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="ar" dir="rtl" className="bg-background">
+    <html lang="ar" dir="rtl" className="dark bg-background">
       <body className={`${cairo.variable} font-sans antialiased`}>
         {children}
         <Toaster />
