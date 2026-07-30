@@ -32,26 +32,10 @@ function toNumber(rows: { value: number }[]) {
  */
 export async function getOpenIncidentsCount(): Promise<number> {
   const userId = await getUserId()
-  // [v0] تشخيص: عدّ كل السجلات بدون شرط أولاً، ثم مع الشرط.
-  const totalRows = await db.select({ value: count() }).from(incident)
-  const scopedRows = await db
-    .select({ value: count() })
-    .from(incident)
-    .where(eq(incident.userId, userId))
   const rows = await db
     .select({ value: count() })
     .from(incident)
     .where(and(eq(incident.userId, userId), ne(incident.status, "closed")))
-  console.log(
-    "[v0] getOpenIncidentsCount → userId:",
-    userId,
-    "| incident total (no WHERE):",
-    toNumber(totalRows),
-    "| scoped to user:",
-    toNumber(scopedRows),
-    "| open (status<>closed):",
-    toNumber(rows),
-  )
   return toNumber(rows)
 }
 
@@ -72,7 +56,6 @@ export async function getActivePermitsCount(): Promise<number> {
         or(isNull(permit.validTo), gte(permit.validTo, today)),
       ),
     )
-  console.log("[v0] getActivePermitsCount →", toNumber(rows))
   return toNumber(rows)
 }
 
@@ -93,9 +76,7 @@ export async function getObservationBreakdown(): Promise<{ positive: number; con
       .from(observation)
       .where(and(eq(observation.userId, userId), ne(observation.kind, "positive"))),
   ])
-  const result = { positive: toNumber(pos), concerns: toNumber(con) }
-  console.log("[v0] getObservationBreakdown →", result)
-  return result
+  return { positive: toNumber(pos), concerns: toNumber(con) }
 }
 
 /**
@@ -117,7 +98,6 @@ export async function getInspectionsThisMonthCount(): Promise<number> {
         lte(refDate, end),
       ),
     )
-  console.log("[v0] getInspectionsThisMonthCount →", toNumber(rows), "| range:", start, "→", end)
   return toNumber(rows)
 }
 
@@ -143,11 +123,5 @@ export async function getHighRiskCount(): Promise<number> {
       .from(observation)
       .where(and(eq(observation.userId, userId), eq(observation.kind, "observation"))),
   ])
-  console.log(
-    "[v0] getHighRiskCount → highRisks (matrix>=9):",
-    toNumber(highRisks),
-    "| nearMiss observations:",
-    toNumber(nearMiss),
-  )
   return toNumber(highRisks) + toNumber(nearMiss)
 }
