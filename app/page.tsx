@@ -17,39 +17,38 @@ import { IncidentTrendChart, IncidentTypeChart, SeverityChart } from "@/componen
 import { StatusBadge, SeverityBadge } from "@/components/status-badge"
 import { requireUser } from "@/lib/session"
 import { getDashboardData } from "@/app/actions/hse"
-import { mockDashboardData } from "@/lib/dashboard-mock"
+import {
+  getOpenIncidentsCount,
+  getActivePermitsCount,
+  getObservationBreakdown,
+  getInspectionsThisMonthCount,
+  getHighRiskCount,
+} from "@/app/actions/dashboard-metrics"
 import { incidentTypeLabels } from "@/lib/labels"
 import { categoryLabels } from "@/lib/violation-category"
 import { effectiveViolationStatus, isViolationClosed } from "@/lib/violation-status"
 
 export default async function DashboardPage() {
   const user = await requireUser()
-  const real = await getDashboardData()
-  // عند عدم وجود بيانات فعلية بعد، تُعرض بيانات تجريبية واقعية غير صفرية.
-  const isEmpty =
-    real.incidents.length === 0 &&
-    real.violations.length === 0 &&
-    real.inspections.length === 0 &&
-    real.permits.length === 0 &&
-    real.risks.length === 0 &&
-    real.actions.length === 0 &&
-    real.observations.length === 0
-  const { incidents, inspections, permits, risks, actions, observations, violations } = (
-    isEmpty ? (mockDashboardData as unknown as typeof real) : real
-  )
+  // مؤشرات الأداء تُحسب عبر server actions مستقلة (استعلامات Drizzle مباشرة على قاعدة البيانات).
+  const [{ incidents, inspections, permits, risks, actions, observations, violations }, openIncidents, activePermits, observationBreakdown, inspectionsThisMonth, highRisks] =
+    await Promise.all([
+      getDashboardData(),
+      getOpenIncidentsCount(),
+      getActivePermitsCount(),
+      getObservationBreakdown(),
+      getInspectionsThisMonthCount(),
+      getHighRiskCount(),
+    ])
+
+  const positiveObservations = observationBreakdown.positive
+  const nearMisses = observationBreakdown.concerns
 
   // مفتوحة = غير مغلقة وفق الحالة الفعلية (مسار الإحالة) لا الحالة المخزّنة.
   const openViolations = violations.filter((v) => !isViolationClosed(v)).length
   const recentViolations = violations.slice(0, 5)
 
-  const openIncidents = incidents.filter((i) => i.status !== "closed").length
-  // الملاحظات الوشيكة = أشباه الحوادث + ملاحظات الجولة الميدانية.
-  const patrolObservations = observations.filter((o) => o.kind === "observation").length
-  const positiveObservations = observations.filter((o) => o.kind === "positive").length
-  const nearMisses = incidents.filter((i) => i.type === "near_miss").length + patrolObservations
   const openActions = actions.filter((a) => a.status !== "closed").length
-  const highRisks = risks.filter((r) => (r.likelihood ?? 1) * (r.consequence ?? 1) >= 9).length
-  const activePermits = permits.filter((p) => p.status === "active" || p.status === "approved").length
   const avgCompliance =
     inspections.length > 0
       ? Math.round(inspections.reduce((s, i) => s + (i.compliance ?? 0), 0) / inspections.length)
@@ -110,7 +109,7 @@ export default async function DashboardPage() {
         <MiniStat label="ملاحظات إيجابية" value={positiveObservations} tone="positive" />
         <MiniStat label="الإجراءات المفتوحة" value={openActions} />
         <MiniStat label="مخاطر عالية" value={highRisks} />
-        <MiniStat label="عمليات التفتيش" value={inspections.length} />
+        <MiniStat label="عمليات التفتيش (هذا الشهر)" value={inspectionsThisMonth} />
         <MiniStat label="سجل المخاطر" value={risks.length} />
         <MiniStat label="إجمالي التصاريح" value={permits.length} />
       </div>
