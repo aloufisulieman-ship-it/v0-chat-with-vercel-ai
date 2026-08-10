@@ -38,6 +38,7 @@ import {
   type DetectionType,
 } from "@/lib/ai-monitoring"
 import { updateDetectionStatus, deleteDetection } from "@/app/actions/ai-monitoring"
+import { ConnectedCameras } from "./connected-cameras"
 
 export type DetectionDto = {
   id: number
@@ -327,6 +328,9 @@ export function MonitoringDashboard({
           </button>
         )}
       </Card>
+
+      {/* الكاميرات المتصلة الآن (بث شبه حي) */}
+      <ConnectedCameras isAdmin={isAdmin} />
 
       {/* جدول البث المباشر للاكتشافات */}
       <div>

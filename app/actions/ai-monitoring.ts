@@ -1,8 +1,8 @@
 "use server"
 
 import { db } from "@/lib/db"
-import { aiDetection, user } from "@/lib/db/schema"
-import { and, desc, eq } from "drizzle-orm"
+import { aiDetection, activeCameraStream, user } from "@/lib/db/schema"
+import { and, desc, eq, gte } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { requireModuleUserId } from "@/lib/session"
 import type { DetectionType, DetectionStatus } from "@/lib/ai-monitoring"
@@ -43,6 +43,48 @@ export async function getDetections(): Promise<AiDetection[]> {
     .from(aiDetection)
     .where(eq(aiDetection.userId, userId))
     .orderBy(desc(aiDetection.detectedAt))
+}
+
+export type ActiveCameraStream = typeof activeCameraStream.$inferSelect
+
+// نافذة اعتبار الكاميرا "متصلة حالياً" (بالثواني): آخر إرسال خلال آخر دقيقتين.
+const ACTIVE_WINDOW_SECONDS = 120
+
+// تحديث (أو إنشاء) سجل الكاميرا المتصلة مع آخر إطار مُستلم.
+// يُستدعى من مسار /api/ai-monitoring/analyze مع كل إرسال إطار جديد.
+export async function touchCameraStream(input: {
+  cameraId: string
+  cameraLocation: string
+  lastFrameUrl: string
+}): Promise<void> {
+  const userId = await requireModuleUserId("ai_monitoring")
+  const cameraId = (input.cameraId || "كاميرا الهاتف").slice(0, 120)
+  const cameraLocation = (input.cameraLocation || "").slice(0, 200)
+  const lastFrameUrl = input.lastFrameUrl || ""
+
+  await db
+    .insert(activeCameraStream)
+    .values({ userId, cameraId, cameraLocation, lastFrameUrl, lastSeenAt: new Date() })
+    .onConflictDoUpdate({
+      target: [activeCameraStream.userId, activeCameraStream.cameraId],
+      set: { cameraLocation, lastFrameUrl, lastSeenAt: new Date() },
+    })
+}
+
+// الكاميرات المتصلة حالياً (آخر إرسال خلال نافذة الاعتبار)، الأحدث أولاً.
+export async function getActiveCameraStreams(): Promise<ActiveCameraStream[]> {
+  const userId = await requireModuleUserId("ai_monitoring")
+  const since = new Date(Date.now() - ACTIVE_WINDOW_SECONDS * 1000)
+  const base = db
+    .select()
+    .from(activeCameraStream)
+    .where(
+      (await isManager(userId))
+        ? gte(activeCameraStream.lastSeenAt, since)
+        : and(eq(activeCameraStream.userId, userId), gte(activeCameraStream.lastSeenAt, since)),
+    )
+    .orderBy(desc(activeCameraStream.lastSeenAt))
+  return base
 }
 
 // توليد معرّف الاكتشاف بالصيغة AID-YYYY-### تسلسلياً حسب السنة.

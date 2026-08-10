@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, serial, integer, date } from "drizzle-orm/pg-core"
+import { pgTable, text, timestamp, boolean, serial, integer, date, uniqueIndex } from "drizzle-orm/pg-core"
 
 // ---------- Better Auth tables (do not rename columns) ----------
 export const user = pgTable("user", {
@@ -362,6 +362,25 @@ export const aiDetection = pgTable("ai_detections", {
   notes: text("notes").default(""),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
+
+// كاميرات الهاتف المتصلة حالياً — سجل واحد لكل كاميرا (userId + cameraId فريد).
+// يُحدّث lastFrameUrl و lastSeenAt مع كل استدعاء لمسار /api/ai-monitoring/analyze،
+// ما يتيح للوحة المدير عرض بث "شبه حي" لكل كاميرا نشطة.
+export const activeCameraStream = pgTable(
+  "active_camera_streams",
+  {
+    id: serial("id").primaryKey(),
+    userId: text("userId").notNull(),
+    cameraId: text("camera_id").notNull(),
+    cameraLocation: text("camera_location").notNull().default(""),
+    lastFrameUrl: text("last_frame_url").notNull().default(""),
+    lastSeenAt: timestamp("last_seen_at").notNull().defaultNow(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (t) => ({
+    userCameraUnique: uniqueIndex("active_cam_user_camera_idx").on(t.userId, t.cameraId),
+  }),
+)
 
 export const document = pgTable("document", {
   id: serial("id").primaryKey(),

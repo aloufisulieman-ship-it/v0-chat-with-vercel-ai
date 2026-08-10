@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { generateObject } from "ai"
 import { z } from "zod"
-import { saveDetection } from "@/app/actions/ai-monitoring"
+import { saveDetection, touchCameraStream } from "@/app/actions/ai-monitoring"
 import {
   detectionTypeOptions,
   detectionTypeDescriptions,
@@ -77,6 +77,10 @@ export async function POST(req: Request) {
 
     const cameraId = (body.cameraId || "").toString()
     const cameraLocation = (body.cameraLocation || "").toString()
+
+    // تحديث حالة الكاميرا المتصلة بآخر إطار (حتى لو لم تُرصد أي مخالفة)
+    // ليظهر البث شبه الحي في لوحة المدير.
+    await touchCameraStream({ cameraId, cameraLocation, lastFrameUrl: image })
 
     // حفظ كل مخالفة مكتشفة كسجل مستقل مع لقطة الإثبات.
     const saved = []
