@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from 'react'
 import useSWR from 'swr'
-import { AlertTriangle, Ban, Boxes, Gauge, HardHat, TrafficCone } from 'lucide-react'
+import Link from 'next/link'
+import { AlertTriangle, Ban, Boxes, Camera, Gauge, HardHat, TrafficCone } from 'lucide-react'
 import { toast } from 'sonner'
 import { updateDetectionStatus } from '@/app/actions/ai-monitoring'
 import { ViolationFormDialog, type ViolationPrefill } from '@/app/violations/violation-form'
@@ -36,6 +37,7 @@ export function MonitoringClient({ initial, employees }: { initial: Detection[];
   async function setStatus(status:'acknowledged'|'false_positive') { if(!selected)return; await updateDetectionStatus(selected.id,status); toast.success(status==='acknowledged'?'تم تأكيد المخالفة':'تم رفض الإنذار'); setSelected(null); mutate() }
 
   return <div className="flex flex-col gap-6">
+    <div className="flex justify-end"><Button asChild><Link href="/ai-monitoring/mobile-camera"><Camera data-icon="inline-start" />بث كاميرا الهاتف</Link></Button></div>
     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">{Object.entries(types).map(([key,item])=>{const Icon=item.icon; return <Card key={key}><CardHeader className="flex-row items-center justify-between gap-2 pb-2"><CardTitle className="text-sm">{item.label}</CardTitle><Icon className="size-5 text-primary" /></CardHeader><CardContent><strong className="font-mono text-3xl">{data.filter(d=>d.detectionType===key&&d.detectedAt.slice(0,10)===today).length}</strong><p className="text-xs text-muted-foreground">حالة اليوم</p></CardContent></Card>})}</section>
     <section className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">
       <Card><CardHeader><CardTitle>خريطة مناطق الرصد الحية</CardTitle></CardHeader><CardContent className="grid min-h-72 gap-3 sm:grid-cols-2">{locations.length?locations.map(location=>{const hits=data.filter(d=>d.cameraLocation===location&&d.status==='new'); const worst=hits.find(d=>d.severity==='critical')?.severity||hits.find(d=>d.severity==='high')?.severity||hits.find(d=>d.severity==='medium')?.severity||'low'; return <button key={location} className="flex flex-col justify-between rounded-xl border bg-muted/30 p-4 text-right hover:bg-muted" onClick={()=>setFilters(f=>({...f,camera:data.find(d=>d.cameraLocation===location)?.cameraId||'all'}))}><span className="font-semibold">{location}</span><span className="flex items-center gap-2 text-sm text-muted-foreground"><i className={`size-3 rounded-full ${severityClass[worst]}`} />{hits.length} تنبيهات نشطة</span></button>}):<p className="m-auto text-muted-foreground">لا توجد مناطق مرصودة بعد</p>}</CardContent></Card>

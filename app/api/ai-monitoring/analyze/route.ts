@@ -1,6 +1,12 @@
 import { generateText, Output } from 'ai'
 import { z } from 'zod'
 import { createDetection } from '@/app/actions/ai-monitoring'
+import { auth } from '@/lib/auth'
+import { db } from '@/lib/db'
+import { user as userTable } from '@/lib/db/schema'
+import { hasModuleAccess } from '@/lib/permissions'
+import { eq } from 'drizzle-orm'
+import { headers } from 'next/headers'
 
 export const runtime = 'nodejs'
 
@@ -18,11 +24,21 @@ const detectionSchema = z.object({
   notes: z.string(),
 })
 
-export async function POST(request: Request) {
+async function isAuthorized(request: Request) {
   const configuredKey = process.env.AI_MONITORING_API_KEY
-  if (!configuredKey) return Response.json({ error: 'AI_MONITORING_API_KEY غير مهيأ' }, { status: 503 })
   const token = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '')
-  if (token !== configuredKey) return Response.json({ error: 'غير مصرح' }, { status: 401 })
+  if (configuredKey && token === configuredKey) return true
+
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (!session?.user?.id) return false
+  const rows = await db.select({ role: userTable.role, status: userTable.status, permissions: userTable.permissions })
+    .from(userTable).where(eq(userTable.id, session.user.id)).limit(1)
+  const currentUser = rows[0]
+  return Boolean(currentUser && currentUser.status === 'approved' && hasModuleAccess(currentUser.role, currentUser.permissions, 'ai_monitoring'))
+}
+
+export async function POST(request: Request) {
+  if (!(await isAuthorized(request))) return Response.json({ error: 'غير مصرح' }, { status: 401 })
 
   const parsed = requestSchema.safeParse(await request.json())
   if (!parsed.success) return Response.json({ error: 'بيانات الإطار غير صالحة' }, { status: 400 })
