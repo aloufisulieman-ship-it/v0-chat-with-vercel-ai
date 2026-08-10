@@ -340,6 +340,29 @@ export const attachment = pgTable("attachment", {
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
+// ---------- المراقبة الذكية بالذكاء الاصطناعي (كاميرات ساحات الرافعات) ----------
+// detectionType: أحد الأنواع الستة (no_ppe / traffic_congestion / unsafe_stacking /
+//   overspeed / restricted_area / pedestrian_near_forklift).
+// severity: low / medium / high / critical.
+// status: new / acknowledged / resolved / false_positive.
+export const aiDetection = pgTable("ai_detections", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  detectionId: text("detection_id").notNull(), // AID-YYYY-###
+  cameraId: text("camera_id").notNull().default(""),
+  cameraLocation: text("camera_location").notNull().default(""),
+  detectionType: text("detection_type").notNull().default("no_ppe"),
+  severity: text("severity").notNull().default("low"),
+  confidenceScore: integer("confidence_score").notNull().default(0), // 0-100
+  snapshotUrl: text("snapshot_url").notNull().default(""),
+  detectedAt: timestamp("detected_at").notNull().defaultNow(),
+  status: text("status").notNull().default("new"),
+  acknowledgedBy: text("acknowledged_by").default(""),
+  resolvedBy: text("resolved_by").default(""),
+  notes: text("notes").default(""),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
 export const document = pgTable("document", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
