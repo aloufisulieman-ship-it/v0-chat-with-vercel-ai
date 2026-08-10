@@ -149,20 +149,29 @@ function SignaturePad({ label, value, onChange }: { label: string; value: string
   )
 }
 
-export function ViolationFormDialog({ employees = [] }: { employees?: EmployeeRecord[] }) {
+export type ViolationPrefill = {
+  violationType?: string
+  place?: string
+  violationDate?: string
+  violationTime?: string
+  description?: string
+  images?: string[]
+}
+
+export function ViolationFormDialog({ employees = [], prefill, triggerLabel = "تسجيل مخالفة جديدة" }: { employees?: EmployeeRecord[]; prefill?: ViolationPrefill; triggerLabel?: string }) {
   const [open, setOpen] = useState(false)
   const [step, setStep] = useState(1)
   const [isPending, startTransition] = useTransition()
 
   const [form, setForm] = useState({
     employeeRefId: "", employeeName: "", employeeNo: "", nationality: "", companyName: "",
-    documentNo: "MHS-IMS-PR-HSE-647", violationDate: "", violationTime: "",
-    place: "", violationType: "", category: "", internalAction: "", actionDetail: "",
-    description: "", witnesses: "",
+    documentNo: "MHS-IMS-PR-HSE-647", violationDate: prefill?.violationDate ?? "", violationTime: prefill?.violationTime ?? "",
+    place: prefill?.place ?? "", violationType: prefill?.violationType ?? "", category: "", internalAction: "", actionDetail: "",
+    description: prefill?.description ?? "", witnesses: "",
     evidences: "", proposedAction: "", status: "open", entryMode: "electronic",
   })
 
-  const [images, setImages] = useState<string[]>([])
+  const [images, setImages] = useState<string[]>(prefill?.images ?? [])
   // النماذج الورقية الممسوحة للمخالفة اليدوية: { name, dataUrl }
   const [manualDocs, setManualDocs] = useState<{ name: string; dataUrl: string }[]>([])
   const [editorSignature, setEditorSignature] = useState("")
@@ -261,7 +270,7 @@ export function ViolationFormDialog({ employees = [] }: { employees?: EmployeeRe
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetForm() }}>
       <DialogTrigger asChild>
-        <Button className="gap-2"><FileWarning className="size-4" /> تسجيل مخالفة جديدة</Button>
+        <Button className="gap-2"><FileWarning className="size-4" /> {triggerLabel}</Button>
       </DialogTrigger>
       <DialogContent className="max-h-[92svh] overflow-y-auto sm:max-w-2xl" dir="rtl">
         <DialogHeader>

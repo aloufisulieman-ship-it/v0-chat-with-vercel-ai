@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, serial, integer, date } from "drizzle-orm/pg-core"
+import { pgTable, text, timestamp, boolean, serial, integer, date, numeric } from "drizzle-orm/pg-core"
 
 // ---------- Better Auth tables (do not rename columns) ----------
 export const user = pgTable("user", {
@@ -54,6 +54,35 @@ export const verification = pgTable("verification", {
   expiresAt: timestamp("expiresAt").notNull(),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+// ---------- AI camera monitoring ----------
+export const aiDetection = pgTable("ai_detections", {
+  id: serial("id").primaryKey(),
+  detectionId: text("detection_id").notNull().unique(),
+  cameraId: text("camera_id").notNull(),
+  cameraLocation: text("camera_location").notNull(),
+  detectionType: text("detection_type").notNull(),
+  severity: text("severity").notNull(),
+  confidenceScore: numeric("confidence_score", { precision: 5, scale: 2 }).notNull(),
+  snapshotUrl: text("snapshot_url").notNull(),
+  boundingBox: text("bounding_box"),
+  detectedAt: timestamp("detected_at").notNull().defaultNow(),
+  status: text("status").notNull().default("new"),
+  acknowledgedBy: text("acknowledged_by"),
+  resolvedBy: text("resolved_by"),
+  notes: text("notes").default(""),
+  createdBy: text("created_by").notNull(),
+})
+
+export const aiMonitoringNotification = pgTable("ai_monitoring_notifications", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  detectionId: integer("detection_id").notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 })
 
 // ---------- HSE app tables (scoped by userId, no FK) ----------

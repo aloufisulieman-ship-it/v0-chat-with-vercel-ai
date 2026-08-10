@@ -1,6 +1,8 @@
 "use client"
 
-import { useState, type ReactNode } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
+import useSWR from "swr"
+import { toast } from "sonner"
 import { Menu, Search, Bell } from "lucide-react"
 import { AppSidebar } from "@/components/app-sidebar"
 
@@ -18,6 +20,22 @@ export function AppShell({
   children: ReactNode
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const previousCount = useRef(0)
+  const { data: alertData, mutate: refreshAlerts } = useSWR<{ count: number; notifications: { message: string }[] }>(
+    "/api/ai-monitoring/notifications",
+    (url: string) => fetch(url).then((response) => response.json()),
+    { refreshInterval: 10000 },
+  )
+  const unreadCount = alertData?.count ?? 0
+  useEffect(() => {
+    if (unreadCount > previousCount.current && previousCount.current > 0) toast.error("تنبيه سلامة جديد من المراقبة الذكية")
+    previousCount.current = unreadCount
+  }, [unreadCount])
+  async function clearAlerts() {
+    if (!unreadCount) return
+    await fetch("/api/ai-monitoring/notifications", { method: "POST" })
+    await refreshAlerts()
+  }
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -44,11 +62,13 @@ export function AppShell({
 
           <div className="flex flex-1 items-center justify-end gap-2 md:flex-none">
             <button
+              onClick={clearAlerts}
               className="relative rounded-md p-2 text-foreground hover:bg-muted"
-              aria-label="الإشعارات"
+              aria-label={`${unreadCount} تنبيهات غير مطّلع عليها`}
+              title="تمييز تنبيهات المراقبة كمطّلع عليها"
             >
               <Bell className="size-5" />
-              <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-destructive" />
+              {unreadCount > 0 && <span className="absolute -right-1 -top-1 flex min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-xs font-bold text-destructive-foreground">{unreadCount > 99 ? "99+" : unreadCount}</span>}
             </button>
           </div>
         </header>

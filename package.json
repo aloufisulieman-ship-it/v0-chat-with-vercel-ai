@@ -39,6 +39,7 @@
     "@radix-ui/react-tooltip": "1.2.8",
     "@vercel/analytics": "1.6.1",
     "@vercel/blob": "^2.4.0",
+    "ai": "^7.0.58",
     "autoprefixer": "^10.4.20",
     "better-auth": "^1.6.14",
     "class-variance-authority": "^0.7.1",

@@ -23,6 +23,7 @@ import {
   UserCog,
   LogOut,
   X,
+  ScanEye,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { authClient } from "@/lib/auth-client"
@@ -41,6 +42,7 @@ const nav: { href: string; label: string; icon: typeof LayoutDashboard; module: 
   { href: "/employees", label: "سجل الموظفين", icon: Users, module: "training" },
   { href: "/violations", label: "المخالفات", icon: Ban, module: "violations" },
   { href: "/patrol", label: "الجولة التفتيشية", icon: Footprints, module: "violations" },
+  { href: "/ai-monitoring", label: "المراقبة الذكية", icon: ScanEye, module: "ai_monitoring" },
   { href: "/hr", label: "الموارد البشرية", icon: UserCog, module: "hr" },
   { href: "/finance", label: "المالية", icon: Banknote, module: "finance" },
   { href: "/actions", label: "الإجراءات التصحيحية", icon: CheckSquare, module: "actions" },

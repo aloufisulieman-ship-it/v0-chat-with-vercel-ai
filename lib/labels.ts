@@ -125,6 +125,7 @@ export const departmentOptions = [
   { value: "inspector", label: "مفتش السلامة" },
   { value: "gm", label: "المدير العام" },
   { value: "operations", label: "العمليات" },
+  { value: "control_room", label: "غرفة التحكم" },
 ]
 export const departmentLabels: Record<string, string> = Object.fromEntries(
   departmentOptions.map((d) => [d.value, d.label]),
@@ -139,6 +140,7 @@ export const moduleOptions = [
   { value: "permits", label: "تصاريح العمل" },
   { value: "training", label: "التدريب" },
   { value: "violations", label: "المخالفات" },
+  { value: "ai_monitoring", label: "المراقبة الذكية" },
   { value: "hr", label: "الموارد البشرية" },
   { value: "finance", label: "المالية" },
   { value: "actions", label: "الإجراءات التصحيحية" },
