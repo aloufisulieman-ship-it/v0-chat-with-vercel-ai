@@ -1,0 +1,302 @@
+"use client"
+
+import { useCallback, useEffect, useRef, useState } from "react"
+import { Camera, Play, Square, AlertTriangle, CheckCircle2, Loader2, BatteryCharging } from "lucide-react"
+import { Card } from "@/components/ui/card"
+import { cn } from "@/lib/utils"
+import { detectionTypeLabels, severityLabels, severityStyles } from "@/lib/ai-monitoring"
+
+const CAPTURE_INTERVAL_MS = 8000
+const MAX_WIDTH = 720
+const JPEG_QUALITY = 0.6
+
+type LastResult = {
+  at: number
+  count: number
+  detections: { type: string; severity: string; confidence: number; description: string }[]
+  error?: string
+}
+
+export function MobileCamera() {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null)
+  const sendingRef = useRef(false)
+
+  const [cameraName, setCameraName] = useState("")
+  const [location, setLocation] = useState("")
+  const [streaming, setStreaming] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [sentCount, setSentCount] = useState(0)
+  const [lastSentAt, setLastSentAt] = useState<number | null>(null)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [lastResult, setLastResult] = useState<LastResult | null>(null)
+
+  // استرجاع اسم الكاميرا والموقع من التخزين المحلي.
+  useEffect(() => {
+    setCameraName(localStorage.getItem("aiCam.name") ?? "")
+    setLocation(localStorage.getItem("aiCam.location") ?? "")
+  }, [])
+
+  useEffect(() => {
+    localStorage.setItem("aiCam.name", cameraName)
+  }, [cameraName])
+  useEffect(() => {
+    localStorage.setItem("aiCam.location", location)
+  }, [location])
+
+  const captureAndSend = useCallback(async () => {
+    if (sendingRef.current) return
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    if (!video || !canvas || video.videoWidth === 0) return
+
+    const scale = Math.min(1, MAX_WIDTH / video.videoWidth)
+    canvas.width = Math.round(video.videoWidth * scale)
+    canvas.height = Math.round(video.videoHeight * scale)
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+    const image = canvas.toDataURL("image/jpeg", JPEG_QUALITY)
+
+    sendingRef.current = true
+    setAnalyzing(true)
+    setSentCount((c) => c + 1)
+    setLastSentAt(Date.now())
+    try {
+      const res = await fetch("/api/ai-monitoring/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image,
+          cameraId: cameraName || "كاميرا الهاتف",
+          cameraLocation: location,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setLastResult({ at: Date.now(), count: 0, detections: [], error: data?.error || "خطأ في التحليل" })
+      } else {
+        setLastResult({ at: Date.now(), count: data.count ?? 0, detections: data.detections ?? [] })
+      }
+    } catch {
+      setLastResult({ at: Date.now(), count: 0, detections: [], error: "تعذّر الاتصال بالخادم" })
+    } finally {
+      sendingRef.current = false
+      setAnalyzing(false)
+    }
+  }, [cameraName, location])
+
+  const stop = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
+    streamRef.current?.getTracks().forEach((t) => t.stop())
+    streamRef.current = null
+    if (videoRef.current) videoRef.current.srcObject = null
+    wakeLockRef.current?.release().catch(() => {})
+    wakeLockRef.current = null
+    setStreaming(false)
+    setAnalyzing(false)
+  }, [])
+
+  const start = useCallback(async () => {
+    setError(null)
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError("متصفحك لا يدعم الوصول إلى الكاميرا.")
+      return
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" } },
+        audio: false,
+      })
+      streamRef.current = stream
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        await videoRef.current.play().catch(() => {})
+      }
+      // محاولة إبقاء الشاشة مضاءة أثناء البث.
+      try {
+        const wl = (navigator as unknown as {
+          wakeLock?: { request: (t: string) => Promise<{ release: () => Promise<void> }> }
+        }).wakeLock
+        if (wl) wakeLockRef.current = await wl.request("screen")
+      } catch {
+        /* غير مدعوم — يتم التجاهل */
+      }
+      setStreaming(true)
+      // أول التقاط فوري ثم كل 8 ثوانٍ.
+      captureAndSend()
+      intervalRef.current = setInterval(captureAndSend, CAPTURE_INTERVAL_MS)
+    } catch (err) {
+      const name = err instanceof Error ? err.name : ""
+      if (name === "NotAllowedError") setError("تم رفض إذن الكاميرا. فعّله من إعدادات المتصفح.")
+      else if (name === "NotFoundError") setError("لم يتم العثور على كاميرا في هذا الجهاز.")
+      else setError("تعذّر تشغيل الكاميرا.")
+    }
+  }, [captureAndSend])
+
+  useEffect(() => () => stop(), [stop])
+
+  return (
+    <div className="mx-auto flex w-full max-w-xl flex-col gap-5">
+      {/* تنبيه إبقاء الشاشة والشحن */}
+      <Card className="flex items-start gap-3 border-accent/30 bg-accent/10 p-4">
+        <BatteryCharging className="mt-0.5 size-5 shrink-0 text-amber-700 dark:text-amber-400" />
+        <p className="text-sm text-amber-800 dark:text-amber-300">
+          أبقِ الشاشة مفتوحة والهاتف بالشحن أثناء البث لضمان استمرار إرسال الإطارات للتحليل.
+        </p>
+      </Card>
+
+      {/* حقول الكاميرا */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium text-foreground">اسم الكاميرا</span>
+          <input
+            value={cameraName}
+            onChange={(e) => setCameraName(e.target.value)}
+            placeholder="مثال: كاميرا البوابة 1"
+            disabled={streaming}
+            className="rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-60"
+          />
+        </label>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium text-foreground">الموقع</span>
+          <input
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            placeholder="مثال: ساحة الرافعات الشمالية"
+            disabled={streaming}
+            className="rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-60"
+          />
+        </label>
+      </div>
+
+      {/* معاينة الكاميرا */}
+      <Card className="relative overflow-hidden bg-black p-0">
+        <video
+          ref={videoRef}
+          playsInline
+          muted
+          className="aspect-[3/4] w-full object-cover sm:aspect-video"
+        />
+        {!streaming && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center text-white/70">
+            <Camera className="size-10" />
+            <span className="text-sm">اضغط «بدء البث» لتشغيل الكاميرا الخلفية</span>
+          </div>
+        )}
+        {streaming && (
+          <div className="absolute right-3 top-3 flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white">
+            <span className="size-2 animate-pulse rounded-full bg-destructive" />
+            بث مباشر
+          </div>
+        )}
+        {analyzing && (
+          <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white">
+            <Loader2 className="size-3.5 animate-spin" />
+            جارٍ التحليل
+          </div>
+        )}
+        <canvas ref={canvasRef} className="hidden" />
+      </Card>
+
+      {error && (
+        <Card className="flex items-start gap-3 border-destructive/30 bg-destructive/10 p-4">
+          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
+          <p className="text-sm text-destructive">{error}</p>
+        </Card>
+      )}
+
+      {/* أزرار التحكم */}
+      <div className="flex gap-3">
+        {!streaming ? (
+          <button
+            onClick={start}
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            <Play className="size-4" />
+            بدء البث
+          </button>
+        ) : (
+          <button
+            onClick={stop}
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-destructive px-4 py-3 text-sm font-semibold text-destructive-foreground transition-colors hover:bg-destructive/90"
+          >
+            <Square className="size-4" />
+            إيقاف البث
+          </button>
+        )}
+      </div>
+
+      {/* عدادات وآخر نتيجة */}
+      <div className="grid grid-cols-2 gap-3">
+        <Card className="flex flex-col gap-1 p-4">
+          <span className="text-xs text-muted-foreground">عدد الإطارات المُرسَلة</span>
+          <span className="text-2xl font-bold text-foreground">{sentCount}</span>
+        </Card>
+        <Card className="flex flex-col gap-1 p-4">
+          <span className="text-xs text-muted-foreground">آخر إرسال</span>
+          <span className="text-sm font-medium text-foreground" dir="ltr">
+            {lastSentAt ? new Date(lastSentAt).toLocaleTimeString("ar") : "—"}
+          </span>
+        </Card>
+      </div>
+
+      {/* آخر نتيجة تحليل */}
+      <Card className="flex flex-col gap-3 p-4">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-semibold text-foreground">آخر نتيجة تحليل</span>
+          {lastResult && !lastResult.error && lastResult.count === 0 && (
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
+              <CheckCircle2 className="size-3.5" />
+              لا مخالفات
+            </span>
+          )}
+        </div>
+        {!lastResult ? (
+          <p className="text-sm text-muted-foreground">لم يتم إرسال أي إطار بعد.</p>
+        ) : lastResult.error ? (
+          <p className="text-sm text-destructive">{lastResult.error}</p>
+        ) : lastResult.count === 0 ? (
+          <p className="text-sm text-muted-foreground">لم تُرصد أي مخالفة في آخر إطار.</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {lastResult.detections.map((d, i) => (
+              <li
+                key={i}
+                className="flex items-start justify-between gap-3 rounded-lg border border-border p-3"
+              >
+                <div className="min-w-0">
+                  <div className="font-medium text-foreground">
+                    {detectionTypeLabels[d.type] ?? d.type}
+                  </div>
+                  {d.description && (
+                    <div className="text-xs text-muted-foreground">{d.description}</div>
+                  )}
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <span
+                    className={cn(
+                      "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
+                      severityStyles[d.severity] ?? "",
+                    )}
+                  >
+                    {severityLabels[d.severity] ?? d.severity}
+                  </span>
+                  <span className="font-mono text-xs text-muted-foreground" dir="ltr">
+                    {d.confidence}%
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    </div>
+  )
+}

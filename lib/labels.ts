@@ -139,6 +139,7 @@ export const moduleOptions = [
   { value: "permits", label: "تصاريح العمل" },
   { value: "training", label: "التدريب" },
   { value: "violations", label: "المخالفات" },
+  { value: "ai_monitoring", label: "المراقبة الذكية (AI)" },
   { value: "hr", label: "الموارد البشرية" },
   { value: "finance", label: "المالية" },
   { value: "actions", label: "الإجراءات التصحيحية" },
