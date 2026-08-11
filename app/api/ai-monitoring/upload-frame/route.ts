@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { put } from "@vercel/blob"
 import { touchCameraStream } from "@/app/actions/ai-monitoring"
 import { requireUser } from "@/lib/session"
+import { sessionCameraId } from "@/lib/camera-session"
 
 export const runtime = "nodejs"
 export const maxDuration = 30
@@ -32,9 +33,11 @@ export async function POST(req: Request) {
     const inspectorName = (body.inspectorName || "كاميرا الهاتف").toString().slice(0, 160)
     const cameraLocation = (body.cameraLocation || "").toString().slice(0, 200)
 
-    // مسار ثابت لكل جلسة (مربوط بحساب المفتش) حتى تُستبدل الصورة نفسها في كل رفع.
+    // مسار ثابت لكل جلسة (مشتقّ من الحساب + اسم المفتش) حتى تُستبدل الصورة نفسها في كل رفع
+    // ويحصل كل مفتش على مسار إطار خاص به عند مشاركة نفس الرابط/الحساب.
     const userId = (await requireUser()).id
-    const pathname = `cameras/${encodeURIComponent(`cam-${userId}`)}/latest.jpg`
+    const cameraId = sessionCameraId(userId, inspectorName)
+    const pathname = `cameras/${encodeURIComponent(cameraId)}/latest.jpg`
 
     const blob = await put(pathname, buffer, {
       access: "public",

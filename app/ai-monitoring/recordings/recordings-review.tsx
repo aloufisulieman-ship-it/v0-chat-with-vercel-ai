@@ -426,6 +426,7 @@ function ReviewDialog({
                       <ScreenshotCard
                         key={shot.id}
                         shot={shot}
+                        detectedBy={recording.cameraName}
                         onDelete={() => handleDeleteShot(shot.id)}
                         onLink={async () => {
                           try {
@@ -451,17 +452,20 @@ function ReviewDialog({
 
 function ScreenshotCard({
   shot,
+  detectedBy,
   onDelete,
   onLink,
 }: {
   shot: VideoScreenshotDto
+  detectedBy: string
   onDelete: () => void
   onLink: () => void
 }) {
-  const violationHref = useMemo(
-    () => `/violations?from=recording&evidence=${encodeURIComponent(shot.imageUrl)}`,
-    [shot.imageUrl],
-  )
+  const violationHref = useMemo(() => {
+    const params = new URLSearchParams({ from: "recording", evidence: shot.imageUrl })
+    if (detectedBy) params.set("detectedBy", detectedBy)
+    return `/violations?${params.toString()}`
+  }, [shot.imageUrl, detectedBy])
 
   return (
     <div className="group flex flex-col overflow-hidden rounded-lg border border-border bg-card">

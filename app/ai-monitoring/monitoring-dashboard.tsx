@@ -128,6 +128,7 @@ export function MonitoringDashboard({
   const [fSeverity, setFSeverity] = useState("all")
   const [fStatus, setFStatus] = useState("all")
   const [fCamera, setFCamera] = useState("all")
+  const [fLocation, setFLocation] = useState("all")
   const [fDate, setFDate] = useState("")
   const [pending, setPending] = useState<number | null>(null)
 
@@ -169,16 +170,24 @@ export function MonitoringDashboard({
     return Array.from(set)
   }, [all])
 
+  // قائمة المواقع الفعلية المتاحة للتصفية.
+  const locations = useMemo(() => {
+    const set = new Set<string>()
+    for (const d of all) if (d.cameraLocation) set.add(d.cameraLocation)
+    return Array.from(set)
+  }, [all])
+
   const filtered = useMemo(() => {
     return all.filter((d) => {
       if (fType !== "all" && d.detectionType !== fType) return false
       if (fSeverity !== "all" && d.severity !== fSeverity) return false
       if (fStatus !== "all" && d.status !== fStatus) return false
       if (fCamera !== "all" && (d.inspectorName || d.cameraId) !== fCamera) return false
+      if (fLocation !== "all" && (d.cameraLocation || "موقع غير محدد") !== fLocation) return false
       if (fDate && d.detectedAt.slice(0, 10) !== fDate) return false
       return true
     })
-  }, [all, fType, fSeverity, fStatus, fCamera, fDate])
+  }, [all, fType, fSeverity, fStatus, fCamera, fLocation, fDate])
 
   const worstZoneRank = ["", "منخفض", "متوسط", "عالٍ", "حرج"]
 
@@ -306,9 +315,15 @@ export function MonitoringDashboard({
           ))}
         </select>
         <select className={selectCls} value={fCamera} onChange={(e) => setFCamera(e.target.value)}>
-          <option value="all">كل الكاميرات</option>
+          <option value="all">كل المفتشين</option>
           {cameras.map((c) => (
             <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+        <select className={selectCls} value={fLocation} onChange={(e) => setFLocation(e.target.value)}>
+          <option value="all">كل المواقع</option>
+          {locations.map((l) => (
+            <option key={l} value={l}>{l}</option>
           ))}
         </select>
         <input
@@ -318,13 +333,19 @@ export function MonitoringDashboard({
           onChange={(e) => setFDate(e.target.value)}
           dir="ltr"
         />
-        {(fType !== "all" || fSeverity !== "all" || fStatus !== "all" || fCamera !== "all" || fDate) && (
+        {(fType !== "all" ||
+          fSeverity !== "all" ||
+          fStatus !== "all" ||
+          fCamera !== "all" ||
+          fLocation !== "all" ||
+          fDate) && (
           <button
             onClick={() => {
               setFType("all")
               setFSeverity("all")
               setFStatus("all")
               setFCamera("all")
+              setFLocation("all")
               setFDate("")
             }}
             className="text-sm font-medium text-primary hover:underline"

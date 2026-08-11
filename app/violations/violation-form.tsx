@@ -152,11 +152,14 @@ function SignaturePad({ label, value, onChange }: { label: string; value: string
 export function ViolationFormDialog({
   employees = [],
   initialEvidence,
+  initialDetectedBy = "",
   autoOpen = false,
 }: {
   employees?: EmployeeRecord[]
   // صورة إثبات مبدئية (data URL) تُحمّل مسبقاً — مثلاً لقطة من تسجيل فيديو.
   initialEvidence?: string
+  // اسم المفتش الذي رصد المخالفة (يُعبّأ مسبقاً عند القدوم من رصد الذكاء الاصطناعي).
+  initialDetectedBy?: string
   // فتح النموذج تلقائياً عند التحميل (عند القدوم من صفحة التسجيلات).
   autoOpen?: boolean
 }) {
@@ -170,6 +173,7 @@ export function ViolationFormDialog({
     place: "", violationType: "", category: "", internalAction: "", actionDetail: "",
     description: "", witnesses: "",
     evidences: "", proposedAction: "", status: "open", entryMode: "electronic",
+    detectedBy: initialDetectedBy,
   })
 
   // إذا كانت صورة الإثبات المبدئية data URL نضعها مباشرة؛ وإن كانت رابط Blob (http)
@@ -210,6 +214,7 @@ export function ViolationFormDialog({
       place: "", violationType: "", category: "", internalAction: "", actionDetail: "",
       description: "", witnesses: "",
       evidences: "", proposedAction: "", status: "open", entryMode: "electronic",
+      detectedBy: initialDetectedBy,
     })
     setImages(isDataUrl(initialEvidence) ? [initialEvidence as string] : [])
     setManualDocs([])
@@ -338,7 +343,7 @@ export function ViolationFormDialog({
                 <div className="flex flex-col gap-2 pt-1">
                   <label className="flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-border p-4 cursor-pointer hover:bg-muted/50 transition-colors">
                     <Upload className="size-6 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">أرفق النموذج الورقي الممسوح (PDF أو صورة أو مستند)</span>
+                    <span className="text-xs text-muted-foreground">أرفق النموذج الورقي المم��وح (PDF أو صورة أو مستند)</span>
                     <input type="file" accept="image/*,application/pdf,.doc,.docx" multiple className="hidden" onChange={handleDocUpload} />
                   </label>
                   {manualDocs.length > 0 && (
@@ -395,10 +400,18 @@ export function ViolationFormDialog({
               <Label>الوقت</Label>
               <Input value={form.violationTime} onChange={e => setForm(f => ({ ...f, violationTime: e.target.value }))} placeholder="مثال: 10:30 صباحاً" />
             </div>
-            <div className="flex flex-col gap-1">
-              <Label>المكان <span className="text-destructive">*</span></Label>
-              <Input value={form.place} onChange={e => setForm(f => ({ ...f, place: e.target.value }))} placeholder="موقع المخالفة" />
-            </div>
+                    <div className="flex flex-col gap-1">
+                      <Label>المكان <span className="text-destructive">*</span></Label>
+                      <Input value={form.place} onChange={e => setForm(f => ({ ...f, place: e.target.value }))} placeholder="موقع المخالفة" />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <Label>رُصدت بواسطة</Label>
+                      <Input
+                        value={form.detectedBy}
+                        onChange={e => setForm(f => ({ ...f, detectedBy: e.target.value }))}
+                        placeholder="اسم المفتش/الموظف الذي رصد المخالفة"
+                      />
+                    </div>
             <div className="flex flex-col gap-1">
               <Label>الحال��</Label>
               <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v }))}>
