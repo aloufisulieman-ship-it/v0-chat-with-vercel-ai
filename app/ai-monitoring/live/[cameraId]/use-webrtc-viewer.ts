@@ -26,6 +26,8 @@ export function useWebrtcViewer(opts: { cameraId: string; enabled: boolean }) {
   const { cameraId, enabled } = opts
   const videoRef = useRef<HTMLVideoElement>(null)
   const [status, setStatus] = useState<ViewerStatus>("connecting")
+  // رسالة خطأ الصلاحيات/الشبكة الكاملة (مثل: "HTTP 403 — مشاهدة البث مقصورة…").
+  const [error, setError] = useState<string | null>(null)
 
   const viewerSessionIdRef = useRef<string>("")
   if (!viewerSessionIdRef.current) viewerSessionIdRef.current = makeSessionId()
@@ -111,7 +113,14 @@ export function useWebrtcViewer(opts: { cameraId: string; enabled: boolean }) {
 
     const tick = async () => {
       if (stopped) return
-      const { signals } = await pollSignals({ role: "viewer", after: lastId, viewerSessionId, cameraId })
+      const { signals, error: pollError } = await pollSignals({
+        role: "viewer",
+        after: lastId,
+        viewerSessionId,
+        cameraId,
+      })
+      // إظهار رسالة الخطأ الحقيقية (401/403…) بدل بقاء الحالة "جارٍ الاتصال" بلا سبب.
+      setError(pollError)
       for (const s of signals) {
         lastId = Math.max(lastId, s.id)
         await handleSignal(s)
@@ -139,5 +148,5 @@ export function useWebrtcViewer(opts: { cameraId: string; enabled: boolean }) {
     }
   }, [cameraId, enabled])
 
-  return { videoRef, status }
+  return { videoRef, status, error }
 }

@@ -59,7 +59,7 @@ export function LiveView({
 
   // البث الحي المباشر (WebRTC): فيديو لحظي ندّاً لِند. يسقط تلقائياً إلى اللقطات
   // إن لم تكن الكاميرا تبث بثاً حياً.
-  const { videoRef, status: webrtcStatus } = useWebrtcViewer({ cameraId, enabled: true })
+  const { videoRef, status: webrtcStatus, error: webrtcError } = useWebrtcViewer({ cameraId, enabled: true })
   const webrtcLive = webrtcStatus === "live"
 
   const lastSeenMs = camera ? new Date(camera.lastSeenAt).getTime() : 0
@@ -101,6 +101,16 @@ export function LiveView({
           {webrtcLive ? "بث حي مباشر" : isLive ? "لقطات حية" : "غير متصل"}
         </span>
       </div>
+
+      {/* شريط خطأ البث المباشر: يعرض رسالة 401/403 الكاملة بدل رمز غامض */}
+      {webrtcError && (
+        <div
+          role="alert"
+          className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm text-destructive"
+        >
+          تعذّر الاتصال بالبث الحي المباشر: {webrtcError}
+        </div>
+      )}
 
       {/* شاشة البث */}
       <div className="relative overflow-hidden rounded-2xl border border-border bg-black shadow-lg">

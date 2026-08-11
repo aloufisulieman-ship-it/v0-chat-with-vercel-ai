@@ -2,10 +2,10 @@ import { type NextRequest, NextResponse } from "next/server"
 import { and, asc, eq, gt, lt } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { webrtcSignal } from "@/lib/db/schema"
-import { requireUser, requireHseReviewerId } from "@/lib/session"
+import { getCurrentUser, isHseReviewer } from "@/lib/session"
 import { sessionCameraId } from "@/lib/camera-session"
 
-// قناة إشارات WebRTC عبر قاعدة البيانات.
+// قناة إشارات WebRTC عبر قاعدة البيانات (لا تستخدم LiveKit ولا أي خدمة خارجية).
 //
 // الأدوار:
 //   - "camera"  = صفحة كاميرا المفتش (المُرسِل). هويتها = حسابها + اسم المفتش،
@@ -17,6 +17,15 @@ import { sessionCameraId } from "@/lib/camera-session"
 
 export const dynamic = "force-dynamic"
 
+// خطأ صلاحيات صريح يحمل رمز الحالة المناسب (401 غير مسجّل، 403 ممنوع).
+class AuthError extends Error {
+  status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
+  }
+}
+
 // حذف الإشارات الأقدم من دقيقتين لجلسة الكاميرا (تنظيف تلقائي خفيف).
 async function pruneOld(cameraId: string) {
   const cutoff = new Date(Date.now() - 2 * 60 * 1000)
@@ -24,15 +33,38 @@ async function pruneOld(cameraId: string) {
 }
 
 // اشتقاق cameraId حسب الدور مع فرض الصلاحيات المناسبة.
+// نستخدم getCurrentUser (بلا توجيه) بدل requireUser حتى لا يرمي redirect استثناءً
+// يظهر خطأً مبهماً؛ وبدلاً من ذلك نُرجع رسالة ورمز حالة واضحين.
 async function resolveCameraId(role: string, params: { cameraId?: string; inspectorName?: string }): Promise<string> {
-  if (role === "camera") {
-    // المُرسِل: أي مستخدم مسجّل دخول؛ المعرّف يُشتقّ من حسابه + اسم المفتش.
-    const userId = (await requireUser()).id
-    return sessionCameraId(userId, params.inspectorName || "")
+  const user = await getCurrentUser()
+  if (!user) {
+    throw new AuthError("يجب تسجيل الدخول للوصول إلى قناة البث المباشر.", 401)
   }
+  if (user.status !== "approved") {
+    throw new AuthError("حسابك قيد الاعتماد بعد؛ لا يمكن بدء البث المباشر.", 403)
+  }
+
+  if (role === "camera") {
+    // المُرسِل: أي مستخدم معتمد؛ المعرّف يُشتقّ من حسابه + اسم المفتش.
+    return sessionCameraId(user.id, params.inspectorName || "")
+  }
+
   // المُشاهد: مقصور على المدير/المراجع، ويمرّر معرّف الكاميرا الهدف مباشرةً.
-  await requireHseReviewerId()
+  if (!isHseReviewer(user.role)) {
+    throw new AuthError("مشاهدة البث المباشر مقصورة على مسؤول HSE (مدير أو أدمن).", 403)
+  }
   return (params.cameraId || "").trim()
+}
+
+// تحويل أي خطأ إلى استجابة JSON واضحة (مع تسجيل التفاصيل الكاملة في السجل).
+function errorResponse(err: unknown, context: string) {
+  if (err instanceof AuthError) {
+    // أخطاء الصلاحيات متوقّعة؛ تُرجع رمزها ورسالتها دون ضجيج في السجل.
+    return NextResponse.json({ error: err.message }, { status: err.status })
+  }
+  const message = err instanceof Error ? err.message : String(err)
+  console.log(`[v0] webrtc ${context} error:`, message)
+  return NextResponse.json({ error: `تعذّر تنفيذ الطلب: ${message}` }, { status: 500 })
 }
 
 export async function POST(req: NextRequest) {
@@ -49,10 +81,10 @@ export async function POST(req: NextRequest) {
     const viewerSessionId = (body.viewerSessionId || "").slice(0, 80)
     const kind = body.kind || ""
     if (!viewerSessionId || !["offer", "answer", "ice"].includes(kind)) {
-      return NextResponse.json({ error: "طلب غير صالح" }, { status: 400 })
+      return NextResponse.json({ error: "طلب غير صالح (viewerSessionId أو kind مفقود)." }, { status: 400 })
     }
     const cameraId = await resolveCameraId(role, { cameraId: body.cameraId, inspectorName: body.inspectorName })
-    if (!cameraId) return NextResponse.json({ error: "معرّف كاميرا مفقود" }, { status: 400 })
+    if (!cameraId) return NextResponse.json({ error: "معرّف الكاميرا مفقود." }, { status: 400 })
 
     await db.insert(webrtcSignal).values({
       cameraId,
@@ -66,8 +98,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true, cameraId })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "خطأ"
-    return NextResponse.json({ error: msg }, { status: 403 })
+    return errorResponse(err, "POST")
   }
 }
 
@@ -98,12 +129,7 @@ export async function GET(req: NextRequest) {
           )
         : and(eq(webrtcSignal.cameraId, cameraId), eq(webrtcSignal.sender, otherSender), gt(webrtcSignal.id, after))
 
-    const rows = await db
-      .select()
-      .from(webrtcSignal)
-      .where(where)
-      .orderBy(asc(webrtcSignal.id))
-      .limit(50)
+    const rows = await db.select().from(webrtcSignal).where(where).orderBy(asc(webrtcSignal.id)).limit(50)
 
     const signals = rows.map((r) => ({
       id: r.id,
@@ -113,8 +139,8 @@ export async function GET(req: NextRequest) {
     }))
 
     return NextResponse.json({ signals, cameraId })
-  } catch {
-    return NextResponse.json({ signals: [], cameraId: "" }, { status: 200 })
+  } catch (err) {
+    return errorResponse(err, "GET")
   }
 }
 

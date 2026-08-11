@@ -17,6 +17,8 @@ export function useWebrtcBroadcaster(opts: {
 }) {
   const { active, inspectorName, getStream } = opts
   const [viewerCount, setViewerCount] = useState(0)
+  // رسالة خطأ قناة الإشارات الكاملة (401/403…) لعرضها للمفتش بدل الفشل الصامت.
+  const [error, setError] = useState<string | null>(null)
 
   const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map())
   const lastIdRef = useRef(0)
@@ -107,11 +109,12 @@ export function useWebrtcBroadcaster(opts: {
 
     const tick = async () => {
       if (stopped) return
-      const { signals } = await pollSignals({
+      const { signals, error: pollError } = await pollSignals({
         role: "camera",
         after: lastIdRef.current,
         inspectorName: inspectorRef.current,
       })
+      setError(pollError)
       for (const s of signals) {
         lastIdRef.current = Math.max(lastIdRef.current, s.id)
         await handleSignal(s)
@@ -137,5 +140,5 @@ export function useWebrtcBroadcaster(opts: {
     }
   }, [active, getStream])
 
-  return { viewerCount }
+  return { viewerCount, error }
 }

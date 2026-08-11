@@ -23,7 +23,20 @@ export type IncomingSignal = {
 
 const ENDPOINT = "/api/ai-monitoring/webrtc"
 
+// استخراج رسالة الخطأ الكاملة من استجابة غير ناجحة (بدل الاكتفاء برمز الحالة).
+async function readError(res: Response): Promise<string> {
+  let detail = ""
+  try {
+    const data = (await res.json()) as { error?: string }
+    detail = data?.error || ""
+  } catch {
+    /* الجسم ليس JSON */
+  }
+  return `HTTP ${res.status}${detail ? ` — ${detail}` : ""}`
+}
+
 // إرسال إشارة إلى الطرف الآخر عبر قناة قاعدة البيانات.
+// يعيد رسالة الخطأ الكاملة عند الفشل (أو null عند النجاح) لعرضها/تسجيلها.
 export async function postSignal(input: {
   role: "camera" | "viewer"
   viewerSessionId: string
@@ -31,26 +44,35 @@ export async function postSignal(input: {
   payload: unknown
   cameraId?: string
   inspectorName?: string
-}): Promise<void> {
+}): Promise<{ error: string | null }> {
   try {
-    await fetch(ENDPOINT, {
+    const res = await fetch(ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     })
-  } catch {
-    /* تجاهل — سيعاد المحاولة في الدورة التالية */
+    if (!res.ok) {
+      const error = await readError(res)
+      console.log("[v0] webrtc postSignal failed:", error)
+      return { error }
+    }
+    return { error: null }
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e)
+    console.log("[v0] webrtc postSignal network error:", error)
+    return { error }
   }
 }
 
 // استقصاء الإشارات الجديدة (id > after) القادمة من الطرف الآخر.
+// يُرجع أيضاً رسالة الخطأ الكاملة عند الفشل لعرضها للمستخدم بدل إخفاء رمز 401/403.
 export async function pollSignals(input: {
   role: "camera" | "viewer"
   after: number
   viewerSessionId?: string
   cameraId?: string
   inspectorName?: string
-}): Promise<{ signals: IncomingSignal[]; cameraId: string }> {
+}): Promise<{ signals: IncomingSignal[]; cameraId: string; error: string | null }> {
   const p = new URLSearchParams()
   p.set("role", input.role)
   p.set("after", String(input.after))
@@ -59,9 +81,16 @@ export async function pollSignals(input: {
   if (input.inspectorName) p.set("inspectorName", input.inspectorName)
   try {
     const res = await fetch(`${ENDPOINT}?${p.toString()}`)
-    if (!res.ok) return { signals: [], cameraId: "" }
-    return (await res.json()) as { signals: IncomingSignal[]; cameraId: string }
-  } catch {
-    return { signals: [], cameraId: "" }
+    if (!res.ok) {
+      const error = await readError(res)
+      console.log("[v0] webrtc pollSignals failed:", error)
+      return { signals: [], cameraId: "", error }
+    }
+    const data = (await res.json()) as { signals: IncomingSignal[]; cameraId: string }
+    return { ...data, error: null }
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e)
+    console.log("[v0] webrtc pollSignals network error:", error)
+    return { signals: [], cameraId: "", error }
   }
 }

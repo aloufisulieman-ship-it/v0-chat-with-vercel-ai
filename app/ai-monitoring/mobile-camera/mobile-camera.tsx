@@ -439,7 +439,7 @@ export function MobileCamera() {
   // البث الحي المباشر (WebRTC): يعيد استخدام نفس بث الكاميرا وينقله للمدير لحظياً
   // كلما كانت الكاميرا تصوّر (بث أو تسجيل). مستقل عن رفع الإطارات/التحليل ويعمل ندّاً لِند.
   const getStream = useCallback(() => streamRef.current, [])
-  const { viewerCount } = useWebrtcBroadcaster({ active: cameraOn, inspectorName, getStream })
+  const { viewerCount, error: broadcastError } = useWebrtcBroadcaster({ active: cameraOn, inspectorName, getStream })
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-5">
@@ -576,6 +576,13 @@ export function MobileCamera() {
         <Card className="flex items-start gap-3 border-destructive/30 bg-destructive/10 p-4">
           <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
           <p className="text-sm text-destructive">{uploadError}</p>
+        </Card>
+      )}
+
+      {cameraOn && broadcastError && (
+        <Card className="flex items-start gap-3 border-destructive/30 bg-destructive/10 p-4">
+          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
+          <p className="text-sm text-destructive">تعذّر بثّ الفيديو الحي المباشر للمدير: {broadcastError}</p>
         </Card>
       )}
 
