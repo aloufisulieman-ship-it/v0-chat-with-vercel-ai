@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, serial, integer, date, uniqueIndex } from "drizzle-orm/pg-core"
+import { pgTable, text, timestamp, boolean, serial, integer, date, uniqueIndex, index } from "drizzle-orm/pg-core"
 
 // ---------- Better Auth tables (do not rename columns) ----------
 export const user = pgTable("user", {
@@ -383,6 +383,26 @@ export const activeCameraStream = pgTable(
   },
   (t) => ({
     userCameraUnique: uniqueIndex("active_cam_user_camera_idx").on(t.userId, t.cameraId),
+  }),
+)
+
+// قناة إشارات WebRTC (signaling) عبر قاعدة البيانات — بديل خفيف عن WebSocket يناسب
+// بيئة الخوادم بلا حالة. تُخزَّن هنا عروض/إجابات SDP ومرشحات ICE مؤقتاً بين
+// الكاميرا (المُرسِل) والمدير (المشاهد)، ويُستقصى منها كل ~ثانية أثناء إنشاء الاتصال فقط.
+// بعد نجاح الاتصال ينتقل الفيديو مباشرةً بين الطرفين (P2P) دون المرور بالخادم.
+export const webrtcSignal = pgTable(
+  "webrtc_signals",
+  {
+    id: serial("id").primaryKey(),
+    cameraId: text("camera_id").notNull(), // جلسة الكاميرا الهدف
+    viewerSessionId: text("viewer_session_id").notNull(), // جلسة تفاوض المشاهد (تسمح بإعادة الاتصال)
+    sender: text("sender").notNull(), // "camera" | "viewer"
+    kind: text("kind").notNull(), // "offer" | "answer" | "ice"
+    payload: text("payload").notNull(), // SDP أو مرشّح ICE مُرمَّز JSON
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    lookupIdx: index("webrtc_lookup_idx").on(t.cameraId, t.viewerSessionId, t.id),
   }),
 )
 

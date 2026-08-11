@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { detectionTypeLabels, severityLabels, severityStyles } from "@/lib/ai-monitoring"
 import type { CameraLiveStatus } from "@/app/actions/ai-monitoring"
+import { useWebrtcViewer } from "./use-webrtc-viewer"
 
 // يُعتبر البث "مباشراً" إذا كان آخر إطار أحدث من 3 ثوانٍ.
 const LIVE_THRESHOLD_MS = 3000
@@ -56,6 +57,11 @@ export function LiveView({
   // العنوان المعروض = اسم المفتش/الموظف (مع تراجع لمعرّف الجلسة).
   const title = camera?.inspectorName || cameraId
 
+  // البث الحي المباشر (WebRTC): فيديو لحظي ندّاً لِند. يسقط تلقائياً إلى اللقطات
+  // إن لم تكن الكاميرا تبث بثاً حياً.
+  const { videoRef, status: webrtcStatus } = useWebrtcViewer({ cameraId, enabled: true })
+  const webrtcLive = webrtcStatus === "live"
+
   const lastSeenMs = camera ? new Date(camera.lastSeenAt).getTime() : 0
   const isLive = camera != null && now - lastSeenMs < LIVE_THRESHOLD_MS
 
@@ -80,7 +86,7 @@ export function LiveView({
         <span
           className={cn(
             "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold",
-            isLive
+            webrtcLive || isLive
               ? "bg-destructive/10 text-destructive"
               : "bg-muted text-muted-foreground",
           )}
@@ -88,30 +94,46 @@ export function LiveView({
           <span
             className={cn(
               "size-2.5 rounded-full",
-              isLive ? "animate-pulse bg-destructive" : "bg-muted-foreground/60",
+              webrtcLive || isLive ? "animate-pulse bg-destructive" : "bg-muted-foreground/60",
             )}
             aria-hidden="true"
           />
-          {isLive ? "مباشر" : "غير متصل"}
+          {webrtcLive ? "بث حي مباشر" : isLive ? "لقطات حية" : "غير متصل"}
         </span>
       </div>
 
       {/* شاشة البث */}
       <div className="relative overflow-hidden rounded-2xl border border-border bg-black shadow-lg">
         <div className="relative aspect-video w-full">
-          {frameSrc ? (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              src={frameSrc || "/placeholder.svg"}
-              alt={`آخر إطار من بث المفتش ${title}`}
-              className="size-full object-contain"
-            />
-          ) : (
-            <div className="flex size-full flex-col items-center justify-center gap-2 text-white/40">
-              <Cctv className="size-12" />
-              <span className="text-sm">بانتظار أول إطار من الكاميرا…</span>
-            </div>
-          )}
+          {/* فيديو البث الحي المباشر (WebRTC) — يظهر فوق اللقطات عند نجاح الاتصال */}
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className={cn(
+              "absolute inset-0 size-full bg-black object-contain transition-opacity duration-300",
+              webrtcLive ? "opacity-100" : "pointer-events-none opacity-0",
+            )}
+          />
+
+          {/* طبقة اللقطات (احتياطية): تظهر ما لم يكن البث الحي المباشر متصلاً */}
+          {!webrtcLive &&
+            (frameSrc ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={frameSrc || "/placeholder.svg"}
+                alt={`آخر إطار من بث المفتش ${title}`}
+                className="size-full object-contain"
+              />
+            ) : (
+              <div className="flex size-full flex-col items-center justify-center gap-2 text-white/40">
+                <Cctv className="size-12" />
+                <span className="text-sm">
+                  {isLive ? "جارٍ الاتصال بالبث الحي المباشر…" : "بانتظار أول إطار من الكاميرا…"}
+                </span>
+              </div>
+            ))}
 
           {/* طبقة معلومات علوية */}
           <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 bg-gradient-to-b from-black/70 to-transparent p-3">
@@ -194,8 +216,10 @@ export function LiveView({
           </span>
         </div>
         <div className="flex flex-col gap-0.5">
-          <span className="text-xs text-muted-foreground">معدل التحديث</span>
-          <span className="font-medium text-foreground">شبه فوري (~0.4 ثانية)</span>
+          <span className="text-xs text-muted-foreground">نوع البث</span>
+          <span className="font-medium text-foreground">
+            {webrtcLive ? "فيديو حي مباشر (WebRTC)" : "لقطات شبه فورية (~0.4 ث)"}
+          </span>
         </div>
       </Card>
     </div>

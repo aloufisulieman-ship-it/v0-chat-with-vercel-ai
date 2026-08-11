@@ -20,7 +20,7 @@ export default async function LiveCameraPage({
   return (
     <AppShell
       title={`مشاهدة مباشرة · ${cameraId}`}
-      subtitle="بث شبه حي للإطارات مع نتائج تحليل الذكاء الاصطناعي لحظياً"
+      subtitle="بث فيديو حي مباشر (WebRTC) مع لقطات احتياطية ونتائج تحليل الذكاء الاصطناعي لحظياً"
       user={user}
     >
       <LiveView cameraId={cameraId} initial={initial} />
