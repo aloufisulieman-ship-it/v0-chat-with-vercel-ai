@@ -13,7 +13,7 @@ const LIVE_THRESHOLD_MS = 8000
 // جدار العرض يُحدَّث بوتيرة أسرع من اللوحة (كل ثانيتين) لأنه شاشة مراقبة حية.
 const POLL_MS = 2000
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
+const fetcher = (url: string) => fetch(url, { cache: "no-store" }).then((r) => r.json())
 
 // كسر الكاش لإطارات Blob (روابط http) بحيث تُحدَّث الصورة مع كل جلب.
 function frameSrc(url: string, version: string) {
@@ -34,7 +34,12 @@ export function GridView({ initial }: { initial: CameraStreamDto[] }) {
   const { data } = useSWR<{ cameras: CameraStreamDto[] }>(
     "/api/ai-monitoring/active-cameras",
     fetcher,
-    { refreshInterval: POLL_MS, fallbackData: { cameras: initial } },
+    {
+      refreshInterval: POLL_MS,
+      fallbackData: { cameras: initial },
+      revalidateOnMount: true,
+      revalidateOnFocus: true,
+    },
   )
   const cameras = data?.cameras ?? initial
 

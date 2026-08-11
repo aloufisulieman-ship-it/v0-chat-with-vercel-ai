@@ -28,7 +28,7 @@ export type CameraStreamDto = {
   lastSeenAt: string
 }
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
+const fetcher = (url: string) => fetch(url, { cache: "no-store" }).then((r) => r.json())
 
 // صياغة الوقت النسبي بالعربية: "قبل X ثانية/دقيقة/ساعة".
 function relativeTime(iso: string, now: number) {
