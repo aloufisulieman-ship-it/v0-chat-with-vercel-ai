@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react"
 import useSWR from "swr"
-import { Cctv, MapPin, Clock, Video } from "lucide-react"
+import Link from "next/link"
+import { Cctv, MapPin, Clock, Video, Radio } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import {
   Dialog,
@@ -47,6 +48,14 @@ function fullTime(iso: string) {
   })
 }
 
+// كسر الكاش للإطارات المرفوعة إلى Blob (روابط http) بحيث تُحدَّث الصورة مع كل جلب.
+// روابط data: (قديمة) تُترك كما هي لأن إضافة استعلام يُفسدها.
+function frameSrc(url: string, version: string) {
+  if (!url) return "/placeholder.svg"
+  if (url.startsWith("http")) return `${url}?v=${encodeURIComponent(version)}`
+  return url
+}
+
 export function ConnectedCameras({ isAdmin }: { isAdmin: boolean }) {
   const { data } = useSWR<{ cameras: CameraStreamDto[] }>(
     "/api/ai-monitoring/active-cameras",
@@ -89,10 +98,14 @@ export function ConnectedCameras({ isAdmin }: { isAdmin: boolean }) {
           {cameras.map((cam) => {
             const isLive = now - new Date(cam.lastSeenAt).getTime() < LIVE_THRESHOLD_MS
             return (
-              <Dialog key={cam.id}>
+              <div
+                key={cam.id}
+                className="flex flex-col overflow-hidden rounded-xl border border-border bg-card"
+              >
+                <Dialog>
                 <DialogTrigger asChild>
                   <button
-                    className="group flex flex-col overflow-hidden rounded-xl border border-border bg-card text-right transition-colors hover:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
+                    className="group flex flex-col text-right transition-colors focus:outline-none focus:ring-2 focus:ring-ring/30"
                     aria-label={`عرض كاميرا ${cam.cameraId}`}
                   >
                     {/* آخر إطار */}
@@ -100,7 +113,7 @@ export function ConnectedCameras({ isAdmin }: { isAdmin: boolean }) {
                       {cam.lastFrameUrl ? (
                         /* eslint-disable-next-line @next/next/no-img-element */
                         <img
-                          src={cam.lastFrameUrl || "/placeholder.svg"}
+                          src={frameSrc(cam.lastFrameUrl, cam.lastSeenAt)}
                           alt={`آخر إطار من ${cam.cameraId}`}
                           className="size-full object-cover transition-transform group-hover:scale-[1.03]"
                         />
@@ -150,7 +163,7 @@ export function ConnectedCameras({ isAdmin }: { isAdmin: boolean }) {
                       {cam.lastFrameUrl ? (
                         /* eslint-disable-next-line @next/next/no-img-element */
                         <img
-                          src={cam.lastFrameUrl || "/placeholder.svg"}
+                          src={frameSrc(cam.lastFrameUrl, cam.lastSeenAt)}
                           alt={`آخر إطار من ${cam.cameraId}`}
                           className="w-full object-contain"
                         />
@@ -195,9 +208,25 @@ export function ConnectedCameras({ isAdmin }: { isAdmin: boolean }) {
                         </dd>
                       </div>
                     </dl>
+                    <Link
+                      href={`/ai-monitoring/live/${encodeURIComponent(cam.cameraId)}`}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                    >
+                      <Radio className="size-4" />
+                      فتح المشاهدة المباشرة
+                    </Link>
                   </div>
                 </DialogContent>
-              </Dialog>
+                </Dialog>
+                {/* رابط المشاهدة المباشرة أسفل البطاقة */}
+                <Link
+                  href={`/ai-monitoring/live/${encodeURIComponent(cam.cameraId)}`}
+                  className="flex items-center justify-center gap-1.5 border-t border-border py-2 text-xs font-medium text-primary transition-colors hover:bg-primary/5"
+                >
+                  <Radio className="size-3.5" />
+                  مشاهدة مباشرة
+                </Link>
+              </div>
             )
           })}
         </div>

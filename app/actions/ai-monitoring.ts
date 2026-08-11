@@ -50,24 +50,32 @@ export type ActiveCameraStream = typeof activeCameraStream.$inferSelect
 // نافذة اعتبار الكاميرا "متصلة حالياً" (بالثواني): آخر إرسال خلال آخر دقيقتين.
 const ACTIVE_WINDOW_SECONDS = 120
 
-// تحديث (أو إنشاء) سجل الكاميرا المتصلة مع آخر إطار مُستلم.
-// يُستدعى من مسار /api/ai-monitoring/analyze مع كل إرسال إطار جديد.
+// تحديث (أو إنشاء) سجل الكاميرا المتصلة مع نبضة الاتصال (heartbeat).
+// إذا مُرِّر lastFrameUrl (رابط Blob) يُحدَّث، وإلا يُحتفظ بالرابط الحالي كما هو
+// حتى لا يمحو استدعاءُ التحليل رابطَ الإطار المرفوع إلى Blob.
 export async function touchCameraStream(input: {
   cameraId: string
   cameraLocation: string
-  lastFrameUrl: string
+  lastFrameUrl?: string
 }): Promise<void> {
   const userId = await requireModuleUserId("ai_monitoring")
   const cameraId = (input.cameraId || "كاميرا الهاتف").slice(0, 120)
   const cameraLocation = (input.cameraLocation || "").slice(0, 200)
-  const lastFrameUrl = input.lastFrameUrl || ""
+  const hasFrame = typeof input.lastFrameUrl === "string" && input.lastFrameUrl.length > 0
+  const lastFrameUrl = hasFrame ? (input.lastFrameUrl as string) : ""
+
+  const set: Partial<typeof activeCameraStream.$inferInsert> = {
+    cameraLocation,
+    lastSeenAt: new Date(),
+  }
+  if (hasFrame) set.lastFrameUrl = lastFrameUrl
 
   await db
     .insert(activeCameraStream)
     .values({ userId, cameraId, cameraLocation, lastFrameUrl, lastSeenAt: new Date() })
     .onConflictDoUpdate({
       target: [activeCameraStream.userId, activeCameraStream.cameraId],
-      set: { cameraLocation, lastFrameUrl, lastSeenAt: new Date() },
+      set,
     })
 }
 
@@ -85,6 +93,73 @@ export async function getActiveCameraStreams(): Promise<ActiveCameraStream[]> {
     )
     .orderBy(desc(activeCameraStream.lastSeenAt))
   return base
+}
+
+export type CameraLiveStatus = {
+  camera: {
+    cameraId: string
+    cameraLocation: string
+    lastFrameUrl: string
+    lastSeenAt: string
+  } | null
+  latestDetection: {
+    detectionType: string
+    severity: string
+    confidenceScore: number
+    detectedAt: string
+    notes: string
+  } | null
+}
+
+// حالة كاميرا واحدة للعرض المباشر: آخر إطار من Blob + آخر نتيجة تحليل AI.
+// تحترم نطاق الرؤية نفسه (المدير يرى الكل، وغيره يرى كاميرات أجهزته فقط).
+export async function getCameraLiveStatus(cameraId: string): Promise<CameraLiveStatus> {
+  const userId = await requireModuleUserId("ai_monitoring")
+  const manager = await isManager(userId)
+  const id = (cameraId || "").slice(0, 120)
+
+  const camWhere = manager
+    ? eq(activeCameraStream.cameraId, id)
+    : and(eq(activeCameraStream.cameraId, id), eq(activeCameraStream.userId, userId))
+  const camRows = await db
+    .select()
+    .from(activeCameraStream)
+    .where(camWhere)
+    .orderBy(desc(activeCameraStream.lastSeenAt))
+    .limit(1)
+  const cam = camRows[0]
+
+  const detWhere = manager
+    ? eq(aiDetection.cameraId, id)
+    : and(eq(aiDetection.cameraId, id), eq(aiDetection.userId, userId))
+  const detRows = await db
+    .select()
+    .from(aiDetection)
+    .where(detWhere)
+    .orderBy(desc(aiDetection.detectedAt))
+    .limit(1)
+  const det = detRows[0]
+
+  return {
+    camera: cam
+      ? {
+          cameraId: cam.cameraId,
+          cameraLocation: cam.cameraLocation,
+          lastFrameUrl: cam.lastFrameUrl,
+          lastSeenAt: (cam.lastSeenAt as unknown as Date)?.toISOString?.() ?? String(cam.lastSeenAt),
+        }
+      : null,
+    latestDetection: det
+      ? {
+          detectionType: det.detectionType,
+          severity: det.severity,
+          confidenceScore: det.confidenceScore,
+          detectedAt:
+            (det.detectedAt as unknown as Date)?.toISOString?.() ?? String(det.detectedAt),
+          notes: det.notes ?? "",
+        }
+      : null,
+  }
 }
 
 // توليد معرّف الاكتشاف بالصيغة AID-YYYY-### تسلسلياً حسب السنة.
