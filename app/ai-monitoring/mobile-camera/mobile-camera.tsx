@@ -437,9 +437,9 @@ export function MobileCamera() {
   const cameraOn = streaming || recording
 
   // البث الحي المباشر (WebRTC): يعيد استخدام نفس بث الكاميرا وينقله للمدير لحظياً
-  // أثناء تفعيل البث. مستقل عن رفع الإطارات/التحليل ويعمل ندّاً لِند.
+  // كلما كانت الكاميرا تصوّر (بث أو تسجيل). مستقل عن رفع الإطارات/التحليل ويعمل ندّاً لِند.
   const getStream = useCallback(() => streamRef.current, [])
-  const { viewerCount } = useWebrtcBroadcaster({ active: streaming, inspectorName, getStream })
+  const { viewerCount } = useWebrtcBroadcaster({ active: cameraOn, inspectorName, getStream })
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-5">
@@ -550,7 +550,7 @@ export function MobileCamera() {
             تسجيل {formatDuration(recordSeconds)}
           </div>
         )}
-        {streaming && viewerCount > 0 && (
+        {cameraOn && viewerCount > 0 && (
           <div className="absolute right-3 bottom-3 flex items-center gap-1.5 rounded-full bg-primary/90 px-2.5 py-1 text-xs font-semibold text-primary-foreground">
             <Eye className="size-3.5" />
             المدير يشاهد مباشرة
