@@ -16,6 +16,7 @@ export default async function AiMonitoringPage() {
     id: r.id,
     detectionId: r.detectionId,
     cameraId: r.cameraId,
+    inspectorName: r.inspectorName ?? "",
     cameraLocation: r.cameraLocation,
     detectionType: r.detectionType,
     severity: r.severity,

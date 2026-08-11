@@ -44,6 +44,7 @@ export type DetectionDto = {
   id: number
   detectionId: string
   cameraId: string
+  inspectorName: string
   cameraLocation: string
   detectionType: string
   severity: string
@@ -158,9 +159,13 @@ export function MonitoringDashboard({
     return Array.from(map.values()).sort((a, b) => b.open - a.open || b.total - a.total)
   }, [all])
 
+  // التصفية باسم المفتش/الموظف بدل معرّف الجلسة المبهم.
   const cameras = useMemo(() => {
     const set = new Set<string>()
-    for (const d of all) if (d.cameraId) set.add(d.cameraId)
+    for (const d of all) {
+      const label = d.inspectorName || d.cameraId
+      if (label) set.add(label)
+    }
     return Array.from(set)
   }, [all])
 
@@ -169,7 +174,7 @@ export function MonitoringDashboard({
       if (fType !== "all" && d.detectionType !== fType) return false
       if (fSeverity !== "all" && d.severity !== fSeverity) return false
       if (fStatus !== "all" && d.status !== fStatus) return false
-      if (fCamera !== "all" && d.cameraId !== fCamera) return false
+      if (fCamera !== "all" && (d.inspectorName || d.cameraId) !== fCamera) return false
       if (fDate && d.detectedAt.slice(0, 10) !== fDate) return false
       return true
     })
@@ -345,7 +350,7 @@ export function MonitoringDashboard({
             <table className="w-full text-right text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
-                  {["الوقت", "الكاميرا", "المخالفة", "الخطورة", "الثقة", "الإثبات", "الحالة", ""].map(
+                  {["الوقت", "المفتش/الموقع", "المخالفة", "الخطورة", "الثقة", "الإثبات", "الحالة", ""].map(
                     (h, i) => (
                       <th
                         key={i}
@@ -379,7 +384,7 @@ export function MonitoringDashboard({
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="font-medium text-foreground">{d.cameraId || "-"}</div>
+                        <div className="font-medium text-foreground">{d.inspectorName || d.cameraId || "-"}</div>
                         <div className="text-xs text-muted-foreground">{d.cameraLocation || "-"}</div>
                       </td>
                       <td className="px-4 py-3">
@@ -418,7 +423,7 @@ export function MonitoringDashboard({
                             <DialogContent className="max-w-lg">
                               <DialogHeader>
                                 <DialogTitle>
-                                  لقطة الإثبات — {detectionTypeLabels[d.detectionType]}
+                                  ��قطة الإثبات — {detectionTypeLabels[d.detectionType]}
                                 </DialogTitle>
                               </DialogHeader>
                               {/* eslint-disable-next-line @next/next/no-img-element */}

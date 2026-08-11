@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import useSWR from "swr"
 import Link from "next/link"
-import { ArrowRight, Cctv, MapPin, Clock, AlertTriangle, ShieldCheck } from "lucide-react"
+import { ArrowRight, Cctv, MapPin, Clock, AlertTriangle, ShieldCheck, UserRound } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { detectionTypeLabels, severityLabels, severityStyles } from "@/lib/ai-monitoring"
