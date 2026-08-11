@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useTransition } from "react"
+import { useState, useRef, useTransition, useEffect } from "react"
 import { FileWarning, PenLine, X, ChevronRight, ChevronLeft, Camera, FileText, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -149,8 +149,18 @@ function SignaturePad({ label, value, onChange }: { label: string; value: string
   )
 }
 
-export function ViolationFormDialog({ employees = [] }: { employees?: EmployeeRecord[] }) {
-  const [open, setOpen] = useState(false)
+export function ViolationFormDialog({
+  employees = [],
+  initialEvidence,
+  autoOpen = false,
+}: {
+  employees?: EmployeeRecord[]
+  // صورة إثبات مبدئية (data URL) تُحمّل مسبقاً — مثلاً لقطة من تسجيل فيديو.
+  initialEvidence?: string
+  // فتح النموذج تلقائياً عند التحميل (عند القدوم من صفحة التسجيلات).
+  autoOpen?: boolean
+}) {
+  const [open, setOpen] = useState(autoOpen)
   const [step, setStep] = useState(1)
   const [isPending, startTransition] = useTransition()
 
@@ -162,12 +172,35 @@ export function ViolationFormDialog({ employees = [] }: { employees?: EmployeeRe
     evidences: "", proposedAction: "", status: "open", entryMode: "electronic",
   })
 
-  const [images, setImages] = useState<string[]>([])
+  // إذا كانت صورة الإثبات المبدئية data URL نضعها مباشرة؛ وإن كانت رابط Blob (http)
+  // نحوّلها لاحقاً إلى data URL عبر useEffect حتى تُضمّن ضمن حمولة الحفظ.
+  const isDataUrl = (v?: string) => !!v && v.startsWith("data:")
+  const [images, setImages] = useState<string[]>(isDataUrl(initialEvidence) ? [initialEvidence as string] : [])
   // النماذج الورقية الممسوحة للمخالفة اليدوية: { name, dataUrl }
   const [manualDocs, setManualDocs] = useState<{ name: string; dataUrl: string }[]>([])
   const [editorSignature, setEditorSignature] = useState("")
   const [violatorSignature, setViolatorSignature] = useState("")
   const [managerSignature, setManagerSignature] = useState("")
+
+  // تحويل رابط لقطة (Blob http) إلى data URL مضغوط لتضمينه ضمن أدلة المخالفة.
+  useEffect(() => {
+    if (!initialEvidence || isDataUrl(initialEvidence)) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch(initialEvidence, { cache: "no-store" })
+        const blob = await res.blob()
+        const file = new File([blob], "screenshot.jpg", { type: blob.type || "image/jpeg" })
+        const dataUrl = await compressImage(file, 1200, 0.7)
+        if (!cancelled) setImages((prev) => (prev.length ? prev : [dataUrl]))
+      } catch {
+        /* يتجاهل — يمكن للمراجع رفع الصورة يدوياً */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [initialEvidence])
 
   function resetForm() {
     setStep(1)
@@ -178,7 +211,7 @@ export function ViolationFormDialog({ employees = [] }: { employees?: EmployeeRe
       description: "", witnesses: "",
       evidences: "", proposedAction: "", status: "open", entryMode: "electronic",
     })
-    setImages([])
+    setImages(isDataUrl(initialEvidence) ? [initialEvidence as string] : [])
     setManualDocs([])
     setEditorSignature("")
     setViolatorSignature("")

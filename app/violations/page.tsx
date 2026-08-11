@@ -29,10 +29,19 @@ async function handleDelete(id: number) {
   await deleteViolation(id)
 }
 
-export default async function ViolationsPage() {
+export default async function ViolationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ evidence?: string; from?: string }>
+}) {
   const user = await requireModule("violations")
   const [violations, employees] = await Promise.all([getViolations(), getEmployees()])
   const isAdmin = user.role === "admin"
+
+  // عند القدوم من صفحة التسجيلات نفتح نموذج المخالفة تلقائياً مع تحميل اللقطة كدليل.
+  const sp = await searchParams
+  const initialEvidence = typeof sp.evidence === "string" ? sp.evidence : undefined
+  const autoOpen = sp.from === "recording" && !!initialEvidence
 
   // العدادات تعتمد الحالة الفعلية (وفق مسار الإحالة) لا الحالة المخزّنة.
   const closed = violations.filter((v) => isViolationClosed(v)).length
@@ -119,7 +128,9 @@ export default async function ViolationsPage() {
       title="إدارة المخالفات"
       subtitle="تسجيل ومتابعة المخالفات وفق النموذج الرسمي (MHS-IMS-PR-HSE-647)"
       user={user}
-      action={<ViolationFormDialog employees={employees} />}
+      action={
+        <ViolationFormDialog employees={employees} initialEvidence={initialEvidence} autoOpen={autoOpen} />
+      }
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <KpiCard label="إجمالي المخالفات" value={violations.length} icon={FileWarning} tone="blue" />
