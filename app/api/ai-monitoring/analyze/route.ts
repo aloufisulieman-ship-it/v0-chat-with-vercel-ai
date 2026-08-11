@@ -44,13 +44,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "صورة غير صالحة" }, { status: 400 })
     }
 
-    // فصل بيانات base64 عن ترويسة data URL.
-    const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(image)
+    // استخراج نوع الوسائط من ترويسة data URL (نمرّر رابط data URL كاملاً للنموذج).
+    const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,.+$/.exec(image)
     if (!match) {
       return NextResponse.json({ error: "تنسيق صورة غير مدعوم" }, { status: 400 })
     }
     const mediaType = match[1]
-    const base64 = match[2]
 
     const { object } = await generateObject({
       model: "anthropic/claude-sonnet-4.6",
@@ -69,7 +68,8 @@ export async function POST(req: Request) {
           role: "user",
           content: [
             { type: "text", text: "حلّل هذا الإطار من كاميرا الساحة وحدّد أي مخالفات سلامة." },
-            { type: "image", image: base64, mediaType },
+            // AI SDK v5+: نوع "image" مهمل؛ نستخدم جزء "file" مع رابط data URL.
+            { type: "file", data: image, mediaType },
           ],
         },
       ],
@@ -85,12 +85,14 @@ export async function POST(req: Request) {
     // حفظ كل مخالفة مكتشفة كسجل مستقل مع لقطة الإثبات.
     const saved = []
     for (const d of object.detections) {
+      // بعض النماذج تُعيد الثقة ككسر (0-1) بدل نسبة مئوية؛ نُوحّدها إلى 0-100.
+      const confidenceScore = Math.round(d.confidence <= 1 ? d.confidence * 100 : d.confidence)
       const row = await saveDetection({
         cameraId,
         cameraLocation,
         detectionType: d.type,
         severity: d.severity,
-        confidenceScore: d.confidence,
+        confidenceScore,
         snapshotUrl: image,
         notes: d.description,
       })

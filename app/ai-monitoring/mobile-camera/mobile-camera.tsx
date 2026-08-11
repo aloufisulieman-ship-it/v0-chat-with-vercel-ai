@@ -48,6 +48,7 @@ export function MobileCamera() {
   const [sentCount, setSentCount] = useState(0)
   const [lastUploadAt, setLastUploadAt] = useState<number | null>(null)
   const [lastUploadOkAt, setLastUploadOkAt] = useState<number | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
   const [lastResult, setLastResult] = useState<LastResult | null>(null)
   const [now, setNow] = useState(() => Date.now())
@@ -105,9 +106,13 @@ export function MobileCamera() {
       if (res.ok) {
         setSentCount((c) => c + 1)
         setLastUploadOkAt(Date.now())
+        setUploadError(null)
+      } else {
+        const data = await res.json().catch(() => null)
+        setUploadError(data?.error || `فشل رفع الإطار (رمز ${res.status})`)
       }
     } catch {
-      /* فشل الرفع — سيظهر كـ "غير متصل" حتى نجاح المحاولة التالية */
+      setUploadError("تعذّر الاتصال بالخادم أثناء رفع الإطار")
     } finally {
       uploadingRef.current = false
     }
@@ -223,7 +228,7 @@ export function MobileCamera() {
           <input
             value={cameraName}
             onChange={(e) => setCameraName(e.target.value)}
-            placeholder="مثال: كاميرا البوابة 1"
+            placeholder="مثال: كاميرا الب��ابة 1"
             disabled={streaming}
             className="rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-60"
           />
@@ -283,6 +288,13 @@ export function MobileCamera() {
         <Card className="flex items-start gap-3 border-destructive/30 bg-destructive/10 p-4">
           <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
           <p className="text-sm text-destructive">{error}</p>
+        </Card>
+      )}
+
+      {streaming && uploadError && (
+        <Card className="flex items-start gap-3 border-destructive/30 bg-destructive/10 p-4">
+          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
+          <p className="text-sm text-destructive">{uploadError}</p>
         </Card>
       )}
 
