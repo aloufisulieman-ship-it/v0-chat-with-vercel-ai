@@ -16,13 +16,15 @@ import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { detectionTypeLabels, severityLabels, severityStyles } from "@/lib/ai-monitoring"
 
-// رفع الإطار إلى Blob بوتيرة سريعة (بث شبه حي)، والتحليل بالذكاء الاصطناعي أبطأ لتوفير التكلفة.
-const UPLOAD_INTERVAL_MS = 1500
+// رفع الإطار إلى Blob بوتيرة سريعة (بث شبه حي، ~2.5 إطار/ثانية)،
+// والتحليل بالذكاء الاصطناعي أبطأ بكثير (كل 8 ثوانٍ) لإبقاء تكلفة AI ثابتة.
+const UPLOAD_INTERVAL_MS = 400
 const ANALYZE_INTERVAL_MS = 8000
-// تُعتبر الكاميرا "متصلة" إذا نجح آخر رفع خلال آخر 5 ثوانٍ.
-const CONNECTED_THRESHOLD_MS = 5000
-const MAX_WIDTH = 720
-const JPEG_QUALITY = 0.6
+// تُعتبر الكاميرا "متصلة" إذا نجح آخر رفع خلال آخر 3 ثوانٍ.
+const CONNECTED_THRESHOLD_MS = 3000
+// دقة ومستوى ضغط أقل لتسريع الرفع وتقليل استهلاك البيانات (~640×480).
+const MAX_WIDTH = 640
+const JPEG_QUALITY = 0.45
 
 type LastResult = {
   at: number
@@ -202,7 +204,7 @@ export function MobileCamera() {
     } catch (err) {
       const name = err instanceof Error ? err.name : ""
       if (name === "NotAllowedError") setError("تم رفض إذن الكاميرا. فعّله من إعدادات المتصفح.")
-      else if (name === "NotFoundError") setError("لم يتم العثور على كاميرا في هذا الجهاز.")
+      else if (name === "NotFoundError") setError("لم يتم ال��ثور على كاميرا في هذا الجهاز.")
       else setError("تعذّر تشغيل الكاميرا.")
     }
   }, [uploadFrame, analyzeFrame])

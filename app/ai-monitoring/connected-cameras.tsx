@@ -14,8 +14,8 @@ import {
 } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 
-// اعتبار الكاميرا "مباشرة" إذا كان آخر إطار خلال آخر 20 ثانية.
-const LIVE_THRESHOLD_MS = 20000
+// اعتبار الكاميرا "مباشرة" إذا كان آخر إطار خلال آخر 8 ثوانٍ.
+const LIVE_THRESHOLD_MS = 8000
 
 export type CameraStreamDto = {
   id: number

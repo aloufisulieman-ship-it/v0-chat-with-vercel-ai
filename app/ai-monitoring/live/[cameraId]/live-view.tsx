@@ -9,9 +9,10 @@ import { cn } from "@/lib/utils"
 import { detectionTypeLabels, severityLabels, severityStyles } from "@/lib/ai-monitoring"
 import type { CameraLiveStatus } from "@/app/actions/ai-monitoring"
 
-// يُعتبر البث "مباشراً" إذا كان آخر إطار أحدث من 5 ثوانٍ.
-const LIVE_THRESHOLD_MS = 5000
-const POLL_INTERVAL_MS = 1500
+// يُعتبر البث "مباشراً" إذا كان آخر إطار أحدث من 3 ثوانٍ.
+const LIVE_THRESHOLD_MS = 3000
+// نجلب حالة الكاميرا بنفس معدل رفع الإطارات (~400ms) لنقل شبه فوري.
+const POLL_INTERVAL_MS = 400
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json() as Promise<CameraLiveStatus>)
 
@@ -35,7 +36,12 @@ export function LiveView({
   const { data } = useSWR<CameraLiveStatus>(
     `/api/ai-monitoring/live-status?cameraId=${encodeURIComponent(cameraId)}`,
     fetcher,
-    { refreshInterval: POLL_INTERVAL_MS, fallbackData: initial },
+    {
+      refreshInterval: POLL_INTERVAL_MS,
+      // خفض نافذة إلغاء التكرار الافتراضية (2s) حتى لا تخنق الاستطلاع السريع.
+      dedupingInterval: POLL_INTERVAL_MS,
+      fallbackData: initial,
+    },
   )
 
   // مؤقت محلي كل ثانية لتحديث الوقت النسبي ومؤشر الاتصال بين عمليات الجلب.
@@ -187,7 +193,7 @@ export function LiveView({
         </div>
         <div className="flex flex-col gap-0.5">
           <span className="text-xs text-muted-foreground">معدل التحديث</span>
-          <span className="font-medium text-foreground">كل 1.5 ثانية</span>
+          <span className="font-medium text-foreground">شبه فوري (~0.4 ثانية)</span>
         </div>
       </Card>
     </div>
