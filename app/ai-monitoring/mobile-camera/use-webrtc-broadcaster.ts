@@ -58,8 +58,8 @@ export function useWebrtcBroadcaster(opts: {
       peers.set(viewerSessionId, pc)
       updateCount()
 
-      // أضف مسارات الكاميرا الحية (فيديو فقط).
-      for (const track of stream.getVideoTracks()) pc.addTrack(track, stream)
+      // أضف مسارات الكاميرا الحية (فيديو + صوت الميكروفون إن وُجد).
+      for (const track of stream.getTracks()) pc.addTrack(track, stream)
 
       pc.onicecandidate = (e) => {
         if (e.candidate) {

@@ -61,6 +61,8 @@ export function useWebrtcViewer(opts: { cameraId: string; enabled: boolean }) {
       pc = createPeer()
 
       pc.addTransceiver("video", { direction: "recvonly" })
+      // استقبال الصوت أيضاً (صوت الميكروفون من كاميرا المفتش).
+      pc.addTransceiver("audio", { direction: "recvonly" })
 
       pc.ontrack = (e) => {
         if (videoRef.current && e.streams[0]) {

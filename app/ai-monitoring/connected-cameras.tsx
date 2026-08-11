@@ -67,6 +67,7 @@ export function ConnectedCameras({ isAdmin }: { isAdmin: boolean }) {
 
   // مؤقت محلي كل ثانية لتحديث الوقت النسبي ومؤشر الاتصال بين عمليات الجلب.
   const [now, setNow] = useState(() => Date.now())
+  const liveCount = cameras.filter((c) => now - new Date(c.lastSeenAt).getTime() < LIVE_THRESHOLD_MS).length
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(t)
@@ -79,8 +80,14 @@ export function ConnectedCameras({ isAdmin }: { isAdmin: boolean }) {
           <Video className="size-4 text-primary" />
           <h2 className="text-lg font-semibold text-foreground">الكاميرات المتصلة الآن</h2>
         </div>
-        <span className="text-xs text-muted-foreground">
-          {cameras.length} كاميرا · بث شبه حي (كل 8 ثوانٍ)
+        <span className="flex items-center gap-2 text-xs text-muted-foreground">
+          {liveCount > 0 && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 px-2 py-0.5 font-semibold text-destructive">
+              <span className="size-1.5 animate-pulse rounded-full bg-destructive" aria-hidden="true" />
+              {liveCount} بث حي الآن
+            </span>
+          )}
+          {cameras.length} كاميرا
         </span>
       </div>
 
@@ -125,16 +132,21 @@ export function ConnectedCameras({ isAdmin }: { isAdmin: boolean }) {
                           <Cctv className="size-8" />
                         </div>
                       )}
-                      {/* مؤشر الاتصال */}
-                      <div className="absolute right-2 top-2 flex items-center gap-1.5 rounded-full bg-black/65 px-2 py-1 text-[11px] font-medium text-white">
+                      {/* مؤشر البث الحي المباشر — شارة حمراء نابضة بارزة عند البث الآن */}
+                      <div
+                        className={cn(
+                          "absolute right-2 top-2 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                          isLive ? "bg-destructive text-white" : "bg-black/65 text-white/90",
+                        )}
+                      >
                         <span
                           className={cn(
                             "size-2 rounded-full",
-                            isLive ? "animate-pulse bg-primary" : "bg-muted-foreground/60",
+                            isLive ? "animate-pulse bg-white" : "bg-muted-foreground/60",
                           )}
                           aria-hidden="true"
                         />
-                        {isLive ? "مباشر" : "غير متصل"}
+                        {isLive ? "بث حي" : "غير متصل"}
                       </div>
                     </div>
                     {/* بيانات المفتش والموقع */}

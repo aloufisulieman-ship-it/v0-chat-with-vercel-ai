@@ -15,6 +15,8 @@ import {
   CircleStop,
   UploadCloud,
   Eye,
+  Mic,
+  MicOff,
 } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
@@ -83,6 +85,10 @@ export function MobileCamera() {
   const recordStartRef = useRef<number>(0)
   const recordMimeRef = useRef<{ mimeType: string; ext: string }>({ mimeType: "", ext: "webm" })
 
+  // حالة الميكروفون: مفعّل افتراضياً حتى يُبثّ الصوت مع الفيديو للمدير.
+  const [micEnabled, setMicEnabled] = useState(true)
+  const micEnabledRef = useRef(true)
+
   const [inspectorName, setInspectorName] = useState("")
   const [location, setLocation] = useState("")
   // الجلسة تبدأ فقط بعد تعبئة اسم المفتش والموقع؛ لا يُفعَّل البث/التسجيل قبلها.
@@ -145,6 +151,18 @@ export function MobileCamera() {
       video: { facingMode: { ideal: "environment" } },
       audio: false,
     })
+    // إضافة مسار الميكروفون (اختياري) لبثّ الصوت مع الفيديو للمدير. الفشل غير قاتل:
+    // إن رُفض الإذن أو لم يتوفر ميكروفون، يستمر البث بالفيديو فقط.
+    try {
+      const mic = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+      const audioTrack = mic.getAudioTracks()[0]
+      if (audioTrack) {
+        audioTrack.enabled = micEnabledRef.current
+        stream.addTrack(audioTrack)
+      }
+    } catch {
+      /* الميكروفون غير متاح — بثّ فيديو فقط */
+    }
     streamRef.current = stream
     if (videoRef.current) {
       videoRef.current.srcObject = stream
@@ -436,6 +454,16 @@ export function MobileCamera() {
   const connected = streaming && lastUploadOkAt != null && now - lastUploadOkAt < CONNECTED_THRESHOLD_MS
   const cameraOn = streaming || recording
 
+  // كتم/تفعيل الصوت المبثوث: يبدّل enabled على مسار الميكروفون دون إعادة تفاوض.
+  const toggleMic = useCallback(() => {
+    setMicEnabled((prev) => {
+      const next = !prev
+      micEnabledRef.current = next
+      streamRef.current?.getAudioTracks().forEach((t) => (t.enabled = next))
+      return next
+    })
+  }, [])
+
   // البث الحي المباشر (WebRTC): يعيد استخدام نفس بث الكاميرا وينقله للمدير لحظياً
   // كلما كانت الكاميرا تصوّر (بث أو تسجيل). مستقل عن رفع الإطارات/التحليل ويعمل ندّاً لِند.
   const getStream = useCallback(() => streamRef.current, [])
@@ -651,6 +679,23 @@ export function MobileCamera() {
           </button>
         )}
       </div>
+
+      {/* كتم/تفعيل الصوت المبثوث للمدير — يظهر أثناء البث أو التسجيل فقط */}
+      {cameraOn && (
+        <button
+          onClick={toggleMic}
+          className={cn(
+            "flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold transition-colors",
+            micEnabled
+              ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15"
+              : "border-border bg-muted text-muted-foreground hover:bg-muted/70",
+          )}
+          aria-pressed={micEnabled}
+        >
+          {micEnabled ? <Mic className="size-4" /> : <MicOff className="size-4" />}
+          {micEnabled ? "الصوت مفعّل — يُبثّ للمدير" : "الصوت مكتوم"}
+        </button>
+      )}
 
       {/* حالة الاتصال والعدادات */}
       <div className="grid grid-cols-3 gap-3">

@@ -1,9 +1,22 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import useSWR from "swr"
 import Link from "next/link"
-import { ArrowRight, Cctv, MapPin, Clock, AlertTriangle, ShieldCheck, UserRound } from "lucide-react"
+import { useRouter } from "next/navigation"
+import {
+  ArrowRight,
+  Cctv,
+  MapPin,
+  Clock,
+  AlertTriangle,
+  ShieldCheck,
+  UserRound,
+  Volume2,
+  VolumeX,
+  Camera,
+  Loader2,
+} from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { detectionTypeLabels, severityLabels, severityStyles } from "@/lib/ai-monitoring"
@@ -61,6 +74,87 @@ export function LiveView({
   // إن لم تكن الكاميرا تبث بثاً حياً.
   const { videoRef, status: webrtcStatus, error: webrtcError } = useWebrtcViewer({ cameraId, enabled: true })
   const webrtcLive = webrtcStatus === "live"
+
+  // كتم الصوت افتراضاً (شرط التشغيل التلقائي)؛ المدير يفعّله بنقرة (إيماءة المستخدم).
+  const [audioOn, setAudioOn] = useState(false)
+  const toggleAudio = () => {
+    const v = videoRef.current
+    if (!v) return
+    const next = !audioOn
+    v.muted = !next
+    if (next) void v.play().catch(() => {})
+    setAudioOn(next)
+  }
+
+  // التقاط لقطة من البث الحي (أو آخر إطار) ورفعها كدليل دائم ثم فتح نموذج مخالفة.
+  const router = useRouter()
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [capturing, setCapturing] = useState(false)
+  const [captureError, setCaptureError] = useState<string | null>(null)
+
+  const captureDataUrl = async (): Promise<string | null> => {
+    const canvas = canvasRef.current
+    if (!canvas) return null
+    const video = videoRef.current
+    // 1) من الفيديو الحي مباشرةً (بكسل اللحظة الحالية).
+    if (webrtcLive && video && video.videoWidth > 0) {
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
+      const ctx = canvas.getContext("2d")
+      if (!ctx) return null
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+      return canvas.toDataURL("image/jpeg", 0.7)
+    }
+    // 2) احتياطي: حمّل آخر إطار (Blob) وحوّله إلى data URL.
+    if (frameSrc) {
+      const res = await fetch(frameSrc, { cache: "no-store" })
+      const blob = await res.blob()
+      return await new Promise<string | null>((resolve) => {
+        const fr = new FileReader()
+        fr.onload = () => resolve(typeof fr.result === "string" ? fr.result : null)
+        fr.onerror = () => resolve(null)
+        fr.readAsDataURL(blob)
+      })
+    }
+    return null
+  }
+
+  const handleCapture = async () => {
+    setCaptureError(null)
+    setCapturing(true)
+    try {
+      const dataUrl = await captureDataUrl()
+      if (!dataUrl) {
+        setCaptureError("تعذّر التقاط لقطة الآن. حاول مرة أخرى.")
+        return
+      }
+      const res = await fetch("/api/ai-monitoring/live-snapshot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: dataUrl, cameraId }),
+      })
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`
+        try {
+          const d = (await res.json()) as { error?: string }
+          if (d?.error) msg = d.error
+        } catch {
+          /* الجسم ليس JSON */
+        }
+        setCaptureError(msg)
+        return
+      }
+      const { url } = (await res.json()) as { url: string }
+      const params = new URLSearchParams({ from: "recording", evidence: url })
+      const detectedBy = camera?.inspectorName || ""
+      if (detectedBy) params.set("detectedBy", detectedBy)
+      router.push(`/violations?${params.toString()}`)
+    } catch (e) {
+      setCaptureError(e instanceof Error ? e.message : "تعذّر التقاط اللقطة")
+    } finally {
+      setCapturing(false)
+    }
+  }
 
   const lastSeenMs = camera ? new Date(camera.lastSeenAt).getTime() : 0
   const isLive = camera != null && now - lastSeenMs < LIVE_THRESHOLD_MS
@@ -145,6 +239,18 @@ export function LiveView({
               </div>
             ))}
 
+          {/* زر تفعيل/كتم صوت البث الحي — يظهر أثناء البث الحي المباشر فقط */}
+          {webrtcLive && (
+            <button
+              onClick={toggleAudio}
+              className="absolute left-3 top-14 z-10 inline-flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-xs font-medium text-white backdrop-blur transition-colors hover:bg-black/75"
+              aria-pressed={audioOn}
+            >
+              {audioOn ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
+              {audioOn ? "الصوت مفعّل" : "تفعيل الصوت"}
+            </button>
+          )}
+
           {/* طبقة معلومات علوية */}
           <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 bg-gradient-to-b from-black/70 to-transparent p-3">
             <div className="flex items-center gap-1.5 rounded-lg bg-black/40 px-2.5 py-1 text-xs font-medium text-white">
@@ -193,6 +299,24 @@ export function LiveView({
           </div>
         </div>
       </div>
+
+      {/* التقاط لقطة وإنشاء مخالفة منها */}
+      <div className="flex flex-col gap-2">
+        <button
+          onClick={handleCapture}
+          disabled={capturing || (!webrtcLive && !frameSrc)}
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {capturing ? <Loader2 className="size-4 animate-spin" /> : <Camera className="size-4" />}
+          {capturing ? "جارٍ التقاط اللقطة…" : "التقاط لقطة وإنشاء مخالفة"}
+        </button>
+        {captureError && (
+          <p className="text-sm text-destructive" role="alert">
+            {captureError}
+          </p>
+        )}
+      </div>
+      <canvas ref={canvasRef} className="hidden" />
 
       {/* تفاصيل الكاميرا */}
       <Card className="grid grid-cols-2 gap-x-4 gap-y-3 p-4 sm:grid-cols-4">
