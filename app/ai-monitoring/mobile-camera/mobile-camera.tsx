@@ -81,8 +81,11 @@ export function MobileCamera() {
   const recordStartRef = useRef<number>(0)
   const recordMimeRef = useRef<{ mimeType: string; ext: string }>({ mimeType: "", ext: "webm" })
 
-  const [cameraName, setCameraName] = useState("")
+  const [inspectorName, setInspectorName] = useState("")
   const [location, setLocation] = useState("")
+  // الجلسة تبدأ فقط بعد تعبئة اسم المفتش والموقع؛ لا يُفعَّل البث/التسجيل قبلها.
+  const [sessionStarted, setSessionStarted] = useState(false)
+  const [sessionError, setSessionError] = useState<string | null>(null)
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sentCount, setSentCount] = useState(0)
@@ -106,18 +109,29 @@ export function MobileCamera() {
     return () => clearInterval(t)
   }, [])
 
-  // استرجاع اسم الكاميرا والموقع من التخزين المحلي.
+  // استرجاع اسم المفتش والموقع من التخزين المحلي (تسهيلاً على المفتش نفسه لاحقاً).
   useEffect(() => {
-    setCameraName(localStorage.getItem("aiCam.name") ?? "")
+    setInspectorName(localStorage.getItem("aiCam.inspector") ?? "")
     setLocation(localStorage.getItem("aiCam.location") ?? "")
   }, [])
 
   useEffect(() => {
-    localStorage.setItem("aiCam.name", cameraName)
-  }, [cameraName])
+    localStorage.setItem("aiCam.inspector", inspectorName)
+  }, [inspectorName])
   useEffect(() => {
     localStorage.setItem("aiCam.location", location)
   }, [location])
+
+  // بدء الجلسة: يتطلب تعبئة الحقلين الإلزاميين قبل تفعيل أزرار البث/التسجيل.
+  const bothFilled = inspectorName.trim().length > 0 && location.trim().length > 0
+  const startSession = useCallback(() => {
+    if (!bothFilled) {
+      setSessionError("يرجى تعبئة اسم المفتش/الموظف والموقع قبل بدء الجلسة.")
+      return
+    }
+    setSessionError(null)
+    setSessionStarted(true)
+  }, [bothFilled])
 
   // ضمان وجود بث كاميرا نشط (يُستخدم للبث والتسجيل معاً). يعيد الـ stream أو يرمي خطأً.
   const ensureStream = useCallback(async (): Promise<MediaStream> => {
@@ -183,7 +197,7 @@ export function MobileCamera() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           image,
-          cameraId: cameraName || "كاميرا الهاتف",
+          inspectorName: inspectorName || "كاميرا الهاتف",
           cameraLocation: location,
         }),
       })
@@ -200,7 +214,7 @@ export function MobileCamera() {
     } finally {
       uploadingRef.current = false
     }
-  }, [captureJpeg, cameraName, location])
+  }, [captureJpeg, inspectorName, location])
 
   // الحلقة البطيئة: إرسال الإطار للتحليل بالذكاء الاصطناعي (Claude Sonnet 4.6).
   const analyzeFrame = useCallback(async () => {
@@ -215,7 +229,7 @@ export function MobileCamera() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           image,
-          cameraId: cameraName || "كاميرا الهاتف",
+          inspectorName: inspectorName || "كاميرا الهاتف",
           cameraLocation: location,
         }),
       })
@@ -231,7 +245,7 @@ export function MobileCamera() {
       analyzingRef.current = false
       setAnalyzing(false)
     }
-  }, [captureJpeg, cameraName, location])
+  }, [captureJpeg, inspectorName, location])
 
   // بدء البث الحي (رفع الإطارات + التحليل).
   const startStreaming = useCallback(async () => {
@@ -289,7 +303,7 @@ export function MobileCamera() {
   // رفع الفيديو المُسجّل (والمعاينة) إلى Blob مباشرةً من المتصفح ثم إنشاء سجل في القاعدة.
   const uploadRecording = useCallback(
     async (blob: Blob, durationSeconds: number, posterDataUrl: string | null) => {
-      const camId = cameraName || "كاميرا الهاتف"
+      const camId = inspectorName || "كاميرا الهاتف"
       const ext = recordMimeRef.current.ext || "webm"
       const stamp = Date.now()
       const path = `recordings/${encodeURIComponent(camId)}/${stamp}.${ext}`
@@ -336,7 +350,7 @@ export function MobileCamera() {
         setSavingRecording(false)
       }
     },
-    [cameraName],
+    [inspectorName],
   )
 
   // بدء تسجيل الفيديو من نفس بث الكاميرا (يعمل مع البث أو بمفرده).
@@ -430,29 +444,68 @@ export function MobileCamera() {
         </p>
       </Card>
 
-      {/* حقول الكاميرا */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-foreground">اسم الكاميرا</span>
-          <input
-            value={cameraName}
-            onChange={(e) => setCameraName(e.target.value)}
-            placeholder="مثال: كاميرا البوابة 1"
+      {/* نموذج بدء الجلسة: اسم المفتش والموقع إلزاميان قبل تفعيل البث/التسجيل */}
+      <Card className="flex flex-col gap-3 p-4">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-semibold text-foreground">بيانات الجلسة</span>
+          {sessionStarted && (
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
+              <CheckCircle2 className="size-3.5" />
+              الجلسة جاهزة
+            </span>
+          )}
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-foreground">
+              اسم المفتش/الموظف <span className="text-destructive">*</span>
+            </span>
+            <input
+              value={inspectorName}
+              onChange={(e) => setInspectorName(e.target.value)}
+              placeholder="مثال: خالد العتيبي"
+              disabled={sessionStarted}
+              className="rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-60"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-foreground">
+              الموقع <span className="text-destructive">*</span>
+            </span>
+            <input
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="مثال: بوابة رقم 3 أو منطقة التحميل"
+              disabled={sessionStarted}
+              className="rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-60"
+            />
+          </label>
+        </div>
+        {sessionError && <p className="text-sm text-destructive">{sessionError}</p>}
+        {!sessionStarted ? (
+          <button
+            onClick={startSession}
+            disabled={!bothFilled}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <CheckCircle2 className="size-4" />
+            بدء الجلسة
+          </button>
+        ) : (
+          <button
+            onClick={() => setSessionStarted(false)}
             disabled={cameraOn}
-            className="rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-60"
-          />
-        </label>
-        <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-foreground">الموقع</span>
-          <input
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            placeholder="مثال: ساحة الرافعات الشمالية"
-            disabled={cameraOn}
-            className="rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-60"
-          />
-        </label>
-      </div>
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-input bg-background px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            تعديل بيانات الجلسة
+          </button>
+        )}
+        {sessionStarted && cameraOn && (
+          <p className="text-xs text-muted-foreground">
+            لا يمكن تعديل بيانات الجلسة أثناء البث أو التسجيل — أوقفهما أولاً.
+          </p>
+        )}
+      </Card>
 
       {/* معاينة الكاميرا */}
       <Card className="relative overflow-hidden bg-black p-0">
@@ -533,12 +586,18 @@ export function MobileCamera() {
         </Card>
       )}
 
-      {/* أزرار التحكم: البث والتسجيل مستقلان */}
+      {/* أزرار التحكم: البث والتسجيل مستقلان — مقفلة حتى بدء الجلسة */}
+      {!sessionStarted && (
+        <p className="text-sm text-muted-foreground">
+          ابدأ الجلسة أعلاه (اسم المفتش + الموقع) لتفعيل زر البث والتسجيل.
+        </p>
+      )}
       <div className="flex flex-col gap-3 sm:flex-row">
         {!streaming ? (
           <button
             onClick={startStreaming}
-            className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            disabled={!sessionStarted}
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Play className="size-4" />
             بدء البث
@@ -556,8 +615,8 @@ export function MobileCamera() {
         {!recording ? (
           <button
             onClick={startRecording}
-            disabled={savingRecording}
-            className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-red-600 bg-red-600/10 px-4 py-3 text-sm font-semibold text-red-700 transition-colors hover:bg-red-600/20 disabled:opacity-60 dark:text-red-400"
+            disabled={savingRecording || !sessionStarted}
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-red-600 bg-red-600/10 px-4 py-3 text-sm font-semibold text-red-700 transition-colors hover:bg-red-600/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400"
           >
             <Video className="size-4" />
             بدء التسجيل

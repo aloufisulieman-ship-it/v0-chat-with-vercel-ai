@@ -341,7 +341,7 @@ export const attachment = pgTable("attachment", {
 })
 
 // ---------- المراقبة الذكية بالذكاء الاصطناعي (كاميرات ساحات الرافعات) ----------
-// detectionType: أحد ��لأنواع الستة (no_ppe / traffic_congestion / unsafe_stacking /
+// detectionType: أحد ����لأنواع الستة (no_ppe / traffic_congestion / unsafe_stacking /
 //   overspeed / restricted_area / pedestrian_near_forklift).
 // severity: low / medium / high / critical.
 // status: new / acknowledged / resolved / false_positive.
@@ -350,6 +350,7 @@ export const aiDetection = pgTable("ai_detections", {
   userId: text("userId").notNull(),
   detectionId: text("detection_id").notNull(), // AID-YYYY-###
   cameraId: text("camera_id").notNull().default(""),
+  inspectorName: text("inspector_name").notNull().default(""), // اسم المفتش/الموظف صاحب الجلسة
   cameraLocation: text("camera_location").notNull().default(""),
   detectionType: text("detection_type").notNull().default("no_ppe"),
   severity: text("severity").notNull().default("low"),
@@ -372,6 +373,7 @@ export const activeCameraStream = pgTable(
     id: serial("id").primaryKey(),
     userId: text("userId").notNull(),
     cameraId: text("camera_id").notNull(),
+    inspectorName: text("inspector_name").notNull().default(""), // اسم المفتش/الموظف الذي بدأ الجلسة
     cameraLocation: text("camera_location").notNull().default(""),
     lastFrameUrl: text("last_frame_url").notNull().default(""),
     lastSeenAt: timestamp("last_seen_at").notNull().defaultNow(),

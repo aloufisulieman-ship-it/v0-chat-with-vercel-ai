@@ -50,22 +50,31 @@ export type ActiveCameraStream = typeof activeCameraStream.$inferSelect
 // نافذة اعتبار الكاميرا "متصلة حالياً" (بالثواني): آخر إرسال خلال آخر دقيقتين.
 const ACTIVE_WINDOW_SECONDS = 120
 
+// معرّف جلسة ثابت لكل مستخدم مسجّل دخول: يضمن أن إعادة المفتش نفسه لفتح البث
+// لاحقاً تُحدّث السجل نفسه بدل إنشاء كاميرا جديدة في كل مرة (نطاق الجلسة = الحساب).
+function sessionCameraId(userId: string) {
+  return `cam-${userId}`
+}
+
 // تحديث (أو إنشاء) سجل الكاميرا المتصلة مع نبضة الاتصال (heartbeat).
+// الهوية مربوطة بحساب المفتش (userId) لا بالنص المُدخل، لذا يُعاد استخدام السجل نفسه.
 // إذا مُرِّر lastFrameUrl (رابط Blob) يُحدَّث، وإلا يُحتفظ بالرابط الحالي كما هو
 // حتى لا يمحو استدعاءُ التحليل رابطَ الإطار المرفوع إلى Blob.
 export async function touchCameraStream(input: {
-  cameraId: string
+  inspectorName: string
   cameraLocation: string
   lastFrameUrl?: string
 }): Promise<void> {
   // البث/التسجيل متاح لأي مستخدم مسجّل دخول (الموظف المصوّر).
   const userId = (await requireUser()).id
-  const cameraId = (input.cameraId || "كاميرا الهاتف").slice(0, 120)
+  const cameraId = sessionCameraId(userId)
+  const inspectorName = (input.inspectorName || "كاميرا الهاتف").slice(0, 160)
   const cameraLocation = (input.cameraLocation || "").slice(0, 200)
   const hasFrame = typeof input.lastFrameUrl === "string" && input.lastFrameUrl.length > 0
   const lastFrameUrl = hasFrame ? (input.lastFrameUrl as string) : ""
 
   const set: Partial<typeof activeCameraStream.$inferInsert> = {
+    inspectorName,
     cameraLocation,
     lastSeenAt: new Date(),
   }
@@ -73,7 +82,7 @@ export async function touchCameraStream(input: {
 
   await db
     .insert(activeCameraStream)
-    .values({ userId, cameraId, cameraLocation, lastFrameUrl, lastSeenAt: new Date() })
+    .values({ userId, cameraId, inspectorName, cameraLocation, lastFrameUrl, lastSeenAt: new Date() })
     .onConflictDoUpdate({
       target: [activeCameraStream.userId, activeCameraStream.cameraId],
       set,
@@ -99,6 +108,7 @@ export async function getActiveCameraStreams(): Promise<ActiveCameraStream[]> {
 export type CameraLiveStatus = {
   camera: {
     cameraId: string
+    inspectorName: string
     cameraLocation: string
     lastFrameUrl: string
     lastSeenAt: string
@@ -145,6 +155,7 @@ export async function getCameraLiveStatus(cameraId: string): Promise<CameraLiveS
     camera: cam
       ? {
           cameraId: cam.cameraId,
+          inspectorName: cam.inspectorName,
           cameraLocation: cam.cameraLocation,
           lastFrameUrl: cam.lastFrameUrl,
           lastSeenAt: (cam.lastSeenAt as unknown as Date)?.toISOString?.() ?? String(cam.lastSeenAt),
@@ -180,7 +191,7 @@ async function nextDetectionId(): Promise<string> {
 
 // حفظ اكتشاف جديد قادم من تحليل الكاميرا. يُستدعى من مسار /api/ai-monitoring/analyze.
 export async function saveDetection(input: {
-  cameraId: string
+  inspectorName: string
   cameraLocation: string
   detectionType: string
   severity?: string
@@ -190,6 +201,8 @@ export async function saveDetection(input: {
 }): Promise<AiDetection> {
   // يُستدعى من مسار التحليل نيابةً عن الموظف المصوّر (أي مستخدم مسجّل دخول).
   const userId = (await requireUser()).id
+  // نفس معرّف جلسة الكاميرا المستخدم في البث المباشر لربط الاكتشافات بالكاميرا الصحيحة.
+  const cameraId = sessionCameraId(userId)
 
   const detectionType = (VALID_TYPES as string[]).includes(input.detectionType)
     ? (input.detectionType as DetectionType)
@@ -206,7 +219,8 @@ export async function saveDetection(input: {
     .values({
       userId,
       detectionId,
-      cameraId: input.cameraId?.slice(0, 120) || "",
+      cameraId,
+      inspectorName: input.inspectorName?.slice(0, 160) || "كاميرا الهاتف",
       cameraLocation: input.cameraLocation?.slice(0, 200) || "",
       detectionType,
       severity,

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import useSWR from "swr"
 import Link from "next/link"
-import { Cctv, MapPin, Clock, Video, Radio } from "lucide-react"
+import { Cctv, MapPin, Clock, Video, Radio, UserRound } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import {
   Dialog,
@@ -20,6 +20,7 @@ const LIVE_THRESHOLD_MS = 8000
 export type CameraStreamDto = {
   id: number
   cameraId: string
+  inspectorName: string
   cameraLocation: string
   lastFrameUrl: string
   lastSeenAt: string
@@ -97,6 +98,8 @@ export function ConnectedCameras({ isAdmin }: { isAdmin: boolean }) {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {cameras.map((cam) => {
             const isLive = now - new Date(cam.lastSeenAt).getTime() < LIVE_THRESHOLD_MS
+            // العنوان المعروض = اسم المفتش/الموظف (مع تراجع لمعرّف الجلسة عند غيابه).
+            const title = cam.inspectorName || cam.cameraId
             return (
               <div
                 key={cam.id}
@@ -106,7 +109,7 @@ export function ConnectedCameras({ isAdmin }: { isAdmin: boolean }) {
                 <DialogTrigger asChild>
                   <button
                     className="group flex flex-col text-right transition-colors focus:outline-none focus:ring-2 focus:ring-ring/30"
-                    aria-label={`عرض كاميرا ${cam.cameraId}`}
+                    aria-label={`عرض بث المفتش ${title}`}
                   >
                     {/* آخر إطار */}
                     <div className="relative aspect-video w-full overflow-hidden bg-black">
@@ -114,7 +117,7 @@ export function ConnectedCameras({ isAdmin }: { isAdmin: boolean }) {
                         /* eslint-disable-next-line @next/next/no-img-element */
                         <img
                           src={frameSrc(cam.lastFrameUrl, cam.lastSeenAt)}
-                          alt={`آخر إطار من ${cam.cameraId}`}
+                          alt={`آخر إطار من بث المفتش ${title}`}
                           className="size-full object-cover transition-transform group-hover:scale-[1.03]"
                         />
                       ) : (
@@ -134,11 +137,11 @@ export function ConnectedCameras({ isAdmin }: { isAdmin: boolean }) {
                         {isLive ? "مباشر" : "غير متصل"}
                       </div>
                     </div>
-                    {/* بيانات الكاميرا */}
+                    {/* بيانات المفتش والموقع */}
                     <div className="flex flex-col gap-1.5 p-3">
                       <div className="flex items-center gap-1.5">
-                        <Cctv className="size-4 shrink-0 text-muted-foreground" />
-                        <span className="truncate font-medium text-foreground">{cam.cameraId}</span>
+                        <UserRound className="size-4 shrink-0 text-muted-foreground" />
+                        <span className="truncate font-medium text-foreground">{title}</span>
                       </div>
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <MapPin className="size-3.5 shrink-0" />
@@ -154,8 +157,8 @@ export function ConnectedCameras({ isAdmin }: { isAdmin: boolean }) {
                 <DialogContent className="max-w-2xl">
                   <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                      <Cctv className="size-5" />
-                      {cam.cameraId}
+                      <UserRound className="size-5" />
+                      {title}
                     </DialogTitle>
                   </DialogHeader>
                   <div className="flex flex-col gap-4">
@@ -164,7 +167,7 @@ export function ConnectedCameras({ isAdmin }: { isAdmin: boolean }) {
                         /* eslint-disable-next-line @next/next/no-img-element */
                         <img
                           src={frameSrc(cam.lastFrameUrl, cam.lastSeenAt)}
-                          alt={`آخر إطار من ${cam.cameraId}`}
+                          alt={`آخر إطار من بث المفتش ${title}`}
                           className="w-full object-contain"
                         />
                       ) : (
@@ -175,8 +178,8 @@ export function ConnectedCameras({ isAdmin }: { isAdmin: boolean }) {
                     </div>
                     <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
                       <div className="flex flex-col gap-0.5">
-                        <dt className="text-xs text-muted-foreground">اسم الكاميرا</dt>
-                        <dd className="font-medium text-foreground">{cam.cameraId}</dd>
+                        <dt className="text-xs text-muted-foreground">اسم المفتش/الموظف</dt>
+                        <dd className="font-medium text-foreground">{title}</dd>
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <dt className="text-xs text-muted-foreground">الموقع</dt>

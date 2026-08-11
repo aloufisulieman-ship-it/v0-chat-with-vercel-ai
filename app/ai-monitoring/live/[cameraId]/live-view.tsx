@@ -53,6 +53,8 @@ export function LiveView({
 
   const camera = data?.camera ?? null
   const detection = data?.latestDetection ?? null
+  // العنوان المعروض = اسم المفتش/الموظف (مع تراجع لمعرّف الجلسة).
+  const title = camera?.inspectorName || cameraId
 
   const lastSeenMs = camera ? new Date(camera.lastSeenAt).getTime() : 0
   const isLive = camera != null && now - lastSeenMs < LIVE_THRESHOLD_MS
@@ -101,7 +103,7 @@ export function LiveView({
             /* eslint-disable-next-line @next/next/no-img-element */
             <img
               src={frameSrc || "/placeholder.svg"}
-              alt={`آخر إطار من ${cameraId}`}
+              alt={`آخر إطار من بث المفتش ${title}`}
               className="size-full object-contain"
             />
           ) : (
@@ -114,8 +116,8 @@ export function LiveView({
           {/* طبقة معلومات علوية */}
           <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 bg-gradient-to-b from-black/70 to-transparent p-3">
             <div className="flex items-center gap-1.5 rounded-lg bg-black/40 px-2.5 py-1 text-xs font-medium text-white">
-              <Cctv className="size-3.5" />
-              {cameraId}
+              <UserRound className="size-3.5" />
+              {title}
             </div>
             {camera && (
               <div className="flex items-center gap-1.5 rounded-lg bg-black/40 px-2.5 py-1 text-xs text-white/90">
@@ -163,8 +165,8 @@ export function LiveView({
       {/* تفاصيل الكاميرا */}
       <Card className="grid grid-cols-2 gap-x-4 gap-y-3 p-4 sm:grid-cols-4">
         <div className="flex flex-col gap-0.5">
-          <span className="text-xs text-muted-foreground">اسم الكاميرا</span>
-          <span className="truncate font-medium text-foreground">{cameraId}</span>
+          <span className="text-xs text-muted-foreground">اسم المفتش/الموظف</span>
+          <span className="truncate font-medium text-foreground">{title}</span>
         </div>
         <div className="flex flex-col gap-0.5">
           <span className="text-xs text-muted-foreground">الموقع</span>
