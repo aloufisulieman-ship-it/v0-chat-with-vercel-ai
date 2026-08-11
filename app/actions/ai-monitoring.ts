@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache"
 import { requireUser, requireHseReviewerId } from "@/lib/session"
 import type { DetectionType, DetectionStatus } from "@/lib/ai-monitoring"
 import { severityByType } from "@/lib/ai-monitoring"
+import { sessionCameraId } from "@/lib/camera-session"
 
 const VALID_TYPES: DetectionType[] = [
   "no_ppe",
@@ -50,14 +51,9 @@ export type ActiveCameraStream = typeof activeCameraStream.$inferSelect
 // نافذة اعتبار الكاميرا "متصلة حالياً" (بالثواني): آخر إرسال خلال آخر دقيقتين.
 const ACTIVE_WINDOW_SECONDS = 120
 
-// معرّف جلسة ثابت لكل مستخدم مسجّل دخول: يضمن أن إعادة المفتش نفسه لفتح البث
-// لاحقاً تُحدّث السجل نفسه بدل إنشاء كاميرا جديدة في كل مرة (نطاق الجلسة = الحساب).
-function sessionCameraId(userId: string) {
-  return `cam-${userId}`
-}
-
 // تحديث (أو إنشاء) سجل الكاميرا المتصلة مع نبضة الاتصال (heartbeat).
-// الهوية مربوطة بحساب المفتش (userId) لا بالنص المُدخل، لذا يُعاد استخدام السجل نفسه.
+// هوية الجلسة مشتقّة من (الحساب + اسم المفتش المُدخل)، فيحصل كل مفتش على سجله الخاص
+// حتى لو تشارك عدّة مفتشين نفس الرابط/الحساب، ويُعاد استخدام السجل نفسه عند عودته.
 // إذا مُرِّر lastFrameUrl (رابط Blob) يُحدَّث، وإلا يُحتفظ بالرابط الحالي كما هو
 // حتى لا يمحو استدعاءُ التحليل رابطَ الإطار المرفوع إلى Blob.
 export async function touchCameraStream(input: {
@@ -67,8 +63,8 @@ export async function touchCameraStream(input: {
 }): Promise<void> {
   // البث/التسجيل متاح لأي مستخدم مسجّل دخول (الموظف المصوّر).
   const userId = (await requireUser()).id
-  const cameraId = sessionCameraId(userId)
   const inspectorName = (input.inspectorName || "كاميرا الهاتف").slice(0, 160)
+  const cameraId = sessionCameraId(userId, inspectorName)
   const cameraLocation = (input.cameraLocation || "").slice(0, 200)
   const hasFrame = typeof input.lastFrameUrl === "string" && input.lastFrameUrl.length > 0
   const lastFrameUrl = hasFrame ? (input.lastFrameUrl as string) : ""
@@ -201,8 +197,9 @@ export async function saveDetection(input: {
 }): Promise<AiDetection> {
   // يُستدعى من مسار التحليل نيابةً عن الموظف المصوّر (أي مستخدم مسجّل دخول).
   const userId = (await requireUser()).id
-  // نفس معرّف جلسة الكاميرا المستخدم في البث المباشر لربط الاكتشافات بالكاميرا الصحيحة.
-  const cameraId = sessionCameraId(userId)
+  // نفس معرّف جلسة الكاميرا المستخدم في البث المباشر (مشتقّ من اسم المفتش)
+  // لربط الاكتشافات بجلسة/كاميرا المفتش الصحيحة.
+  const cameraId = sessionCameraId(userId, input.inspectorName || "")
 
   const detectionType = (VALID_TYPES as string[]).includes(input.detectionType)
     ? (input.detectionType as DetectionType)
