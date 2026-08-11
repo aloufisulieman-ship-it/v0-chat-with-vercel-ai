@@ -86,14 +86,6 @@ export function ConnectedCameras({ isAdmin }: { isAdmin: boolean }) {
       if (t - new Date(c.lastSeenAt).getTime() < LIVE_THRESHOLD_MS) liveNow.add(c.cameraId)
     }
     const prev = prevLiveRef.current
-    console.log(
-      "[v0] toast-effect:",
-      JSON.stringify({
-        camerasLen: cameras.length,
-        liveNow: [...liveNow],
-        prev: prev === null ? "SEED" : [...prev],
-      }),
-    )
     // أول تشغيل: نبذر المجموعة دون إطلاق إشعارات.
     if (prev === null) {
       prevLiveRef.current = liveNow
@@ -105,6 +97,8 @@ export function ConnectedCameras({ isAdmin }: { isAdmin: boolean }) {
         toast({
           title: "بدأ بثٌّ حيّ جديد",
           description: `${label}${c.cameraLocation ? ` — ${c.cameraLocation}` : ""}`,
+          // إشعار مهم للمدير: نُبقيه ظاهراً 15 ثانية بدل 5 الافتراضية.
+          duration: 15000,
           action: (
             <ToastAction altText="فتح البث المباشر" asChild>
               <Link href={`/ai-monitoring/live/${encodeURIComponent(c.cameraId)}`}>فتح البث</Link>
