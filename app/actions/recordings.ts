@@ -12,11 +12,28 @@ export type VideoRecordingDto = {
   cameraId: string
   cameraName: string
   videoUrl: string
+  posterUrl: string
   durationSeconds: number
   fileSizeBytes: number
   recordedBy: string
   recordedAt: string
   screenshotCount: number
+}
+
+export type RecordingsFilter = {
+  camera?: string
+  from?: string // YYYY-MM-DD
+  to?: string // YYYY-MM-DD
+  page?: number
+  pageSize?: number
+}
+
+export type RecordingsPage = {
+  items: VideoRecordingDto[]
+  total: number
+  page: number
+  pageSize: number
+  cameras: string[]
 }
 
 export type VideoScreenshotDto = {
@@ -35,6 +52,7 @@ export async function createRecording(input: {
   cameraId: string
   cameraName: string
   videoUrl: string
+  posterUrl?: string
   durationSeconds: number
   fileSizeBytes: number
 }): Promise<{ id: number }> {
@@ -49,6 +67,7 @@ export async function createRecording(input: {
       cameraId: (input.cameraId || "").slice(0, 120),
       cameraName: (input.cameraName || "كاميرا الهاتف").slice(0, 160),
       videoUrl: input.videoUrl,
+      posterUrl: input.posterUrl?.startsWith("http") ? input.posterUrl : "",
       durationSeconds: Math.max(0, Math.round(input.durationSeconds || 0)),
       fileSizeBytes: Math.max(0, Math.round(input.fileSizeBytes || 0)),
       recordedBy: u.name || "مستخدم",
@@ -58,7 +77,32 @@ export async function createRecording(input: {
   return { id: row.id }
 }
 
-// قائمة التسجيلات — مقصورة على المراجع وعلى حسابه فقط.
+function toDto(r: typeof videoRecording.$inferSelect, screenshotCount: number): VideoRecordingDto {
+  return {
+    id: r.id,
+    cameraId: r.cameraId,
+    cameraName: r.cameraName,
+    videoUrl: r.videoUrl,
+    posterUrl: r.posterUrl ?? "",
+    durationSeconds: r.durationSeconds,
+    fileSizeBytes: r.fileSizeBytes,
+    recordedBy: r.recordedBy,
+    recordedAt: (r.recordedAt as unknown as Date)?.toISOString?.() ?? String(r.recordedAt),
+    screenshotCount,
+  }
+}
+
+async function screenshotCounts(userId: string): Promise<Map<number, number>> {
+  const shots = await db
+    .select({ recordingId: videoScreenshot.recordingId })
+    .from(videoScreenshot)
+    .where(eq(videoScreenshot.userId, userId))
+  const countByRec = new Map<number, number>()
+  for (const s of shots) countByRec.set(s.recordingId, (countByRec.get(s.recordingId) ?? 0) + 1)
+  return countByRec
+}
+
+// قائمة التسجيلات كاملة — مقصورة على المراجع وعلى حسابه فقط (للتحميل المبدئي).
 export async function getRecordings(): Promise<VideoRecordingDto[]> {
   const userId = await requireHseReviewerId()
   const rows = await db
@@ -66,26 +110,48 @@ export async function getRecordings(): Promise<VideoRecordingDto[]> {
     .from(videoRecording)
     .where(eq(videoRecording.userId, userId))
     .orderBy(desc(videoRecording.recordedAt))
+  const countByRec = await screenshotCounts(userId)
+  return rows.map((r) => toDto(r, countByRec.get(r.id) ?? 0))
+}
 
-  // عدّ اللقطات لكل تسجيل بجلب واحد ثم التجميع في الذاكرة.
-  const shots = await db
-    .select({ recordingId: videoScreenshot.recordingId })
-    .from(videoScreenshot)
-    .where(eq(videoScreenshot.userId, userId))
-  const countByRec = new Map<number, number>()
-  for (const s of shots) countByRec.set(s.recordingId, (countByRec.get(s.recordingId) ?? 0) + 1)
+// قائمة مصفّاة ومُقسّمة لصفحات — تصفية بالكاميرا ونطاق التاريخ.
+export async function getRecordingsPage(filter: RecordingsFilter = {}): Promise<RecordingsPage> {
+  const userId = await requireHseReviewerId()
+  const page = Math.max(1, Math.round(filter.page ?? 1))
+  const pageSize = Math.min(48, Math.max(6, Math.round(filter.pageSize ?? 12)))
 
-  return rows.map((r) => ({
-    id: r.id,
-    cameraId: r.cameraId,
-    cameraName: r.cameraName,
-    videoUrl: r.videoUrl,
-    durationSeconds: r.durationSeconds,
-    fileSizeBytes: r.fileSizeBytes,
-    recordedBy: r.recordedBy,
-    recordedAt: (r.recordedAt as unknown as Date)?.toISOString?.() ?? String(r.recordedAt),
-    screenshotCount: countByRec.get(r.id) ?? 0,
-  }))
+  // جلب كل تسجيلات الحساب مرة واحدة ثم التصفية/التقسيم في الذاكرة (الحجم لكل حساب محدود).
+  const all = await db
+    .select()
+    .from(videoRecording)
+    .where(eq(videoRecording.userId, userId))
+    .orderBy(desc(videoRecording.recordedAt))
+
+  const cameras = Array.from(new Set(all.map((r) => r.cameraName).filter(Boolean))).sort()
+
+  const fromTs = filter.from ? new Date(`${filter.from}T00:00:00`).getTime() : null
+  const toTs = filter.to ? new Date(`${filter.to}T23:59:59.999`).getTime() : null
+
+  const filtered = all.filter((r) => {
+    if (filter.camera && filter.camera !== "all" && r.cameraName !== filter.camera) return false
+    const t = (r.recordedAt as unknown as Date)?.getTime?.() ?? 0
+    if (fromTs != null && t < fromTs) return false
+    if (toTs != null && t > toTs) return false
+    return true
+  })
+
+  const total = filtered.length
+  const start = (page - 1) * pageSize
+  const pageRows = filtered.slice(start, start + pageSize)
+  const countByRec = await screenshotCounts(userId)
+
+  return {
+    items: pageRows.map((r) => toDto(r, countByRec.get(r.id) ?? 0)),
+    total,
+    page,
+    pageSize,
+    cameras,
+  }
 }
 
 // لقطات تسجيل معيّن — للمراجع صاحب الحساب فقط.
@@ -219,7 +285,7 @@ export async function deleteScreenshot(id: number): Promise<void> {
 // ربط لقطة بمخالفة أُنشئت منها (لأغراض العرض فقط).
 export async function linkScreenshotToViolation(screenshotId: number): Promise<void> {
   const userId = await requireHseReviewerId()
-  // نضع علامة الربط دون تخزين معرّف حقيقي (المخالفة تُنشأ عبر نظام المخالفات المستقل).
+  // نضع علامة الربط دون تخزين م��رّف حقيقي (المخالفة تُنشأ عبر نظام المخالفات المستقل).
   await db
     .update(videoScreenshot)
     .set({ linkedViolationId: -1 })

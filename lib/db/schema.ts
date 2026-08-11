@@ -364,7 +364,7 @@ export const aiDetection = pgTable("ai_detections", {
 })
 
 // كاميرات الهاتف المتصلة حالياً — سجل واحد لكل كاميرا (userId + cameraId فريد).
-// يُحدّث lastFrameUrl و lastSeenAt مع كل استدعاء لمسار /api/ai-monitoring/analyze،
+// يُحدّث lastFrameUrl و lastSeenAt مع كل استدعا�� لمسار /api/ai-monitoring/analyze،
 // ما يتيح للوحة المدير عرض بث "شبه حي" لكل كاميرا نشطة.
 export const activeCameraStream = pgTable(
   "active_camera_streams",
@@ -390,6 +390,7 @@ export const videoRecording = pgTable("video_recordings", {
   cameraId: text("camera_id").notNull().default(""),
   cameraName: text("camera_name").notNull().default(""),
   videoUrl: text("video_url").notNull(),
+  posterUrl: text("poster_url").notNull().default(""),
   durationSeconds: integer("duration_seconds").notNull().default(0),
   fileSizeBytes: integer("file_size_bytes").notNull().default(0),
   recordedBy: text("recorded_by").notNull().default(""),

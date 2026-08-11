@@ -15,13 +15,16 @@ import {
   FileWarning,
   Loader2,
   X,
+  ChevronRight,
+  ChevronLeft,
+  Filter,
 } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { toast } from "@/hooks/use-toast"
 import {
-  getRecordings,
+  getRecordingsPage,
   getRecordingScreenshots,
   saveScreenshot,
   deleteRecording,
@@ -29,6 +32,7 @@ import {
   linkScreenshotToViolation,
   type VideoRecordingDto,
   type VideoScreenshotDto,
+  type RecordingsPage,
 } from "@/app/actions/recordings"
 
 function fmtDuration(sec: number) {
@@ -54,36 +58,117 @@ function fmtDate(iso: string) {
   })
 }
 
-export function RecordingsReview({ initialRecordings }: { initialRecordings: VideoRecordingDto[] }) {
-  const { data: recordings = initialRecordings, mutate: mutateRecordings } = useSWR(
-    "recordings",
-    () => getRecordings(),
-    { fallbackData: initialRecordings, refreshInterval: 15000 },
+export function RecordingsReview({ initialPage }: { initialPage: RecordingsPage }) {
+  const [camera, setCamera] = useState<string>("all")
+  const [from, setFrom] = useState<string>("")
+  const [to, setTo] = useState<string>("")
+  const [page, setPage] = useState<number>(1)
+
+  const key = ["recordings", camera, from, to, page] as const
+  const { data = initialPage, mutate: mutateRecordings } = useSWR(
+    key,
+    () => getRecordingsPage({ camera, from, to, page, pageSize: initialPage.pageSize }),
+    { fallbackData: initialPage, keepPreviousData: true },
   )
 
   const [selected, setSelected] = useState<VideoRecordingDto | null>(null)
 
+  const totalPages = Math.max(1, Math.ceil(data.total / data.pageSize))
+  const hasFilters = camera !== "all" || from !== "" || to !== ""
+
+  function resetFilters() {
+    setCamera("all")
+    setFrom("")
+    setTo("")
+    setPage(1)
+  }
+
   return (
     <div className="flex flex-col gap-6">
-      {recordings.length === 0 ? (
+      {/* شريط التصفية */}
+      <Card className="flex flex-wrap items-end gap-3 p-4">
+        <div className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+          <Filter className="size-4" />
+          تصفية
+        </div>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-muted-foreground">الكاميرا</span>
+          <select
+            value={camera}
+            onChange={(e) => {
+              setCamera(e.target.value)
+              setPage(1)
+            }}
+            className="min-w-40 rounded-lg border border-input bg-background px-3 py-1.5 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
+          >
+            <option value="all">كل الكاميرات</option>
+            {data.cameras.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-muted-foreground">من تاريخ</span>
+          <input
+            type="date"
+            value={from}
+            onChange={(e) => {
+              setFrom(e.target.value)
+              setPage(1)
+            }}
+            className="rounded-lg border border-input bg-background px-3 py-1.5 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-muted-foreground">إلى تاريخ</span>
+          <input
+            type="date"
+            value={to}
+            onChange={(e) => {
+              setTo(e.target.value)
+              setPage(1)
+            }}
+            className="rounded-lg border border-input bg-background px-3 py-1.5 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
+          />
+        </label>
+        {hasFilters && (
+          <Button variant="ghost" size="sm" onClick={resetFilters} className="gap-1">
+            <X className="size-3.5" />
+            مسح
+          </Button>
+        )}
+        <span className="ms-auto self-center text-xs text-muted-foreground">
+          {data.total} تسجيل
+        </span>
+      </Card>
+
+      {data.items.length === 0 ? (
         <Card className="flex flex-col items-center gap-3 border-dashed py-16 text-center">
           <div className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
             <Film className="size-6" />
           </div>
-          <p className="text-sm font-medium text-foreground">لا توجد تسجيلات بعد</p>
-          <p className="max-w-sm text-xs text-muted-foreground text-pretty">
-            سجّل فيديو من صفحة بث كاميرا الهاتف وسيظهر هنا للمراجعة والتقاط اللقطات.
+          <p className="text-sm font-medium text-foreground">
+            {hasFilters ? "لا توجد تسجيلات مطابقة للتصفية" : "لا توجد تسجيلات بعد"}
           </p>
-          <Link
-            href="/ai-monitoring/mobile-camera"
-            className="mt-2 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-          >
-            فتح كاميرا الهاتف
-          </Link>
+          <p className="max-w-sm text-xs text-muted-foreground text-pretty">
+            {hasFilters
+              ? "جرّب تغيير الكاميرا أو نطاق التاريخ."
+              : "سجّل فيديو من صفحة بث كاميرا الهاتف وسيظهر هنا للمراجعة والتقاط اللقطات."}
+          </p>
+          {!hasFilters && (
+            <Link
+              href="/ai-monitoring/mobile-camera"
+              className="mt-2 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+            >
+              فتح كاميرا الهاتف
+            </Link>
+          )}
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {recordings.map((rec) => (
+          {data.items.map((rec) => (
             <RecordingCard
               key={rec.id}
               rec={rec}
@@ -91,6 +176,35 @@ export function RecordingsReview({ initialRecordings }: { initialRecordings: Vid
               onDeleted={() => mutateRecordings()}
             />
           ))}
+        </div>
+      )}
+
+      {/* ترقيم الصفحات */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className="gap-1"
+          >
+            <ChevronRight className="size-4" />
+            السابق
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            صفحة {page} من {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page >= totalPages}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            className="gap-1"
+          >
+            التالي
+            <ChevronLeft className="size-4" />
+          </Button>
         </div>
       )}
 
@@ -134,13 +248,24 @@ function RecordingCard({
       onClick={onOpen}
     >
       <div className="relative flex aspect-video items-center justify-center bg-muted">
-        <video
-          src={rec.videoUrl}
-          className="size-full object-cover"
-          preload="metadata"
-          muted
-          playsInline
-        />
+        {rec.posterUrl ? (
+          <Image
+            src={rec.posterUrl || "/placeholder.svg"}
+            alt={`معاينة ${rec.cameraName}`}
+            fill
+            sizes="(max-width: 640px) 100vw, 33vw"
+            className="object-cover"
+            unoptimized
+          />
+        ) : (
+          <video
+            src={rec.videoUrl}
+            className="size-full object-cover"
+            preload="metadata"
+            muted
+            playsInline
+          />
+        )}
         <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 transition-opacity group-hover:opacity-100">
           <div className="flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground">
             <Video className="size-5" />

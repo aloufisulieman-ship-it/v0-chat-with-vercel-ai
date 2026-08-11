@@ -267,12 +267,32 @@ export function MobileCamera() {
     releaseStreamIfIdle(false, recorderRef.current !== null)
   }, [releaseStreamIfIdle])
 
-  // رفع الفيديو المُسجّل إلى Blob مباشرةً من المتصفح ثم إنشاء سجل في القاعدة.
+  // التقاط إطار مصغّر (poster) من الفيديو الحي لعرضه كمعاينة للتسجيل.
+  const capturePosterDataUrl = useCallback((): string | null => {
+    const video = videoRef.current
+    if (!video || !video.videoWidth) return null
+    try {
+      const canvas = document.createElement("canvas")
+      const w = 640
+      const scale = w / video.videoWidth
+      canvas.width = w
+      canvas.height = Math.round(video.videoHeight * scale) || 480
+      const ctx = canvas.getContext("2d")
+      if (!ctx) return null
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+      return canvas.toDataURL("image/jpeg", 0.6)
+    } catch {
+      return null
+    }
+  }, [])
+
+  // رفع الفيديو المُسجّل (والمعاينة) إلى Blob مباشرةً من المتصفح ثم إنشاء سجل في القاعدة.
   const uploadRecording = useCallback(
-    async (blob: Blob, durationSeconds: number) => {
+    async (blob: Blob, durationSeconds: number, posterDataUrl: string | null) => {
       const camId = cameraName || "كاميرا الهاتف"
       const ext = recordMimeRef.current.ext || "webm"
-      const path = `recordings/${encodeURIComponent(camId)}/${Date.now()}.${ext}`
+      const stamp = Date.now()
+      const path = `recordings/${encodeURIComponent(camId)}/${stamp}.${ext}`
       setSavingRecording(true)
       setRecordError(null)
       setRecordMsg(null)
@@ -282,10 +302,29 @@ export function MobileCamera() {
           handleUploadUrl: "/api/ai-monitoring/upload-recording",
           contentType: blob.type || `video/${ext}`,
         })
+
+        // رفع المعاينة (اختياري — نتجاهل فشلها حتى لا يتعطّل حفظ الفيديو).
+        let posterUrl = ""
+        if (posterDataUrl) {
+          try {
+            const posterBlob = await (await fetch(posterDataUrl)).blob()
+            const posterPath = `recordings/${encodeURIComponent(camId)}/${stamp}-poster.jpg`
+            const up = await upload(posterPath, posterBlob, {
+              access: "public",
+              handleUploadUrl: "/api/ai-monitoring/upload-recording",
+              contentType: "image/jpeg",
+            })
+            posterUrl = up.url
+          } catch {
+            /* تجاهل فشل المعاينة */
+          }
+        }
+
         await createRecording({
           cameraId: camId,
           cameraName: camId,
           videoUrl: uploaded.url,
+          posterUrl,
           durationSeconds,
           fileSizeBytes: blob.size,
         })
@@ -323,7 +362,9 @@ export function MobileCamera() {
         const blob = new Blob(chunksRef.current, { type: mime.mimeType || "video/webm" })
         chunksRef.current = []
         recorderRef.current = null
-        if (blob.size > 0) void uploadRecording(blob, durationSeconds)
+        // التقط المعاينة من الفيديو الحي قبل تحرير الكاميرا.
+        const poster = capturePosterDataUrl()
+        if (blob.size > 0) void uploadRecording(blob, durationSeconds, poster)
         else setRecordError("التسجيل فارغ — لم تُلتقط أي بيانات فيديو.")
         // حرّر الكاميرا إن لم يكن البث الحي شغّالاً.
         releaseStreamIfIdle(uploadIntervalRef.current !== null, false)
@@ -342,7 +383,7 @@ export function MobileCamera() {
       else if (name === "NotFoundError") setError("لم يتم العثور على كاميرا في هذا الجهاز.")
       else setError(err instanceof Error ? err.message : "تعذّر بدء التسجيل.")
     }
-  }, [ensureStream, uploadRecording, releaseStreamIfIdle])
+  }, [ensureStream, uploadRecording, releaseStreamIfIdle, capturePosterDataUrl])
 
   const stopRecording = useCallback(() => {
     if (recordTimerRef.current) {

@@ -13,7 +13,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       onBeforeGenerateToken: async () => {
         await requireUser()
         return {
-          allowedContentTypes: ["video/webm", "video/mp4", "video/x-matroska", "video/ogg"],
+          allowedContentTypes: ["video/webm", "video/mp4", "video/x-matroska", "video/ogg", "image/jpeg"],
           maximumSizeInBytes: 500 * 1024 * 1024, // 500MB
           addRandomSuffix: false,
         }
