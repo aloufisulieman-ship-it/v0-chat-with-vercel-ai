@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import useSWR from "swr"
 import Link from "next/link"
 import { Cctv, MapPin, Clock, Video, Radio, UserRound } from "lucide-react"
@@ -12,6 +12,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { ToastAction } from "@/components/ui/toast"
+import { toast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 
 // اعتبار الكاميرا "مباشرة" إذا كان آخر إطار خلال آخر 8 ثوانٍ.
@@ -72,6 +74,39 @@ export function ConnectedCameras({ isAdmin }: { isAdmin: boolean }) {
     const t = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(t)
   }, [])
+
+  // تنبيه فوري عند بدء بث جديد: نتتبّع الكاميرات الحية سابقاً، وعند ظهور كاميرا
+  // حيّة لم تكن حيّة من قبل نُطلق إشعاراً. نتجاهل أول تحميل (بذر) حتى لا يُغرق
+  // المدير بإشعارات عن بثوث كانت تعمل مسبقاً.
+  const prevLiveRef = useRef<Set<string> | null>(null)
+  useEffect(() => {
+    const t = Date.now()
+    const liveNow = new Set<string>()
+    for (const c of cameras) {
+      if (t - new Date(c.lastSeenAt).getTime() < LIVE_THRESHOLD_MS) liveNow.add(c.cameraId)
+    }
+    const prev = prevLiveRef.current
+    // أول تشغيل: نبذر المجموعة دون إطلاق إشعارات.
+    if (prev === null) {
+      prevLiveRef.current = liveNow
+      return
+    }
+    for (const c of cameras) {
+      if (liveNow.has(c.cameraId) && !prev.has(c.cameraId)) {
+        const label = c.inspectorName || c.cameraId
+        toast({
+          title: "بدأ بثٌّ حيّ جديد",
+          description: `${label}${c.cameraLocation ? ` — ${c.cameraLocation}` : ""}`,
+          action: (
+            <ToastAction altText="فتح البث المباشر" asChild>
+              <Link href={`/ai-monitoring/live/${encodeURIComponent(c.cameraId)}`}>فتح البث</Link>
+            </ToastAction>
+          ),
+        })
+      }
+    }
+    prevLiveRef.current = liveNow
+  }, [cameras])
 
   return (
     <div>

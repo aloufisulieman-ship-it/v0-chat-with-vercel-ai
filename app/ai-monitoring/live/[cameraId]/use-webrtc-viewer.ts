@@ -10,8 +10,20 @@ import { createPeer, pollSignals, postSignal, type IncomingSignal } from "@/lib/
 // تكن الكاميرا تبث (لا إجابة) يبقى في حالة "connecting" فيسقط العرض إلى اللقطات.
 const POLL_MS = 1000
 const RETRY_MS = 9000
+// وتيرة قياس جودة الاتصال (bitrate/rtt) عبر getStats.
+const STATS_MS = 2000
 
 export type ViewerStatus = "connecting" | "live"
+
+// إحصاءات جودة الاتصال الحية للمُشاهد.
+export type ViewerStats = {
+  // معدل تدفق الفيديو الوارد بالكيلوبت/الثانية.
+  kbps: number
+  // زمن الذهاب والإياب بالمللي ثانية (round-trip time).
+  rttMs: number
+  // عدد الإطارات المستقبَلة في الثانية.
+  fps: number
+}
 
 function makeSessionId(): string {
   try {
@@ -28,6 +40,8 @@ export function useWebrtcViewer(opts: { cameraId: string; enabled: boolean }) {
   const [status, setStatus] = useState<ViewerStatus>("connecting")
   // رسالة خطأ الصلاحيات/الشبكة الكاملة (مثل: "HTTP 403 — مشاهدة البث مقصورة…").
   const [error, setError] = useState<string | null>(null)
+  // إحصاءات جودة الاتصال الحية (تُحدَّث كل ثانيتين أثناء البث).
+  const [stats, setStats] = useState<ViewerStats | null>(null)
 
   const viewerSessionIdRef = useRef<string>("")
   if (!viewerSessionIdRef.current) viewerSessionIdRef.current = makeSessionId()
@@ -40,6 +54,11 @@ export function useWebrtcViewer(opts: { cameraId: string; enabled: boolean }) {
     let lastId = 0
     let pollTimer: ReturnType<typeof setInterval> | null = null
     let retryTimer: ReturnType<typeof setTimeout> | null = null
+    let statsTimer: ReturnType<typeof setInterval> | null = null
+    // للحساب التفاضلي لمعدل التدفق: آخر قراءة للبايتات/الإطارات والزمن.
+    let lastBytes = 0
+    let lastFrames = 0
+    let lastStatsTs = 0
     const viewerSessionId = viewerSessionIdRef.current
 
     const teardownPeer = () => {
@@ -137,18 +156,57 @@ export function useWebrtcViewer(opts: { cameraId: string; enabled: boolean }) {
       }, RETRY_MS)
     }
 
+    // قياس جودة الاتصال: نقرأ inbound-rtp للفيديو ونشتق معدل التدفق وعدد الإطارات،
+    // وncandidate-pair النشط لزمن الذهاب والإياب (RTT).
+    const sampleStats = async () => {
+      if (stopped || !pc || pc.connectionState !== "connected") return
+      try {
+        const report = await pc.getStats()
+        let bytes = 0
+        let frames = 0
+        let rttMs = 0
+        const now = Date.now()
+        report.forEach((s) => {
+          if (s.type === "inbound-rtp" && (s as { kind?: string }).kind === "video") {
+            bytes = (s as { bytesReceived?: number }).bytesReceived ?? bytes
+            frames = (s as { framesDecoded?: number }).framesDecoded ?? frames
+          }
+          if (s.type === "candidate-pair" && (s as { nominated?: boolean }).nominated) {
+            const rtt = (s as { currentRoundTripTime?: number }).currentRoundTripTime
+            if (typeof rtt === "number") rttMs = Math.round(rtt * 1000)
+          }
+        })
+        if (lastStatsTs > 0) {
+          const dt = (now - lastStatsTs) / 1000
+          if (dt > 0) {
+            const kbps = Math.max(0, Math.round(((bytes - lastBytes) * 8) / 1000 / dt))
+            const fps = Math.max(0, Math.round((frames - lastFrames) / dt))
+            setStats({ kbps, rttMs, fps })
+          }
+        }
+        lastBytes = bytes
+        lastFrames = frames
+        lastStatsTs = now
+      } catch {
+        /* تجاهل قراءة فاشلة */
+      }
+    }
+
     void startNegotiation()
     pollTimer = setInterval(tick, POLL_MS)
+    statsTimer = setInterval(sampleStats, STATS_MS)
     scheduleRetry()
 
     return () => {
       stopped = true
       if (pollTimer) clearInterval(pollTimer)
       if (retryTimer) clearInterval(retryTimer)
+      if (statsTimer) clearInterval(statsTimer)
+      setStats(null)
       teardownPeer()
       if (videoRef.current) videoRef.current.srcObject = null
     }
   }, [cameraId, enabled])
 
-  return { videoRef, status, error }
+  return { videoRef, status, error, stats }
 }

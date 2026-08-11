@@ -3,7 +3,7 @@ import { requireHseReviewer } from "@/lib/session"
 import { getDetections } from "@/app/actions/ai-monitoring"
 import { MonitoringDashboard, type DetectionDto } from "./monitoring-dashboard"
 import Link from "next/link"
-import { Smartphone, Video } from "lucide-react"
+import { Smartphone, Video, LayoutGrid } from "lucide-react"
 
 export const dynamic = "force-dynamic"
 
@@ -36,6 +36,13 @@ export default async function AiMonitoringPage() {
       user={user}
       action={
         <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/ai-monitoring/grid"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+          >
+            <LayoutGrid className="size-4" />
+            جدار العرض
+          </Link>
           <Link
             href="/ai-monitoring/recordings"
             className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
