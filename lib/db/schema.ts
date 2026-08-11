@@ -341,7 +341,7 @@ export const attachment = pgTable("attachment", {
 })
 
 // ---------- المراقبة الذكية بالذكاء الاصطناعي (كاميرات ساحات الرافعات) ----------
-// detectionType: أحد الأنواع الستة (no_ppe / traffic_congestion / unsafe_stacking /
+// detectionType: أحد ��لأنواع الستة (no_ppe / traffic_congestion / unsafe_stacking /
 //   overspeed / restricted_area / pedestrian_near_forklift).
 // severity: low / medium / high / critical.
 // status: new / acknowledged / resolved / false_positive.
@@ -381,6 +381,34 @@ export const activeCameraStream = pgTable(
     userCameraUnique: uniqueIndex("active_cam_user_camera_idx").on(t.userId, t.cameraId),
   }),
 )
+
+// تسجيلات الفيديو المرفوعة من كاميرا الهاتف إلى Vercel Blob.
+// userId = مالك التسجيل (الحساب الذي سجّل)، ونطاق العرض مقصور عليه.
+export const videoRecording = pgTable("video_recordings", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  cameraId: text("camera_id").notNull().default(""),
+  cameraName: text("camera_name").notNull().default(""),
+  videoUrl: text("video_url").notNull(),
+  durationSeconds: integer("duration_seconds").notNull().default(0),
+  fileSizeBytes: integer("file_size_bytes").notNull().default(0),
+  recordedBy: text("recorded_by").notNull().default(""),
+  recordedAt: timestamp("recorded_at").notNull().defaultNow(),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
+// اللقطات المستخرجة من تسجيل فيديو عبر مشغّل المراجعة.
+export const videoScreenshot = pgTable("video_screenshots", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  recordingId: integer("recording_id").notNull(),
+  cameraId: text("camera_id").notNull().default(""),
+  imageUrl: text("image_url").notNull(),
+  atSeconds: integer("at_seconds").notNull().default(0),
+  linkedViolationId: integer("linked_violation_id"),
+  capturedAt: timestamp("captured_at").notNull().defaultNow(),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
 
 export const document = pgTable("document", {
   id: serial("id").primaryKey(),

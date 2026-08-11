@@ -11,10 +11,15 @@ import {
   BatteryCharging,
   Wifi,
   WifiOff,
+  Video,
+  CircleStop,
+  UploadCloud,
 } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { detectionTypeLabels, severityLabels, severityStyles } from "@/lib/ai-monitoring"
+import { upload } from "@vercel/blob/client"
+import { createRecording } from "@/app/actions/recordings"
 
 // رفع الإطار إلى Blob بوتيرة سريعة (بث شبه حي، ~2.5 إطار/ثانية)،
 // والتحليل بالذكاء الاصطناعي أبطأ بكثير (كل 8 ثوانٍ) لإبقاء تكلفة AI ثابتة.
@@ -33,6 +38,32 @@ type LastResult = {
   error?: string
 }
 
+// اختيار أفضل صيغة تسجيل مدعومة في المتصفح (WebM أولاً ثم MP4).
+function pickRecordingMime(): { mimeType: string; ext: string } {
+  const candidates: { mimeType: string; ext: string }[] = [
+    { mimeType: "video/webm;codecs=vp9", ext: "webm" },
+    { mimeType: "video/webm;codecs=vp8", ext: "webm" },
+    { mimeType: "video/webm", ext: "webm" },
+    { mimeType: "video/mp4", ext: "mp4" },
+  ]
+  if (typeof MediaRecorder !== "undefined") {
+    for (const c of candidates) {
+      try {
+        if (MediaRecorder.isTypeSupported(c.mimeType)) return c
+      } catch {
+        /* تجاهل */
+      }
+    }
+  }
+  return { mimeType: "", ext: "webm" }
+}
+
+function formatDuration(totalSeconds: number): string {
+  const m = Math.floor(totalSeconds / 60)
+  const s = totalSeconds % 60
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+}
+
 export function MobileCamera() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -42,6 +73,13 @@ export function MobileCamera() {
   const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null)
   const uploadingRef = useRef(false)
   const analyzingRef = useRef(false)
+
+  // مراجع التسجيل بالفيديو (MediaRecorder).
+  const recorderRef = useRef<MediaRecorder | null>(null)
+  const chunksRef = useRef<Blob[]>([])
+  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const recordStartRef = useRef<number>(0)
+  const recordMimeRef = useRef<{ mimeType: string; ext: string }>({ mimeType: "", ext: "webm" })
 
   const [cameraName, setCameraName] = useState("")
   const [location, setLocation] = useState("")
@@ -54,6 +92,13 @@ export function MobileCamera() {
   const [analyzing, setAnalyzing] = useState(false)
   const [lastResult, setLastResult] = useState<LastResult | null>(null)
   const [now, setNow] = useState(() => Date.now())
+
+  // حالة التسجيل.
+  const [recording, setRecording] = useState(false)
+  const [recordSeconds, setRecordSeconds] = useState(0)
+  const [savingRecording, setSavingRecording] = useState(false)
+  const [recordMsg, setRecordMsg] = useState<string | null>(null)
+  const [recordError, setRecordError] = useState<string | null>(null)
 
   // مؤقت محلي لتحديث مؤشر الاتصال والوقت.
   useEffect(() => {
@@ -73,6 +118,43 @@ export function MobileCamera() {
   useEffect(() => {
     localStorage.setItem("aiCam.location", location)
   }, [location])
+
+  // ضمان وجود بث كاميرا نشط (يُستخدم للبث والتسجيل معاً). يعيد الـ stream أو يرمي خطأً.
+  const ensureStream = useCallback(async (): Promise<MediaStream> => {
+    if (streamRef.current) return streamRef.current
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error("متصفحك لا يدعم الوصول إلى الكاميرا.")
+    }
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" } },
+      audio: false,
+    })
+    streamRef.current = stream
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream
+      await videoRef.current.play().catch(() => {})
+    }
+    // محاولة إبقاء الشاشة مضاءة أثناء البث/التسجيل.
+    try {
+      const wl = (navigator as unknown as {
+        wakeLock?: { request: (t: string) => Promise<{ release: () => Promise<void> }> }
+      }).wakeLock
+      if (wl && !wakeLockRef.current) wakeLockRef.current = await wl.request("screen")
+    } catch {
+      /* غير مدعوم — يتم التجاهل */
+    }
+    return stream
+  }, [])
+
+  // إيقاف الكاميرا فعلياً فقط عندما لا يوجد بث ولا تسجيل نشط.
+  const releaseStreamIfIdle = useCallback((stillStreaming: boolean, stillRecording: boolean) => {
+    if (stillStreaming || stillRecording) return
+    streamRef.current?.getTracks().forEach((t) => t.stop())
+    streamRef.current = null
+    if (videoRef.current) videoRef.current.srcObject = null
+    wakeLockRef.current?.release().catch(() => {})
+    wakeLockRef.current = null
+  }, [])
 
   // التقاط إطار من الفيديو وإرجاعه كـ data URL (JPEG)، أو null إن لم يكن جاهزاً.
   const captureJpeg = useCallback((): string | null => {
@@ -151,50 +233,11 @@ export function MobileCamera() {
     }
   }, [captureJpeg, cameraName, location])
 
-  const stop = useCallback(() => {
-    if (uploadIntervalRef.current) {
-      clearInterval(uploadIntervalRef.current)
-      uploadIntervalRef.current = null
-    }
-    if (analyzeIntervalRef.current) {
-      clearInterval(analyzeIntervalRef.current)
-      analyzeIntervalRef.current = null
-    }
-    streamRef.current?.getTracks().forEach((t) => t.stop())
-    streamRef.current = null
-    if (videoRef.current) videoRef.current.srcObject = null
-    wakeLockRef.current?.release().catch(() => {})
-    wakeLockRef.current = null
-    setStreaming(false)
-    setAnalyzing(false)
-    setLastUploadOkAt(null)
-  }, [])
-
-  const start = useCallback(async () => {
+  // بدء البث الحي (رفع الإطارات + التحليل).
+  const startStreaming = useCallback(async () => {
     setError(null)
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setError("متصفحك لا يدعم الوصول إلى الكاميرا.")
-      return
-    }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" } },
-        audio: false,
-      })
-      streamRef.current = stream
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        await videoRef.current.play().catch(() => {})
-      }
-      // محاولة إبقاء الشاشة مضاءة أثناء البث.
-      try {
-        const wl = (navigator as unknown as {
-          wakeLock?: { request: (t: string) => Promise<{ release: () => Promise<void> }> }
-        }).wakeLock
-        if (wl) wakeLockRef.current = await wl.request("screen")
-      } catch {
-        /* غير مدعوم — يتم التجاهل */
-      }
+      await ensureStream()
       setStreaming(true)
       // رفع فوري + تحليل فوري، ثم كل حلقة بوتيرتها.
       uploadFrame()
@@ -204,14 +247,137 @@ export function MobileCamera() {
     } catch (err) {
       const name = err instanceof Error ? err.name : ""
       if (name === "NotAllowedError") setError("تم رفض إذن الكاميرا. فعّله من إعدادات المتصفح.")
-      else if (name === "NotFoundError") setError("لم يتم ال��ثور على كاميرا في هذا الجهاز.")
-      else setError("تعذّر تشغيل الكاميرا.")
+      else if (name === "NotFoundError") setError("لم يتم العثور على كاميرا في هذا الجهاز.")
+      else setError(err instanceof Error ? err.message : "تعذّر تشغيل الكاميرا.")
     }
-  }, [uploadFrame, analyzeFrame])
+  }, [ensureStream, uploadFrame, analyzeFrame])
 
-  useEffect(() => () => stop(), [stop])
+  const stopStreaming = useCallback(() => {
+    if (uploadIntervalRef.current) {
+      clearInterval(uploadIntervalRef.current)
+      uploadIntervalRef.current = null
+    }
+    if (analyzeIntervalRef.current) {
+      clearInterval(analyzeIntervalRef.current)
+      analyzeIntervalRef.current = null
+    }
+    setStreaming(false)
+    setAnalyzing(false)
+    setLastUploadOkAt(null)
+    releaseStreamIfIdle(false, recorderRef.current !== null)
+  }, [releaseStreamIfIdle])
+
+  // رفع الفيديو المُسجّل إلى Blob مباشرةً من المتصفح ثم إنشاء سجل في القاعدة.
+  const uploadRecording = useCallback(
+    async (blob: Blob, durationSeconds: number) => {
+      const camId = cameraName || "كاميرا الهاتف"
+      const ext = recordMimeRef.current.ext || "webm"
+      const path = `recordings/${encodeURIComponent(camId)}/${Date.now()}.${ext}`
+      setSavingRecording(true)
+      setRecordError(null)
+      setRecordMsg(null)
+      try {
+        const uploaded = await upload(path, blob, {
+          access: "public",
+          handleUploadUrl: "/api/ai-monitoring/upload-recording",
+          contentType: blob.type || `video/${ext}`,
+        })
+        await createRecording({
+          cameraId: camId,
+          cameraName: camId,
+          videoUrl: uploaded.url,
+          durationSeconds,
+          fileSizeBytes: blob.size,
+        })
+        setRecordMsg(`تم حفظ التسجيل (${formatDuration(durationSeconds)}) بنجاح.`)
+      } catch (err) {
+        console.log("[v0] recording upload failed:", err instanceof Error ? err.message : err)
+        setRecordError(err instanceof Error ? err.message : "تعذّر رفع التسجيل. حاول مجدداً.")
+      } finally {
+        setSavingRecording(false)
+      }
+    },
+    [cameraName],
+  )
+
+  // بدء تسجيل الفيديو من نفس بث الكاميرا (يعمل مع البث أو بمفرده).
+  const startRecording = useCallback(async () => {
+    setError(null)
+    setRecordError(null)
+    setRecordMsg(null)
+    if (typeof MediaRecorder === "undefined") {
+      setRecordError("متصفحك لا يدعم تسجيل الفيديو (MediaRecorder).")
+      return
+    }
+    try {
+      const stream = await ensureStream()
+      const mime = pickRecordingMime()
+      recordMimeRef.current = mime
+      const recorder = mime.mimeType ? new MediaRecorder(stream, { mimeType: mime.mimeType }) : new MediaRecorder(stream)
+      chunksRef.current = []
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunksRef.current.push(e.data)
+      }
+      recorder.onstop = () => {
+        const durationSeconds = Math.max(1, Math.round((Date.now() - recordStartRef.current) / 1000))
+        const blob = new Blob(chunksRef.current, { type: mime.mimeType || "video/webm" })
+        chunksRef.current = []
+        recorderRef.current = null
+        if (blob.size > 0) void uploadRecording(blob, durationSeconds)
+        else setRecordError("التسجيل فارغ — لم تُلتقط أي بيانات فيديو.")
+        // حرّر الكاميرا إن لم يكن البث الحي شغّالاً.
+        releaseStreamIfIdle(uploadIntervalRef.current !== null, false)
+      }
+      recorder.start(1000) // تجميع البيانات كل ثانية
+      recorderRef.current = recorder
+      recordStartRef.current = Date.now()
+      setRecordSeconds(0)
+      setRecording(true)
+      recordTimerRef.current = setInterval(() => {
+        setRecordSeconds(Math.floor((Date.now() - recordStartRef.current) / 1000))
+      }, 500)
+    } catch (err) {
+      const name = err instanceof Error ? err.name : ""
+      if (name === "NotAllowedError") setError("تم رفض إذن الكاميرا. فعّله من إعدادات المتصفح.")
+      else if (name === "NotFoundError") setError("لم يتم العثور على كاميرا في هذا الجهاز.")
+      else setError(err instanceof Error ? err.message : "تعذّر بدء التسجيل.")
+    }
+  }, [ensureStream, uploadRecording, releaseStreamIfIdle])
+
+  const stopRecording = useCallback(() => {
+    if (recordTimerRef.current) {
+      clearInterval(recordTimerRef.current)
+      recordTimerRef.current = null
+    }
+    setRecording(false)
+    try {
+      recorderRef.current?.stop() // يشغّل onstop الذي يرفع الفيديو
+    } catch {
+      recorderRef.current = null
+    }
+  }, [])
+
+  // تنظيف عند مغادرة الصفحة.
+  useEffect(
+    () => () => {
+      if (uploadIntervalRef.current) clearInterval(uploadIntervalRef.current)
+      if (analyzeIntervalRef.current) clearInterval(analyzeIntervalRef.current)
+      if (recordTimerRef.current) clearInterval(recordTimerRef.current)
+      try {
+        recorderRef.current?.stop()
+      } catch {
+        /* تجاهل */
+      }
+      streamRef.current?.getTracks().forEach((t) => t.stop())
+      streamRef.current = null
+      wakeLockRef.current?.release().catch(() => {})
+      wakeLockRef.current = null
+    },
+    [],
+  )
 
   const connected = streaming && lastUploadOkAt != null && now - lastUploadOkAt < CONNECTED_THRESHOLD_MS
+  const cameraOn = streaming || recording
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-5">
@@ -219,7 +385,7 @@ export function MobileCamera() {
       <Card className="flex items-start gap-3 border-accent/30 bg-accent/10 p-4">
         <BatteryCharging className="mt-0.5 size-5 shrink-0 text-amber-700 dark:text-amber-400" />
         <p className="text-sm text-amber-800 dark:text-amber-300">
-          أبقِ الشاشة مفتوحة والهاتف بالشحن أثناء البث لضمان استمرار رفع الإطارات وتحليلها.
+          أبقِ الشاشة مفتوحة والهاتف بالشحن أثناء البث أو التسجيل لضمان استمرار العمل.
         </p>
       </Card>
 
@@ -230,8 +396,8 @@ export function MobileCamera() {
           <input
             value={cameraName}
             onChange={(e) => setCameraName(e.target.value)}
-            placeholder="مثال: كاميرا الب��ابة 1"
-            disabled={streaming}
+            placeholder="مثال: كاميرا البوابة 1"
+            disabled={cameraOn}
             className="rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-60"
           />
         </label>
@@ -241,7 +407,7 @@ export function MobileCamera() {
             value={location}
             onChange={(e) => setLocation(e.target.value)}
             placeholder="مثال: ساحة الرافعات الشمالية"
-            disabled={streaming}
+            disabled={cameraOn}
             className="rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-60"
           />
         </label>
@@ -255,10 +421,10 @@ export function MobileCamera() {
           muted
           className="aspect-[3/4] w-full object-cover sm:aspect-video"
         />
-        {!streaming && (
+        {!cameraOn && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center text-white/70">
             <Camera className="size-10" />
-            <span className="text-sm">اضغط «بدء البث» لتشغيل الكاميرا الخلفية</span>
+            <span className="text-sm">اضغط «بدء البث» أو «بدء التسجيل» لتشغيل الكاميرا الخلفية</span>
           </div>
         )}
         {streaming && (
@@ -275,6 +441,12 @@ export function MobileCamera() {
               )}
             />
             {connected ? "بث مباشر" : "إعادة الاتصال…"}
+          </div>
+        )}
+        {recording && (
+          <div className="absolute left-3 bottom-3 flex items-center gap-1.5 rounded-full bg-red-600/90 px-2.5 py-1 text-xs font-semibold text-white">
+            <span className="size-2 animate-pulse rounded-full bg-white" />
+            تسجيل {formatDuration(recordSeconds)}
           </div>
         )}
         {analyzing && (
@@ -300,11 +472,31 @@ export function MobileCamera() {
         </Card>
       )}
 
-      {/* أزرار التحكم */}
-      <div className="flex gap-3">
+      {/* حالة رفع التسجيل */}
+      {savingRecording && (
+        <Card className="flex items-center gap-3 border-primary/30 bg-primary/10 p-4">
+          <UploadCloud className="size-5 shrink-0 animate-pulse text-primary" />
+          <p className="text-sm font-medium text-primary">جارٍ رفع التسجيل إلى الخادم… لا تغلق الصفحة.</p>
+        </Card>
+      )}
+      {recordMsg && !savingRecording && (
+        <Card className="flex items-center gap-3 border-primary/30 bg-primary/10 p-4">
+          <CheckCircle2 className="size-5 shrink-0 text-primary" />
+          <p className="text-sm font-medium text-primary">{recordMsg}</p>
+        </Card>
+      )}
+      {recordError && (
+        <Card className="flex items-start gap-3 border-destructive/30 bg-destructive/10 p-4">
+          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
+          <p className="text-sm text-destructive">{recordError}</p>
+        </Card>
+      )}
+
+      {/* أزرار التحكم: البث والتسجيل مستقلان */}
+      <div className="flex flex-col gap-3 sm:flex-row">
         {!streaming ? (
           <button
-            onClick={start}
+            onClick={startStreaming}
             className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
           >
             <Play className="size-4" />
@@ -312,11 +504,30 @@ export function MobileCamera() {
           </button>
         ) : (
           <button
-            onClick={stop}
+            onClick={stopStreaming}
             className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-destructive px-4 py-3 text-sm font-semibold text-destructive-foreground transition-colors hover:bg-destructive/90"
           >
             <Square className="size-4" />
             إيقاف البث
+          </button>
+        )}
+
+        {!recording ? (
+          <button
+            onClick={startRecording}
+            disabled={savingRecording}
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-red-600 bg-red-600/10 px-4 py-3 text-sm font-semibold text-red-700 transition-colors hover:bg-red-600/20 disabled:opacity-60 dark:text-red-400"
+          >
+            <Video className="size-4" />
+            بدء التسجيل
+          </button>
+        ) : (
+          <button
+            onClick={stopRecording}
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-red-700"
+          >
+            <CircleStop className="size-4" />
+            إيقاف التسجيل · {formatDuration(recordSeconds)}
           </button>
         )}
       </div>
@@ -356,9 +567,9 @@ export function MobileCamera() {
           <span className="text-2xl font-bold text-foreground">{sentCount}</span>
         </Card>
         <Card className="flex flex-col gap-1 p-4">
-          <span className="text-xs text-muted-foreground">آخر رفع</span>
-          <span className="text-sm font-medium text-foreground" dir="ltr">
-            {lastUploadAt ? new Date(lastUploadAt).toLocaleTimeString("ar") : "—"}
+          <span className="text-xs text-muted-foreground">مدة التسجيل</span>
+          <span className="text-2xl font-bold text-foreground" dir="ltr">
+            {formatDuration(recordSeconds)}
           </span>
         </Card>
       </div>
