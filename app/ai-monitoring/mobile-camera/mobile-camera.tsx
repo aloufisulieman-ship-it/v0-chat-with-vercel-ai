@@ -1,12 +1,26 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Camera, Play, Square, AlertTriangle, CheckCircle2, Loader2, BatteryCharging } from "lucide-react"
+import {
+  Camera,
+  Play,
+  Square,
+  AlertTriangle,
+  CheckCircle2,
+  Loader2,
+  BatteryCharging,
+  Wifi,
+  WifiOff,
+} from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { detectionTypeLabels, severityLabels, severityStyles } from "@/lib/ai-monitoring"
 
-const CAPTURE_INTERVAL_MS = 8000
+// رفع الإطار إلى Blob بوتيرة سريعة (بث شبه حي)، والتحليل بالذكاء الاصطناعي أبطأ لتوفير التكلفة.
+const UPLOAD_INTERVAL_MS = 1500
+const ANALYZE_INTERVAL_MS = 8000
+// تُعتبر الكاميرا "متصلة" إذا نجح آخر رفع خلال آخر 5 ثوانٍ.
+const CONNECTED_THRESHOLD_MS = 5000
 const MAX_WIDTH = 720
 const JPEG_QUALITY = 0.6
 
@@ -21,18 +35,29 @@ export function MobileCamera() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const uploadIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const analyzeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null)
-  const sendingRef = useRef(false)
+  const uploadingRef = useRef(false)
+  const analyzingRef = useRef(false)
 
   const [cameraName, setCameraName] = useState("")
   const [location, setLocation] = useState("")
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sentCount, setSentCount] = useState(0)
-  const [lastSentAt, setLastSentAt] = useState<number | null>(null)
+  const [lastUploadAt, setLastUploadAt] = useState<number | null>(null)
+  const [lastUploadOkAt, setLastUploadOkAt] = useState<number | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
   const [lastResult, setLastResult] = useState<LastResult | null>(null)
+  const [now, setNow] = useState(() => Date.now())
+
+  // مؤقت محلي لتحديث مؤشر الاتصال والوقت.
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [])
 
   // استرجاع اسم الكاميرا والموقع من التخزين المحلي.
   useEffect(() => {
@@ -47,24 +72,59 @@ export function MobileCamera() {
     localStorage.setItem("aiCam.location", location)
   }, [location])
 
-  const captureAndSend = useCallback(async () => {
-    if (sendingRef.current) return
+  // التقاط إطار من الفيديو وإرجاعه كـ data URL (JPEG)، أو null إن لم يكن جاهزاً.
+  const captureJpeg = useCallback((): string | null => {
     const video = videoRef.current
     const canvas = canvasRef.current
-    if (!video || !canvas || video.videoWidth === 0) return
-
+    if (!video || !canvas || video.videoWidth === 0) return null
     const scale = Math.min(1, MAX_WIDTH / video.videoWidth)
     canvas.width = Math.round(video.videoWidth * scale)
     canvas.height = Math.round(video.videoHeight * scale)
     const ctx = canvas.getContext("2d")
-    if (!ctx) return
+    if (!ctx) return null
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-    const image = canvas.toDataURL("image/jpeg", JPEG_QUALITY)
+    return canvas.toDataURL("image/jpeg", JPEG_QUALITY)
+  }, [])
 
-    sendingRef.current = true
+  // الحلقة السريعة: رفع الإطار إلى Blob للبث شبه الحي.
+  const uploadFrame = useCallback(async () => {
+    if (uploadingRef.current) return
+    const image = captureJpeg()
+    if (!image) return
+    uploadingRef.current = true
+    setLastUploadAt(Date.now())
+    try {
+      const res = await fetch("/api/ai-monitoring/upload-frame", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image,
+          cameraId: cameraName || "كاميرا الهاتف",
+          cameraLocation: location,
+        }),
+      })
+      if (res.ok) {
+        setSentCount((c) => c + 1)
+        setLastUploadOkAt(Date.now())
+        setUploadError(null)
+      } else {
+        const data = await res.json().catch(() => null)
+        setUploadError(data?.error || `فشل رفع الإطار (رمز ${res.status})`)
+      }
+    } catch {
+      setUploadError("تعذّر الاتصال بالخادم أثناء رفع الإطار")
+    } finally {
+      uploadingRef.current = false
+    }
+  }, [captureJpeg, cameraName, location])
+
+  // الحلقة البطيئة: إرسال الإطار للتحليل بالذكاء الاصطناعي (Claude Sonnet 4.6).
+  const analyzeFrame = useCallback(async () => {
+    if (analyzingRef.current) return
+    const image = captureJpeg()
+    if (!image) return
+    analyzingRef.current = true
     setAnalyzing(true)
-    setSentCount((c) => c + 1)
-    setLastSentAt(Date.now())
     try {
       const res = await fetch("/api/ai-monitoring/analyze", {
         method: "POST",
@@ -84,15 +144,19 @@ export function MobileCamera() {
     } catch {
       setLastResult({ at: Date.now(), count: 0, detections: [], error: "تعذّر الاتصال بالخادم" })
     } finally {
-      sendingRef.current = false
+      analyzingRef.current = false
       setAnalyzing(false)
     }
-  }, [cameraName, location])
+  }, [captureJpeg, cameraName, location])
 
   const stop = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current)
-      intervalRef.current = null
+    if (uploadIntervalRef.current) {
+      clearInterval(uploadIntervalRef.current)
+      uploadIntervalRef.current = null
+    }
+    if (analyzeIntervalRef.current) {
+      clearInterval(analyzeIntervalRef.current)
+      analyzeIntervalRef.current = null
     }
     streamRef.current?.getTracks().forEach((t) => t.stop())
     streamRef.current = null
@@ -101,6 +165,7 @@ export function MobileCamera() {
     wakeLockRef.current = null
     setStreaming(false)
     setAnalyzing(false)
+    setLastUploadOkAt(null)
   }, [])
 
   const start = useCallback(async () => {
@@ -129,18 +194,22 @@ export function MobileCamera() {
         /* غير مدعوم — يتم التجاهل */
       }
       setStreaming(true)
-      // أول التقاط فوري ثم كل 8 ثوانٍ.
-      captureAndSend()
-      intervalRef.current = setInterval(captureAndSend, CAPTURE_INTERVAL_MS)
+      // رفع فوري + تحليل فوري، ثم كل حلقة بوتيرتها.
+      uploadFrame()
+      analyzeFrame()
+      uploadIntervalRef.current = setInterval(uploadFrame, UPLOAD_INTERVAL_MS)
+      analyzeIntervalRef.current = setInterval(analyzeFrame, ANALYZE_INTERVAL_MS)
     } catch (err) {
       const name = err instanceof Error ? err.name : ""
       if (name === "NotAllowedError") setError("تم رفض إذن الكاميرا. فعّله من إعدادات المتصفح.")
       else if (name === "NotFoundError") setError("لم يتم العثور على كاميرا في هذا الجهاز.")
       else setError("تعذّر تشغيل الكاميرا.")
     }
-  }, [captureAndSend])
+  }, [uploadFrame, analyzeFrame])
 
   useEffect(() => () => stop(), [stop])
+
+  const connected = streaming && lastUploadOkAt != null && now - lastUploadOkAt < CONNECTED_THRESHOLD_MS
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-5">
@@ -148,7 +217,7 @@ export function MobileCamera() {
       <Card className="flex items-start gap-3 border-accent/30 bg-accent/10 p-4">
         <BatteryCharging className="mt-0.5 size-5 shrink-0 text-amber-700 dark:text-amber-400" />
         <p className="text-sm text-amber-800 dark:text-amber-300">
-          أبقِ الشاشة مفتوحة والهاتف بالشحن أثناء البث لضمان استمرار إرسال الإطارات للتحليل.
+          أبقِ الشاشة مفتوحة والهاتف بالشحن أثناء البث لضمان استمرار رفع الإطارات وتحليلها.
         </p>
       </Card>
 
@@ -159,7 +228,7 @@ export function MobileCamera() {
           <input
             value={cameraName}
             onChange={(e) => setCameraName(e.target.value)}
-            placeholder="مثال: كاميرا البوابة 1"
+            placeholder="مثال: كاميرا الب��ابة 1"
             disabled={streaming}
             className="rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-60"
           />
@@ -191,9 +260,19 @@ export function MobileCamera() {
           </div>
         )}
         {streaming && (
-          <div className="absolute right-3 top-3 flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white">
-            <span className="size-2 animate-pulse rounded-full bg-destructive" />
-            بث مباشر
+          <div
+            className={cn(
+              "absolute right-3 top-3 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium text-white",
+              connected ? "bg-black/60" : "bg-destructive/80",
+            )}
+          >
+            <span
+              className={cn(
+                "size-2 rounded-full",
+                connected ? "animate-pulse bg-destructive" : "bg-white/70",
+              )}
+            />
+            {connected ? "بث مباشر" : "إعادة الاتصال…"}
           </div>
         )}
         {analyzing && (
@@ -209,6 +288,13 @@ export function MobileCamera() {
         <Card className="flex items-start gap-3 border-destructive/30 bg-destructive/10 p-4">
           <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
           <p className="text-sm text-destructive">{error}</p>
+        </Card>
+      )}
+
+      {streaming && uploadError && (
+        <Card className="flex items-start gap-3 border-destructive/30 bg-destructive/10 p-4">
+          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
+          <p className="text-sm text-destructive">{uploadError}</p>
         </Card>
       )}
 
@@ -233,16 +319,44 @@ export function MobileCamera() {
         )}
       </div>
 
-      {/* عدادات وآخر نتيجة */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* حالة الاتصال والعدادات */}
+      <div className="grid grid-cols-3 gap-3">
         <Card className="flex flex-col gap-1 p-4">
-          <span className="text-xs text-muted-foreground">عدد الإطارات المُرسَلة</span>
+          <span className="text-xs text-muted-foreground">حالة الاتصال</span>
+          <span
+            className={cn(
+              "flex items-center gap-1.5 text-sm font-semibold",
+              streaming ? (connected ? "text-primary" : "text-destructive") : "text-muted-foreground",
+            )}
+          >
+            {streaming ? (
+              connected ? (
+                <>
+                  <Wifi className="size-4" />
+                  متصل
+                </>
+              ) : (
+                <>
+                  <WifiOff className="size-4" />
+                  منقطع
+                </>
+              )
+            ) : (
+              <>
+                <WifiOff className="size-4" />
+                متوقف
+              </>
+            )}
+          </span>
+        </Card>
+        <Card className="flex flex-col gap-1 p-4">
+          <span className="text-xs text-muted-foreground">الإطارات المرفوعة</span>
           <span className="text-2xl font-bold text-foreground">{sentCount}</span>
         </Card>
         <Card className="flex flex-col gap-1 p-4">
-          <span className="text-xs text-muted-foreground">آخر إرسال</span>
+          <span className="text-xs text-muted-foreground">آخر رفع</span>
           <span className="text-sm font-medium text-foreground" dir="ltr">
-            {lastSentAt ? new Date(lastSentAt).toLocaleTimeString("ar") : "—"}
+            {lastUploadAt ? new Date(lastUploadAt).toLocaleTimeString("ar") : "—"}
           </span>
         </Card>
       </div>
@@ -259,7 +373,7 @@ export function MobileCamera() {
           )}
         </div>
         {!lastResult ? (
-          <p className="text-sm text-muted-foreground">لم يتم إرسال أي إطار بعد.</p>
+          <p className="text-sm text-muted-foreground">لم يتم إرسال أي إطار للتحليل بعد.</p>
         ) : lastResult.error ? (
           <p className="text-sm text-destructive">{lastResult.error}</p>
         ) : lastResult.count === 0 ? (
