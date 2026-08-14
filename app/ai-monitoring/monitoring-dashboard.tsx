@@ -44,6 +44,7 @@ export type DetectionDto = {
   id: number
   detectionId: string
   cameraId: string
+  inspectorName: string
   cameraLocation: string
   detectionType: string
   severity: string
@@ -127,6 +128,7 @@ export function MonitoringDashboard({
   const [fSeverity, setFSeverity] = useState("all")
   const [fStatus, setFStatus] = useState("all")
   const [fCamera, setFCamera] = useState("all")
+  const [fLocation, setFLocation] = useState("all")
   const [fDate, setFDate] = useState("")
   const [pending, setPending] = useState<number | null>(null)
 
@@ -158,9 +160,20 @@ export function MonitoringDashboard({
     return Array.from(map.values()).sort((a, b) => b.open - a.open || b.total - a.total)
   }, [all])
 
+  // التصفية باسم المفتش/الموظف بدل معرّف الجلسة المبهم.
   const cameras = useMemo(() => {
     const set = new Set<string>()
-    for (const d of all) if (d.cameraId) set.add(d.cameraId)
+    for (const d of all) {
+      const label = d.inspectorName || d.cameraId
+      if (label) set.add(label)
+    }
+    return Array.from(set)
+  }, [all])
+
+  // قائمة المواقع الفعلية المتاحة للتصفية.
+  const locations = useMemo(() => {
+    const set = new Set<string>()
+    for (const d of all) if (d.cameraLocation) set.add(d.cameraLocation)
     return Array.from(set)
   }, [all])
 
@@ -169,11 +182,12 @@ export function MonitoringDashboard({
       if (fType !== "all" && d.detectionType !== fType) return false
       if (fSeverity !== "all" && d.severity !== fSeverity) return false
       if (fStatus !== "all" && d.status !== fStatus) return false
-      if (fCamera !== "all" && d.cameraId !== fCamera) return false
+      if (fCamera !== "all" && (d.inspectorName || d.cameraId) !== fCamera) return false
+      if (fLocation !== "all" && (d.cameraLocation || "موقع غير محدد") !== fLocation) return false
       if (fDate && d.detectedAt.slice(0, 10) !== fDate) return false
       return true
     })
-  }, [all, fType, fSeverity, fStatus, fCamera, fDate])
+  }, [all, fType, fSeverity, fStatus, fCamera, fLocation, fDate])
 
   const worstZoneRank = ["", "منخفض", "متوسط", "عالٍ", "حرج"]
 
@@ -301,9 +315,15 @@ export function MonitoringDashboard({
           ))}
         </select>
         <select className={selectCls} value={fCamera} onChange={(e) => setFCamera(e.target.value)}>
-          <option value="all">كل الكاميرات</option>
+          <option value="all">كل المفتشين</option>
           {cameras.map((c) => (
             <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+        <select className={selectCls} value={fLocation} onChange={(e) => setFLocation(e.target.value)}>
+          <option value="all">كل المواقع</option>
+          {locations.map((l) => (
+            <option key={l} value={l}>{l}</option>
           ))}
         </select>
         <input
@@ -313,13 +333,19 @@ export function MonitoringDashboard({
           onChange={(e) => setFDate(e.target.value)}
           dir="ltr"
         />
-        {(fType !== "all" || fSeverity !== "all" || fStatus !== "all" || fCamera !== "all" || fDate) && (
+        {(fType !== "all" ||
+          fSeverity !== "all" ||
+          fStatus !== "all" ||
+          fCamera !== "all" ||
+          fLocation !== "all" ||
+          fDate) && (
           <button
             onClick={() => {
               setFType("all")
               setFSeverity("all")
               setFStatus("all")
               setFCamera("all")
+              setFLocation("all")
               setFDate("")
             }}
             className="text-sm font-medium text-primary hover:underline"
@@ -345,7 +371,7 @@ export function MonitoringDashboard({
             <table className="w-full text-right text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
-                  {["الوقت", "الكاميرا", "المخالفة", "الخطورة", "الثقة", "الإثبات", "الحالة", ""].map(
+                  {["الوقت", "المفتش/الموقع", "المخالفة", "الخطورة", "الثقة", "الإثبات", "الحالة", ""].map(
                     (h, i) => (
                       <th
                         key={i}
@@ -379,7 +405,7 @@ export function MonitoringDashboard({
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="font-medium text-foreground">{d.cameraId || "-"}</div>
+                        <div className="font-medium text-foreground">{d.inspectorName || d.cameraId || "-"}</div>
                         <div className="text-xs text-muted-foreground">{d.cameraLocation || "-"}</div>
                       </td>
                       <td className="px-4 py-3">
@@ -418,7 +444,7 @@ export function MonitoringDashboard({
                             <DialogContent className="max-w-lg">
                               <DialogHeader>
                                 <DialogTitle>
-                                  لقطة الإثبات — {detectionTypeLabels[d.detectionType]}
+                                  ��قطة الإثبات — {detectionTypeLabels[d.detectionType]}
                                 </DialogTitle>
                               </DialogHeader>
                               {/* eslint-disable-next-line @next/next/no-img-element */}

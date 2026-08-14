@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, serial, integer, date, uniqueIndex } from "drizzle-orm/pg-core"
+import { pgTable, text, timestamp, boolean, serial, integer, date, uniqueIndex, index } from "drizzle-orm/pg-core"
 
 // ---------- Better Auth tables (do not rename columns) ----------
 export const user = pgTable("user", {
@@ -278,6 +278,8 @@ export const violation = pgTable("violation", {
   category: text("category").default("internal"),
   // مصدر إدخال المخالفة: electronic (عبر النظام) | manual (نموذج ورقي ممسوح).
   entryMode: text("entry_mode").notNull().default("electronic"),
+  // اسم المفتش/الموظف الذي رصد المخالفة (يُعبّأ تلقائياً عند الرصد بالذكاء الاصطناعي).
+  detectedBy: text("detected_by").default(""),
   internalAction: text("internal_action").default(""),
   violationDate: date("violationDate"),
   violationTime: text("violationTime").default(""),
@@ -341,7 +343,7 @@ export const attachment = pgTable("attachment", {
 })
 
 // ---------- المراقبة الذكية بالذكاء الاصطناعي (كاميرات ساحات الرافعات) ----------
-// detectionType: أحد الأنواع الستة (no_ppe / traffic_congestion / unsafe_stacking /
+// detectionType: أحد ����لأنواع الستة (no_ppe / traffic_congestion / unsafe_stacking /
 //   overspeed / restricted_area / pedestrian_near_forklift).
 // severity: low / medium / high / critical.
 // status: new / acknowledged / resolved / false_positive.
@@ -350,6 +352,7 @@ export const aiDetection = pgTable("ai_detections", {
   userId: text("userId").notNull(),
   detectionId: text("detection_id").notNull(), // AID-YYYY-###
   cameraId: text("camera_id").notNull().default(""),
+  inspectorName: text("inspector_name").notNull().default(""), // اسم المفتش/الموظف صاحب الجلسة
   cameraLocation: text("camera_location").notNull().default(""),
   detectionType: text("detection_type").notNull().default("no_ppe"),
   severity: text("severity").notNull().default("low"),
@@ -364,7 +367,7 @@ export const aiDetection = pgTable("ai_detections", {
 })
 
 // كاميرات الهاتف المتصلة حالياً — سجل واحد لكل كاميرا (userId + cameraId فريد).
-// يُحدّث lastFrameUrl و lastSeenAt مع كل استدعاء لمسار /api/ai-monitoring/analyze،
+// يُحدّث lastFrameUrl و lastSeenAt مع كل استدعا�� لمسار /api/ai-monitoring/analyze،
 // ما يتيح للوحة المدير عرض بث "شبه حي" لكل كاميرا نشطة.
 export const activeCameraStream = pgTable(
   "active_camera_streams",
@@ -372,6 +375,7 @@ export const activeCameraStream = pgTable(
     id: serial("id").primaryKey(),
     userId: text("userId").notNull(),
     cameraId: text("camera_id").notNull(),
+    inspectorName: text("inspector_name").notNull().default(""), // اسم المفتش/الموظف الذي بدأ الجلسة
     cameraLocation: text("camera_location").notNull().default(""),
     lastFrameUrl: text("last_frame_url").notNull().default(""),
     lastSeenAt: timestamp("last_seen_at").notNull().defaultNow(),
@@ -381,6 +385,55 @@ export const activeCameraStream = pgTable(
     userCameraUnique: uniqueIndex("active_cam_user_camera_idx").on(t.userId, t.cameraId),
   }),
 )
+
+// قناة إشارات WebRTC (signaling) عبر قاعدة البيانات — بديل خفيف عن WebSocket يناسب
+// بيئة الخوادم بلا حالة. تُخزَّن هنا عروض/إجابات SDP ومرشحات ICE مؤقتاً بين
+// الكاميرا (المُرسِل) والمدير (المشاهد)، ويُستقصى منها كل ~ثانية أثناء إنشاء الاتصال فقط.
+// بعد نجاح الاتصال ينتقل الفيديو مباشرةً بين الطرفين (P2P) دون المرور بالخادم.
+export const webrtcSignal = pgTable(
+  "webrtc_signals",
+  {
+    id: serial("id").primaryKey(),
+    cameraId: text("camera_id").notNull(), // جلسة الكاميرا الهدف
+    viewerSessionId: text("viewer_session_id").notNull(), // جلسة تفاوض المشاهد (تسمح بإعادة الاتصال)
+    sender: text("sender").notNull(), // "camera" | "viewer"
+    kind: text("kind").notNull(), // "offer" | "answer" | "ice"
+    payload: text("payload").notNull(), // SDP أو مرشّح ICE مُرمَّز JSON
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    lookupIdx: index("webrtc_lookup_idx").on(t.cameraId, t.viewerSessionId, t.id),
+  }),
+)
+
+// تسجيلات الفيديو المرفوعة من كاميرا الهاتف إلى Vercel Blob.
+// userId = مالك التسجيل (الحساب الذي سجّل)، ونطاق العرض مقصور عليه.
+export const videoRecording = pgTable("video_recordings", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  cameraId: text("camera_id").notNull().default(""),
+  cameraName: text("camera_name").notNull().default(""),
+  videoUrl: text("video_url").notNull(),
+  posterUrl: text("poster_url").notNull().default(""),
+  durationSeconds: integer("duration_seconds").notNull().default(0),
+  fileSizeBytes: integer("file_size_bytes").notNull().default(0),
+  recordedBy: text("recorded_by").notNull().default(""),
+  recordedAt: timestamp("recorded_at").notNull().defaultNow(),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
+// اللقطات المستخرجة من تسجيل فيديو عبر مشغّل المراجعة.
+export const videoScreenshot = pgTable("video_screenshots", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  recordingId: integer("recording_id").notNull(),
+  cameraId: text("camera_id").notNull().default(""),
+  imageUrl: text("image_url").notNull(),
+  atSeconds: integer("at_seconds").notNull().default(0),
+  linkedViolationId: integer("linked_violation_id"),
+  capturedAt: timestamp("captured_at").notNull().defaultNow(),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
 
 export const document = pgTable("document", {
   id: serial("id").primaryKey(),

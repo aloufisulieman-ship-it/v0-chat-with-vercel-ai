@@ -4,9 +4,10 @@ import { db } from "@/lib/db"
 import { aiDetection, activeCameraStream, user } from "@/lib/db/schema"
 import { and, desc, eq, gte } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
-import { requireModuleUserId } from "@/lib/session"
+import { requireUser, requireHseReviewerId } from "@/lib/session"
 import type { DetectionType, DetectionStatus } from "@/lib/ai-monitoring"
 import { severityByType } from "@/lib/ai-monitoring"
+import { sessionCameraId } from "@/lib/camera-session"
 
 const VALID_TYPES: DetectionType[] = [
   "no_ppe",
@@ -19,22 +20,22 @@ const VALID_TYPES: DetectionType[] = [
 const VALID_STATUS: DetectionStatus[] = ["new", "acknowledged", "resolved", "false_positive"]
 const VALID_SEVERITY = ["low", "medium", "high", "critical"] as const
 
-// المدير/الأدمن/مفتش السلامة يرى كل الاكتشافات، وغيرهم يرى ما سجّلته أجهزته فقط.
+// المراجع (admin/manager) يرى كل الاكتشافات، وغيره يرى ما سجّلته أجهزته فقط.
 async function isManager(userId: string) {
   const rows = await db
-    .select({ role: user.role, department: user.department })
+    .select({ role: user.role })
     .from(user)
     .where(eq(user.id, userId))
     .limit(1)
   const u = rows[0]
-  return u?.role === "admin" || u?.department === "المدير العام" || u?.department === "مفتش السلامة"
+  return u?.role === "admin" || u?.role === "manager"
 }
 
 export type AiDetection = typeof aiDetection.$inferSelect
 
 // قائمة الاكتشافات مرتبة بالأحدث.
 export async function getDetections(): Promise<AiDetection[]> {
-  const userId = await requireModuleUserId("ai_monitoring")
+  const userId = await requireHseReviewerId()
   if (await isManager(userId)) {
     return db.select().from(aiDetection).orderBy(desc(aiDetection.detectedAt))
   }
@@ -51,20 +52,25 @@ export type ActiveCameraStream = typeof activeCameraStream.$inferSelect
 const ACTIVE_WINDOW_SECONDS = 120
 
 // تحديث (أو إنشاء) سجل الكاميرا المتصلة مع نبضة الاتصال (heartbeat).
+// هوية الجلسة مشتقّة من (الحساب + اسم المفتش المُدخل)، فيحصل كل مفتش على سجله الخاص
+// حتى لو تشارك عدّة مفتشين نفس الرابط/الحساب، ويُعاد استخدام السجل نفسه عند عودته.
 // إذا مُرِّر lastFrameUrl (رابط Blob) يُحدَّث، وإلا يُحتفظ بالرابط الحالي كما هو
 // حتى لا يمحو استدعاءُ التحليل رابطَ الإطار المرفوع إلى Blob.
 export async function touchCameraStream(input: {
-  cameraId: string
+  inspectorName: string
   cameraLocation: string
   lastFrameUrl?: string
 }): Promise<void> {
-  const userId = await requireModuleUserId("ai_monitoring")
-  const cameraId = (input.cameraId || "كاميرا الهاتف").slice(0, 120)
+  // البث/التسجيل متاح لأي مستخدم مسجّل دخول (الموظف المصوّر).
+  const userId = (await requireUser()).id
+  const inspectorName = (input.inspectorName || "كاميرا الهاتف").slice(0, 160)
+  const cameraId = sessionCameraId(userId, inspectorName)
   const cameraLocation = (input.cameraLocation || "").slice(0, 200)
   const hasFrame = typeof input.lastFrameUrl === "string" && input.lastFrameUrl.length > 0
   const lastFrameUrl = hasFrame ? (input.lastFrameUrl as string) : ""
 
   const set: Partial<typeof activeCameraStream.$inferInsert> = {
+    inspectorName,
     cameraLocation,
     lastSeenAt: new Date(),
   }
@@ -72,7 +78,7 @@ export async function touchCameraStream(input: {
 
   await db
     .insert(activeCameraStream)
-    .values({ userId, cameraId, cameraLocation, lastFrameUrl, lastSeenAt: new Date() })
+    .values({ userId, cameraId, inspectorName, cameraLocation, lastFrameUrl, lastSeenAt: new Date() })
     .onConflictDoUpdate({
       target: [activeCameraStream.userId, activeCameraStream.cameraId],
       set,
@@ -81,7 +87,7 @@ export async function touchCameraStream(input: {
 
 // الكاميرات المتصلة حالياً (آخر إرسال خلال نافذة الاعتبار)، الأحدث أولاً.
 export async function getActiveCameraStreams(): Promise<ActiveCameraStream[]> {
-  const userId = await requireModuleUserId("ai_monitoring")
+  const userId = await requireHseReviewerId()
   const since = new Date(Date.now() - ACTIVE_WINDOW_SECONDS * 1000)
   const base = db
     .select()
@@ -98,6 +104,7 @@ export async function getActiveCameraStreams(): Promise<ActiveCameraStream[]> {
 export type CameraLiveStatus = {
   camera: {
     cameraId: string
+    inspectorName: string
     cameraLocation: string
     lastFrameUrl: string
     lastSeenAt: string
@@ -114,7 +121,7 @@ export type CameraLiveStatus = {
 // حالة كاميرا واحدة للعرض المباشر: آخر إطار من Blob + آخر نتيجة تحليل AI.
 // تحترم نطاق الرؤية نفسه (المدير يرى الكل، وغيره يرى كاميرات أجهزته فقط).
 export async function getCameraLiveStatus(cameraId: string): Promise<CameraLiveStatus> {
-  const userId = await requireModuleUserId("ai_monitoring")
+  const userId = await requireHseReviewerId()
   const manager = await isManager(userId)
   const id = (cameraId || "").slice(0, 120)
 
@@ -144,6 +151,7 @@ export async function getCameraLiveStatus(cameraId: string): Promise<CameraLiveS
     camera: cam
       ? {
           cameraId: cam.cameraId,
+          inspectorName: cam.inspectorName,
           cameraLocation: cam.cameraLocation,
           lastFrameUrl: cam.lastFrameUrl,
           lastSeenAt: (cam.lastSeenAt as unknown as Date)?.toISOString?.() ?? String(cam.lastSeenAt),
@@ -179,7 +187,7 @@ async function nextDetectionId(): Promise<string> {
 
 // حفظ اكتشاف جديد قادم من تحليل الكاميرا. يُستدعى من مسار /api/ai-monitoring/analyze.
 export async function saveDetection(input: {
-  cameraId: string
+  inspectorName: string
   cameraLocation: string
   detectionType: string
   severity?: string
@@ -187,7 +195,11 @@ export async function saveDetection(input: {
   snapshotUrl?: string
   notes?: string
 }): Promise<AiDetection> {
-  const userId = await requireModuleUserId("ai_monitoring")
+  // يُستدعى من مسار التحليل نيابةً عن الموظف المصوّر (أي مستخدم مسجّل دخول).
+  const userId = (await requireUser()).id
+  // نفس معرّف جلسة الكاميرا المستخدم في البث المباشر (مشتقّ من اسم المفتش)
+  // لربط الاكتشافات بجلسة/كاميرا المفتش الصحيحة.
+  const cameraId = sessionCameraId(userId, input.inspectorName || "")
 
   const detectionType = (VALID_TYPES as string[]).includes(input.detectionType)
     ? (input.detectionType as DetectionType)
@@ -204,7 +216,8 @@ export async function saveDetection(input: {
     .values({
       userId,
       detectionId,
-      cameraId: input.cameraId?.slice(0, 120) || "",
+      cameraId,
+      inspectorName: input.inspectorName?.slice(0, 160) || "كاميرا الهاتف",
       cameraLocation: input.cameraLocation?.slice(0, 200) || "",
       detectionType,
       severity,
@@ -221,7 +234,7 @@ export async function saveDetection(input: {
 
 // تحديث حالة اكتشاف (اطّلاع / معالجة / إنذار خاطئ).
 export async function updateDetectionStatus(id: number, status: string, notes?: string) {
-  const userId = await requireModuleUserId("ai_monitoring")
+  const userId = await requireHseReviewerId()
   if (!(VALID_STATUS as string[]).includes(status)) throw new Error("حالة غير صالحة")
 
   const rows = await db
@@ -244,7 +257,7 @@ export async function updateDetectionStatus(id: number, status: string, notes?: 
 }
 
 export async function deleteDetection(id: number) {
-  const userId = await requireModuleUserId("ai_monitoring")
+  const userId = await requireHseReviewerId()
   const manager = await isManager(userId)
   const where = manager ? eq(aiDetection.id, id) : and(eq(aiDetection.id, id), eq(aiDetection.userId, userId))
   await db.delete(aiDetection).where(where)

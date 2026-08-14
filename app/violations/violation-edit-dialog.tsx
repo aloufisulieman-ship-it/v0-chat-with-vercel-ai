@@ -23,6 +23,7 @@ type ViolationRow = {
   violationType: string | null
   category: string | null
   entryMode: string | null
+  detectedBy: string | null
   internalAction: string | null
   violationDate: string | null
   violationTime: string | null
@@ -45,6 +46,7 @@ export function ViolationEditDialog({ violation }: { violation: ViolationRow }) 
     violationType: violation.violationType ?? "",
     category: violation.category ?? "internal",
     entryMode: violation.entryMode ?? "electronic",
+    detectedBy: violation.detectedBy ?? "",
     internalAction: violation.internalAction ?? "",
     violationDate: violation.violationDate ?? "",
     violationTime: violation.violationTime ?? "",
@@ -213,6 +215,10 @@ export function ViolationEditDialog({ violation }: { violation: ViolationRow }) 
           <div className="flex flex-col gap-1">
             <Label>المكان</Label>
             <Input value={form.place} onChange={e => setForm(f => ({ ...f, place: e.target.value }))} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label>رُصدت بواسطة</Label>
+            <Input value={form.detectedBy} onChange={e => setForm(f => ({ ...f, detectedBy: e.target.value }))} placeholder="اسم المفتش/الموظف" />
           </div>
           <div className="flex flex-col gap-1 sm:col-span-2">
             <Label>وصف المخالفة</Label>

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { put } from "@vercel/blob"
 import { touchCameraStream } from "@/app/actions/ai-monitoring"
+import { requireUser } from "@/lib/session"
+import { sessionCameraId } from "@/lib/camera-session"
 
 export const runtime = "nodejs"
 export const maxDuration = 30
@@ -12,7 +14,7 @@ export async function POST(req: Request) {
   try {
     const body = (await req.json()) as {
       image?: string
-      cameraId?: string
+      inspectorName?: string
       cameraLocation?: string
     }
 
@@ -28,10 +30,13 @@ export async function POST(req: Request) {
     const base64 = match[2]
     const buffer = Buffer.from(base64, "base64")
 
-    const cameraId = (body.cameraId || "كاميرا الهاتف").toString().slice(0, 120)
+    const inspectorName = (body.inspectorName || "كاميرا الهاتف").toString().slice(0, 160)
     const cameraLocation = (body.cameraLocation || "").toString().slice(0, 200)
 
-    // مسار ثابت لكل كاميرا؛ الترميز يجعل الأسماء العربية والمسافات آمنة في المسار.
+    // مسار ثابت لكل جلسة (مشتقّ من الحساب + اسم المفتش) حتى تُستبدل الصورة نفسها في كل رفع
+    // ويحصل كل مفتش على مسار إطار خاص به عند مشاركة نفس الرابط/الحساب.
+    const userId = (await requireUser()).id
+    const cameraId = sessionCameraId(userId, inspectorName)
     const pathname = `cameras/${encodeURIComponent(cameraId)}/latest.jpg`
 
     const blob = await put(pathname, buffer, {
@@ -43,7 +48,7 @@ export async function POST(req: Request) {
     })
 
     // تحديث نبضة الاتصال برابط الإطار الأحدث.
-    await touchCameraStream({ cameraId, cameraLocation, lastFrameUrl: blob.url })
+    await touchCameraStream({ inspectorName, cameraLocation, lastFrameUrl: blob.url })
 
     return NextResponse.json({ url: blob.url })
   } catch (err) {

@@ -1,14 +1,14 @@
 import { AppShell } from "@/components/app-shell"
-import { requireModule } from "@/lib/session"
+import { requireHseReviewer } from "@/lib/session"
 import { getDetections } from "@/app/actions/ai-monitoring"
 import { MonitoringDashboard, type DetectionDto } from "./monitoring-dashboard"
 import Link from "next/link"
-import { Smartphone } from "lucide-react"
+import { Smartphone, Video, LayoutGrid } from "lucide-react"
 
 export const dynamic = "force-dynamic"
 
 export default async function AiMonitoringPage() {
-  const user = await requireModule("ai_monitoring")
+  const user = await requireHseReviewer()
   const rows = await getDetections()
 
   // تحويل التواريخ إلى نصوص لتتوافق مع بيانات الـ API أثناء التحديث الحي.
@@ -16,6 +16,7 @@ export default async function AiMonitoringPage() {
     id: r.id,
     detectionId: r.detectionId,
     cameraId: r.cameraId,
+    inspectorName: r.inspectorName ?? "",
     cameraLocation: r.cameraLocation,
     detectionType: r.detectionType,
     severity: r.severity,
@@ -34,13 +35,29 @@ export default async function AiMonitoringPage() {
       subtitle="رصد مخالفات السلامة لحظياً في ساحات الرافعات الشوكية عبر تحليل بث الكاميرات"
       user={user}
       action={
-        <Link
-          href="/ai-monitoring/mobile-camera"
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
-        >
-          <Smartphone className="size-4" />
-          بث كاميرا الهاتف
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/ai-monitoring/grid"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+          >
+            <LayoutGrid className="size-4" />
+            جدار العرض
+          </Link>
+          <Link
+            href="/ai-monitoring/recordings"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+          >
+            <Video className="size-4" />
+            التسجيلات
+          </Link>
+          <Link
+            href="/ai-monitoring/mobile-camera"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            <Smartphone className="size-4" />
+            بث كاميرا الهاتف
+          </Link>
+        </div>
       }
     >
       <MonitoringDashboard initial={initial} isAdmin={user.role === "admin"} />

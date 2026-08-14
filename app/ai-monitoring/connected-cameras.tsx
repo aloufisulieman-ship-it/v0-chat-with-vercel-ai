@@ -1,9 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import useSWR from "swr"
 import Link from "next/link"
-import { Cctv, MapPin, Clock, Video, Radio } from "lucide-react"
+import { Cctv, MapPin, Clock, Video, Radio, UserRound } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import {
   Dialog,
@@ -12,20 +12,23 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { ToastAction } from "@/components/ui/toast"
+import { toast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 
-// اعتبار الكاميرا "مباشرة" إذا كان آخر إطار خلال آخر 20 ثانية.
-const LIVE_THRESHOLD_MS = 20000
+// اعتبار الكاميرا "مباشرة" إذا كان آخر إطار خلال آخر 8 ثوانٍ.
+const LIVE_THRESHOLD_MS = 8000
 
 export type CameraStreamDto = {
   id: number
   cameraId: string
+  inspectorName: string
   cameraLocation: string
   lastFrameUrl: string
   lastSeenAt: string
 }
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
+const fetcher = (url: string) => fetch(url, { cache: "no-store" }).then((r) => r.json())
 
 // صياغة الوقت النسبي بالعربية: "قبل X ثانية/دقيقة/ساعة".
 function relativeTime(iso: string, now: number) {
@@ -66,10 +69,46 @@ export function ConnectedCameras({ isAdmin }: { isAdmin: boolean }) {
 
   // مؤقت محلي كل ثانية لتحديث الوقت النسبي ومؤشر الاتصال بين عمليات الجلب.
   const [now, setNow] = useState(() => Date.now())
+  const liveCount = cameras.filter((c) => now - new Date(c.lastSeenAt).getTime() < LIVE_THRESHOLD_MS).length
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(t)
   }, [])
+
+  // تنبيه فوري عند بدء بث جديد: نتتبّع الكاميرات الحية سابقاً، وعند ظهور كاميرا
+  // حيّة لم تكن حيّة من قبل نُطلق إشعاراً. نتجاهل أول تحميل (بذر) حتى لا يُغرق
+  // المدير بإشعارات عن بثوث كانت تعمل مسبقاً.
+  const prevLiveRef = useRef<Set<string> | null>(null)
+  useEffect(() => {
+    const t = Date.now()
+    const liveNow = new Set<string>()
+    for (const c of cameras) {
+      if (t - new Date(c.lastSeenAt).getTime() < LIVE_THRESHOLD_MS) liveNow.add(c.cameraId)
+    }
+    const prev = prevLiveRef.current
+    // أول تشغيل: نبذر المجموعة دون إطلاق إشعارات.
+    if (prev === null) {
+      prevLiveRef.current = liveNow
+      return
+    }
+    for (const c of cameras) {
+      if (liveNow.has(c.cameraId) && !prev.has(c.cameraId)) {
+        const label = c.inspectorName || c.cameraId
+        toast({
+          title: "بدأ بثٌّ حيّ جديد",
+          description: `${label}${c.cameraLocation ? ` — ${c.cameraLocation}` : ""}`,
+          // إشعار مهم للمدير: نُبقيه ظاهراً 15 ثانية بدل 5 الافتراضية.
+          duration: 15000,
+          action: (
+            <ToastAction altText="فتح البث المباشر" asChild>
+              <Link href={`/ai-monitoring/live/${encodeURIComponent(c.cameraId)}`}>فتح البث</Link>
+            </ToastAction>
+          ),
+        })
+      }
+    }
+    prevLiveRef.current = liveNow
+  }, [cameras])
 
   return (
     <div>
@@ -78,8 +117,14 @@ export function ConnectedCameras({ isAdmin }: { isAdmin: boolean }) {
           <Video className="size-4 text-primary" />
           <h2 className="text-lg font-semibold text-foreground">الكاميرات المتصلة الآن</h2>
         </div>
-        <span className="text-xs text-muted-foreground">
-          {cameras.length} كاميرا · بث شبه حي (كل 8 ثوانٍ)
+        <span className="flex items-center gap-2 text-xs text-muted-foreground">
+          {liveCount > 0 && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 px-2 py-0.5 font-semibold text-destructive">
+              <span className="size-1.5 animate-pulse rounded-full bg-destructive" aria-hidden="true" />
+              {liveCount} بث حي الآن
+            </span>
+          )}
+          {cameras.length} كاميرا
         </span>
       </div>
 
@@ -97,6 +142,8 @@ export function ConnectedCameras({ isAdmin }: { isAdmin: boolean }) {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {cameras.map((cam) => {
             const isLive = now - new Date(cam.lastSeenAt).getTime() < LIVE_THRESHOLD_MS
+            // العنوان المعروض = اسم المفتش/الموظف (مع تراجع لمعرّف الجلسة عند غيابه).
+            const title = cam.inspectorName || cam.cameraId
             return (
               <div
                 key={cam.id}
@@ -106,7 +153,7 @@ export function ConnectedCameras({ isAdmin }: { isAdmin: boolean }) {
                 <DialogTrigger asChild>
                   <button
                     className="group flex flex-col text-right transition-colors focus:outline-none focus:ring-2 focus:ring-ring/30"
-                    aria-label={`عرض كاميرا ${cam.cameraId}`}
+                    aria-label={`عرض بث المفتش ${title}`}
                   >
                     {/* آخر إطار */}
                     <div className="relative aspect-video w-full overflow-hidden bg-black">
@@ -114,7 +161,7 @@ export function ConnectedCameras({ isAdmin }: { isAdmin: boolean }) {
                         /* eslint-disable-next-line @next/next/no-img-element */
                         <img
                           src={frameSrc(cam.lastFrameUrl, cam.lastSeenAt)}
-                          alt={`آخر إطار من ${cam.cameraId}`}
+                          alt={`آخر إطار من بث المفتش ${title}`}
                           className="size-full object-cover transition-transform group-hover:scale-[1.03]"
                         />
                       ) : (
@@ -122,23 +169,28 @@ export function ConnectedCameras({ isAdmin }: { isAdmin: boolean }) {
                           <Cctv className="size-8" />
                         </div>
                       )}
-                      {/* مؤشر الاتصال */}
-                      <div className="absolute right-2 top-2 flex items-center gap-1.5 rounded-full bg-black/65 px-2 py-1 text-[11px] font-medium text-white">
+                      {/* مؤشر البث الحي المباشر — شارة حمراء نابضة بارزة عند البث الآن */}
+                      <div
+                        className={cn(
+                          "absolute right-2 top-2 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                          isLive ? "bg-destructive text-white" : "bg-black/65 text-white/90",
+                        )}
+                      >
                         <span
                           className={cn(
                             "size-2 rounded-full",
-                            isLive ? "animate-pulse bg-primary" : "bg-muted-foreground/60",
+                            isLive ? "animate-pulse bg-white" : "bg-muted-foreground/60",
                           )}
                           aria-hidden="true"
                         />
-                        {isLive ? "مباشر" : "غير متصل"}
+                        {isLive ? "بث حي" : "غير متصل"}
                       </div>
                     </div>
-                    {/* بيانات الكاميرا */}
+                    {/* بيانات المفتش والموقع */}
                     <div className="flex flex-col gap-1.5 p-3">
                       <div className="flex items-center gap-1.5">
-                        <Cctv className="size-4 shrink-0 text-muted-foreground" />
-                        <span className="truncate font-medium text-foreground">{cam.cameraId}</span>
+                        <UserRound className="size-4 shrink-0 text-muted-foreground" />
+                        <span className="truncate font-medium text-foreground">{title}</span>
                       </div>
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <MapPin className="size-3.5 shrink-0" />
@@ -154,8 +206,8 @@ export function ConnectedCameras({ isAdmin }: { isAdmin: boolean }) {
                 <DialogContent className="max-w-2xl">
                   <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                      <Cctv className="size-5" />
-                      {cam.cameraId}
+                      <UserRound className="size-5" />
+                      {title}
                     </DialogTitle>
                   </DialogHeader>
                   <div className="flex flex-col gap-4">
@@ -164,7 +216,7 @@ export function ConnectedCameras({ isAdmin }: { isAdmin: boolean }) {
                         /* eslint-disable-next-line @next/next/no-img-element */
                         <img
                           src={frameSrc(cam.lastFrameUrl, cam.lastSeenAt)}
-                          alt={`آخر إطار من ${cam.cameraId}`}
+                          alt={`آخر إطار من بث المفتش ${title}`}
                           className="w-full object-contain"
                         />
                       ) : (
@@ -175,8 +227,8 @@ export function ConnectedCameras({ isAdmin }: { isAdmin: boolean }) {
                     </div>
                     <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
                       <div className="flex flex-col gap-0.5">
-                        <dt className="text-xs text-muted-foreground">اسم الكاميرا</dt>
-                        <dd className="font-medium text-foreground">{cam.cameraId}</dd>
+                        <dt className="text-xs text-muted-foreground">اسم المفتش/الموظف</dt>
+                        <dd className="font-medium text-foreground">{title}</dd>
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <dt className="text-xs text-muted-foreground">الموقع</dt>

@@ -35,7 +35,7 @@ export async function POST(req: Request) {
   try {
     const body = (await req.json()) as {
       image?: string
-      cameraId?: string
+      inspectorName?: string
       cameraLocation?: string
     }
 
@@ -75,12 +75,12 @@ export async function POST(req: Request) {
       ],
     })
 
-    const cameraId = (body.cameraId || "").toString()
+    const inspectorName = (body.inspectorName || "").toString()
     const cameraLocation = (body.cameraLocation || "").toString()
 
     // تحديث نبضة الاتصال فقط (بدون تمرير إطار) حتى لا نمحو رابط Blob الأحدث
     // الذي يرفعه مسار upload-frame كل 1-2 ثانية.
-    await touchCameraStream({ cameraId, cameraLocation })
+    await touchCameraStream({ inspectorName, cameraLocation })
 
     // حفظ كل مخالفة مكتشفة كسجل مستقل مع لقطة الإثبات.
     const saved = []
@@ -88,7 +88,7 @@ export async function POST(req: Request) {
       // بعض النماذج تُعيد الثقة ككسر (0-1) بدل نسبة مئوية؛ نُوحّدها إلى 0-100.
       const confidenceScore = Math.round(d.confidence <= 1 ? d.confidence * 100 : d.confidence)
       const row = await saveDetection({
-        cameraId,
+        inspectorName,
         cameraLocation,
         detectionType: d.type,
         severity: d.severity,

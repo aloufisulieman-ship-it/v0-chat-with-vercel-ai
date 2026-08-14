@@ -72,9 +72,12 @@ export function AppSidebar({
 
   // Dashboard and settings are always available so no user gets locked out (settings holds password change).
   const alwaysOn: ModuleKey[] = ["dashboard", "settings"]
-  const visible = nav.filter(
-    (item) => alwaysOn.includes(item.module) || hasModuleAccess(user?.role, user?.permissions, item.module),
-  )
+  // صفحات المراقبة الذكية (المراجعة) مقصورة على مسؤول HSE: admin أو manager.
+  const isReviewer = user?.role === "admin" || user?.role === "manager"
+  const visible = nav.filter((item) => {
+    if (item.href === "/ai-monitoring") return isReviewer
+    return alwaysOn.includes(item.module) || hasModuleAccess(user?.role, user?.permissions, item.module)
+  })
   const items =
     user?.role === "admin" ? [...visible, { href: "/users", label: "إدارة المستخدمين", icon: Users }] : visible
 

@@ -49,6 +49,28 @@ export async function requireAdmin(): Promise<AppUser> {
   return u
 }
 
+// مسؤول HSE / المراجع: صاحب دور admin أو manager.
+// صفحات المراجعة (اللوحة، البث المباشر، التسجيلات) حصرية لهذه الفئة.
+export function isHseReviewer(role: string | null | undefined): boolean {
+  return role === "admin" || role === "manager"
+}
+
+// حارس صفحات المراجعة: يعيد المستخدم إن كان مراجعاً، وإلا يوجّهه لصفحة عدم التصريح.
+export async function requireHseReviewer(): Promise<AppUser> {
+  const u = await requireUser()
+  if (!isHseReviewer(u.role)) redirect("/ai-monitoring/unauthorized")
+  return u
+}
+
+// نسخة لاستخدامها داخل server actions: ترمي خطأً بدل التوجيه.
+export async function requireHseReviewerId(): Promise<string> {
+  const u = await requireUser()
+  if (!isHseReviewer(u.role)) {
+    throw new Error("هذه العملية مقصورة على مسؤول HSE (مدير أو أدمن)")
+  }
+  return u.id
+}
+
 // Requires the user to have access to a given module, else sends them home.
 export async function requireModule(module: ModuleKey): Promise<AppUser> {
   const u = await requireUser()
