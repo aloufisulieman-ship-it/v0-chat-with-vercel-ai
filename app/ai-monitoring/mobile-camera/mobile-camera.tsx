@@ -17,6 +17,7 @@ import {
   Eye,
   Mic,
   MicOff,
+  SwitchCamera,
 } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
@@ -47,9 +48,10 @@ type LastResult = {
 
 // اختيار أفضل صيغة تسجيل مدعومة في المتصفح (WebM أولاً ثم MP4).
 function pickRecordingMime(): { mimeType: string; ext: string } {
+  // نُفضّل صيغاً تتضمّن ترميز الصوت (opus) لضمان تسجيل الصوت مع الفيديو معاً.
   const candidates: { mimeType: string; ext: string }[] = [
-    { mimeType: "video/webm;codecs=vp9", ext: "webm" },
-    { mimeType: "video/webm;codecs=vp8", ext: "webm" },
+    { mimeType: "video/webm;codecs=vp9,opus", ext: "webm" },
+    { mimeType: "video/webm;codecs=vp8,opus", ext: "webm" },
     { mimeType: "video/webm", ext: "webm" },
     { mimeType: "video/mp4", ext: "mp4" },
   ]
@@ -91,6 +93,22 @@ export function MobileCamera() {
   // حالة الميكروفون: مفعّل افتراضياً حتى يُبثّ الصوت مع الفيديو للمدير.
   const [micEnabled, setMicEnabled] = useState(true)
   const micEnabledRef = useRef(true)
+
+  // تبديل الكاميرا (أمامية/خلفية): قائمة معرّفات كاميرات الجهاز والكاميرا النشطة حالياً.
+  const videoDeviceIdsRef = useRef<string[]>([])
+  const currentDeviceIdRef = useRef<string>("")
+  const currentFacingRef = useRef<string>("")
+  const [videoDeviceCount, setVideoDeviceCount] = useState(0)
+  const [currentFacing, setCurrentFacing] = useState<string>("")
+  const [switching, setSwitching] = useState(false)
+  // مرجع لدالة استبدال مسار الفيديو في اتصالات WebRTC (يُملأ بعد استدعاء خطاف الناشر
+  // أدناه) — نستخدمه داخل switchCamera دون إنشاء تبعيات دورية.
+  const replaceVideoTrackRef = useRef<((t: MediaStreamTrack) => Promise<void>) | null>(null)
+
+  // قناة تسجيل عبر canvas تُحاكي الفيديو الحالي، لتستمر عبر تبديل الكاميرا دون تجميد.
+  const recCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const recRafRef = useRef<number | null>(null)
+  const recordingActiveRef = useRef(false)
 
   const [inspectorName, setInspectorName] = useState("")
   const [location, setLocation] = useState("")
@@ -144,6 +162,25 @@ export function MobileCamera() {
     setSessionStarted(true)
   }, [bothFilled])
 
+  // تحديث الحالة المعروضة لاتجاه الكاميرا (أمامي/خلفي) مع مرجع متزامن للاستخدام داخل
+  // ردود النداء دون تبعيات.
+  const applyFacing = useCallback((facing: string) => {
+    currentFacingRef.current = facing
+    setCurrentFacing(facing)
+  }, [])
+
+  // حصر كاميرات الجهاز المتاحة (تظهر معرّفاتها/تسمياتها بعد منح إذن الكاميرا).
+  const refreshVideoDevices = useCallback(async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices()
+      const ids = devices.filter((d) => d.kind === "videoinput").map((d) => d.deviceId).filter(Boolean)
+      videoDeviceIdsRef.current = ids
+      setVideoDeviceCount(ids.length)
+    } catch {
+      /* تجاهل */
+    }
+  }, [])
+
   // ضمان وجود بث كاميرا نشط (يُستخدم للبث والتسجيل معاً). يعيد الـ stream أو يرمي خطأً.
   const ensureStream = useCallback(async (): Promise<MediaStream> => {
     if (streamRef.current) return streamRef.current
@@ -172,9 +209,17 @@ export function MobileCamera() {
         stream.addTrack(audioTrack)
       }
     } catch {
-      /* الميكروفون غير متاح — بثّ فيديو فقط */
+      /* الميكروف��ن غير متاح — بثّ فيديو فقط */
     }
     streamRef.current = stream
+    // سجّل الكاميرا النشطة (المعرّف/الاتجاه) وحدّث قائمة الأجهزة لتفعيل زر التبديل.
+    const vTrack = stream.getVideoTracks()[0]
+    if (vTrack) {
+      const st = vTrack.getSettings()
+      currentDeviceIdRef.current = st.deviceId ?? ""
+      applyFacing((st.facingMode as string) ?? "environment")
+    }
+    void refreshVideoDevices()
     if (videoRef.current) {
       videoRef.current.srcObject = stream
       await videoRef.current.play().catch(() => {})
@@ -189,7 +234,73 @@ export function MobileCamera() {
       /* غير مدعوم — يتم التجاهل */
     }
     return stream
-  }, [])
+  }, [applyFacing, refreshVideoDevices])
+
+  // تبديل الكاميرا (أمامية/خلفية) بسلاسة دون قطع البث الحي أو التسجيل الجاري:
+  // 1) نحضر مسار فيديو جديداً من الكاميرا التالية. 2) نستبدله في اتصالات WebRTC عبر
+  // replaceTrack (بلا إعادة تفاوض). 3) نحدّث بث الكاميرا الحي في مكانه دون المساس
+  // بمسار الصوت. التسجيل يستمر لأنه يقرأ من canvas يعكس المعاينة، والتحليل يقرأ من
+  // عنصر الفيديو نفسه فيتبع الكاميرا الجديدة تلقائياً.
+  const switchCamera = useCallback(async () => {
+    if (!streamRef.current || switching) return
+    setError(null)
+    setSwitching(true)
+    try {
+      const videoConstraints: MediaTrackConstraints = {
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        frameRate: { ideal: 24, max: 30 },
+      }
+      const ids = videoDeviceIdsRef.current
+      if (ids.length >= 2) {
+        const idx = Math.max(0, ids.indexOf(currentDeviceIdRef.current))
+        videoConstraints.deviceId = { exact: ids[(idx + 1) % ids.length] }
+      } else {
+        // جهاز واحد معروف: بدّل الاتجاه (أمامي/خلفي) كحل بديل.
+        videoConstraints.facingMode = {
+          ideal: currentFacingRef.current === "user" ? "environment" : "user",
+        }
+      }
+      const getVideo = () => navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: false })
+      let newStream: MediaStream
+      try {
+        newStream = await getVideo()
+      } catch {
+        // قد يرفض الجهاز فتح كاميرتين معاً: أوقف الحالية ثم أعد المحاولة.
+        streamRef.current?.getVideoTracks().forEach((t) => t.stop())
+        newStream = await getVideo()
+      }
+      const newTrack = newStream.getVideoTracks()[0]
+      if (!newTrack) throw new Error("no-video-track")
+      newTrack.enabled = true
+
+      // (1) استبدال المسار في اتصالات WebRTC القائمة قبل إيقاف القديم (بث بلا انقطاع).
+      await replaceVideoTrackRef.current?.(newTrack)
+
+      // (2) تحديث بث الكاميرا الحي في مكانه دون لمس مسار الصوت.
+      const s = streamRef.current!
+      s.getVideoTracks().forEach((t) => {
+        s.removeTrack(t)
+        t.stop()
+      })
+      s.addTrack(newTrack)
+
+      // (3) تحديث المعاينة (يتبعها التحليل تلقائياً لأنه يقرأ من عنصر الفيديو).
+      if (videoRef.current) {
+        videoRef.current.srcObject = s
+        await videoRef.current.play().catch(() => {})
+      }
+
+      const st = newTrack.getSettings()
+      currentDeviceIdRef.current = st.deviceId ?? currentDeviceIdRef.current
+      applyFacing((st.facingMode as string) ?? "")
+      void refreshVideoDevices()
+    } catch {
+      setError("تعذّر تبديل الكاميرا. حاول مرة أخرى.")
+    } finally {
+      setSwitching(false)
+    }
+  }, [switching, applyFacing, refreshVideoDevices])
 
   // إيقاف الكاميرا فعلياً فقط عندما لا يوجد بث ولا تسجيل نشط.
   const releaseStreamIfIdle = useCallback((stillStreaming: boolean, stillRecording: boolean) => {
@@ -397,12 +508,51 @@ export function MobileCamera() {
       const stream = await ensureStream()
       const mime = pickRecordingMime()
       recordMimeRef.current = mime
-      const recorder = mime.mimeType ? new MediaRecorder(stream, { mimeType: mime.mimeType }) : new MediaRecorder(stream)
+
+      // نُسجّل من قناة canvas تُحاكي عنصر الفيديو الحالي (بدل التسجيل المباشر من مسار
+      // الكاميرا)، حتى يستمر التسجيل بسلاسة عبر تبديل الكاميرا دون تجميد الفيديو.
+      // نضيف مسار الصوت نفسه (كائن المسار ذاته) فيتبع حالة كتم/تفعيل الميكروفون.
+      const recCanvas = recCanvasRef.current ?? document.createElement("canvas")
+      recCanvasRef.current = recCanvas
+      const rctx = recCanvas.getContext("2d")
+      const syncSize = () => {
+        const v = videoRef.current
+        const w = v?.videoWidth || 1280
+        const h = v?.videoHeight || 720
+        if (recCanvas.width !== w) recCanvas.width = w
+        if (recCanvas.height !== h) recCanvas.height = h
+      }
+      syncSize()
+      recordingActiveRef.current = true
+      const drawLoop = () => {
+        if (!recordingActiveRef.current) return
+        const v = videoRef.current
+        if (v && v.videoWidth) {
+          syncSize()
+          rctx?.drawImage(v, 0, 0, recCanvas.width, recCanvas.height)
+        }
+        recRafRef.current = requestAnimationFrame(drawLoop)
+      }
+      drawLoop()
+
+      const recStream = recCanvas.captureStream(24)
+      const audioTrack = stream.getAudioTracks()[0]
+      if (audioTrack) recStream.addTrack(audioTrack)
+
+      const recorder = mime.mimeType
+        ? new MediaRecorder(recStream, { mimeType: mime.mimeType })
+        : new MediaRecorder(recStream)
       chunksRef.current = []
       recorder.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) chunksRef.current.push(e.data)
       }
       recorder.onstop = () => {
+        // أوقف حلقة الرسم قبل بناء الملف.
+        recordingActiveRef.current = false
+        if (recRafRef.current) {
+          cancelAnimationFrame(recRafRef.current)
+          recRafRef.current = null
+        }
         const durationSeconds = Math.max(1, Math.round((Date.now() - recordStartRef.current) / 1000))
         const blob = new Blob(chunksRef.current, { type: mime.mimeType || "video/webm" })
         chunksRef.current = []
@@ -449,6 +599,8 @@ export function MobileCamera() {
       if (uploadIntervalRef.current) clearInterval(uploadIntervalRef.current)
       if (analyzeIntervalRef.current) clearInterval(analyzeIntervalRef.current)
       if (recordTimerRef.current) clearInterval(recordTimerRef.current)
+      recordingActiveRef.current = false
+      if (recRafRef.current) cancelAnimationFrame(recRafRef.current)
       try {
         recorderRef.current?.stop()
       } catch {
@@ -478,7 +630,13 @@ export function MobileCamera() {
   // البث الحي المباشر (WebRTC): يعيد استخدام نفس بث الكاميرا وينقله للمدير لحظياً
   // كلما كانت الكاميرا تصوّر (بث أو تسجيل). مستقل عن رفع الإطارات/التحليل ويعمل ندّاً لِند.
   const getStream = useCallback(() => streamRef.current, [])
-  const { viewerCount, error: broadcastError } = useWebrtcBroadcaster({ active: cameraOn, inspectorName, getStream })
+  const { viewerCount, error: broadcastError, replaceVideoTrack } = useWebrtcBroadcaster({
+    active: cameraOn,
+    inspectorName,
+    getStream,
+  })
+  // نخزّن دالة استبدال المسار في مرجع ليستخدمها switchCamera دون تبعيات دورية.
+  replaceVideoTrackRef.current = replaceVideoTrack
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-5">
@@ -604,6 +762,38 @@ export function MobileCamera() {
         <canvas ref={canvasRef} className="hidden" />
       </Card>
 
+      {/* تحكّم الكاميرا والصوت — بجانب المعاينة، متاح طوال تشغيل الكاميرا (بث أو تسجيل) */}
+      {cameraOn && (
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button
+            onClick={switchCamera}
+            disabled={switching || videoDeviceCount < 2}
+            title={videoDeviceCount < 2 ? "لا توجد كاميرا أخرى للتبديل إليها" : "التبديل بين الأمامية والخلفية"}
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-input bg-background px-4 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {switching ? <Loader2 className="size-4 animate-spin" /> : <SwitchCamera className="size-4" />}
+            {switching
+              ? "جارٍ التبديل…"
+              : `تبديل الكاميرا${
+                  currentFacing === "user" ? " · الأمامية" : currentFacing === "environment" ? " · الخلفية" : ""
+                }`}
+          </button>
+          <button
+            onClick={toggleMic}
+            aria-pressed={micEnabled}
+            className={cn(
+              "flex flex-1 items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold transition-colors",
+              micEnabled
+                ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15"
+                : "border-border bg-muted text-muted-foreground hover:bg-muted/70",
+            )}
+          >
+            {micEnabled ? <Mic className="size-4" /> : <MicOff className="size-4" />}
+            {micEnabled ? "الصوت مفعّل — يُبثّ للمدير" : "الصوت مكتوم"}
+          </button>
+        </div>
+      )}
+
       {error && (
         <Card className="flex items-start gap-3 border-destructive/30 bg-destructive/10 p-4">
           <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
@@ -691,22 +881,6 @@ export function MobileCamera() {
         )}
       </div>
 
-      {/* كتم/تفعيل الصوت المبثوث للمدير — يظهر أثناء البث أو التسجيل فقط */}
-      {cameraOn && (
-        <button
-          onClick={toggleMic}
-          className={cn(
-            "flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold transition-colors",
-            micEnabled
-              ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15"
-              : "border-border bg-muted text-muted-foreground hover:bg-muted/70",
-          )}
-          aria-pressed={micEnabled}
-        >
-          {micEnabled ? <Mic className="size-4" /> : <MicOff className="size-4" />}
-          {micEnabled ? "الصوت مفعّل — يُبثّ للمدير" : "الصوت مكتوم"}
-        </button>
-      )}
 
       {/* حالة الاتصال والعدادات */}
       <div className="grid grid-cols-3 gap-3">

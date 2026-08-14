@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { createPeer, pollSignals, postSignal, type IncomingSignal } from "@/lib/webrtc-client"
 
 // خطاف المُرسِل (المفتش): يبثّ فيديو الكاميرا الحي مباشرةً إلى المدير عبر WebRTC.
@@ -54,6 +54,25 @@ export function useWebrtcBroadcaster(opts: {
 
   const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map())
   const lastIdRef = useRef(0)
+
+  // استبدال مسار الفيديو المُرسَل في كل اتصالات المشاهدين القائمة دون إعادة تفاوض
+  // (replaceTrack) — يُستخدم عند تبديل الكاميرا فلا ينقطع البث الحي للمدير. لا يمسّ
+  // مسار الصوت ولا يعيد بناء الاتصال، فتبقى طبقات simulcast وإعدادات المُرسِل كما هي.
+  const replaceVideoTrack = useCallback(async (track: MediaStreamTrack) => {
+    const peers = peersRef.current
+    await Promise.all(
+      [...peers.values()].map(async (pc) => {
+        const sender = pc.getSenders().find((s) => s.track && s.track.kind === "video")
+        if (sender) {
+          try {
+            await sender.replaceTrack(track)
+          } catch {
+            /* بعض المتصفحات قد ترفض — نتجاهل بأمان */
+          }
+        }
+      }),
+    )
+  }, [])
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const inspectorRef = useRef(inspectorName)
   inspectorRef.current = inspectorName
@@ -185,5 +204,5 @@ export function useWebrtcBroadcaster(opts: {
     }
   }, [active, getStream])
 
-  return { viewerCount, error }
+  return { viewerCount, error, replaceVideoTrack }
 }
