@@ -12,13 +12,6 @@ const POLL_MS = 1000
 
 // حد أقصى لمعدل بت الفيديو (~1.5Mbps) لتفادي إغراق رفع الجوّال وتقليل التأخير.
 const MAX_VIDEO_BITRATE = 1_500_000
-// طبقات simulcast: يرسل الناشر ثلاث دقّات متزامنة (كاملة/نصف/ربع) فيختار المتصفح
-// الطبقة المناسبة تلقائياً حسب جودة شبكة كل مشاهد — تكيّف حقيقي مع الشبكة.
-const SIMULCAST_ENCODINGS: RTCRtpEncodingParameters[] = [
-  { rid: "h", maxBitrate: MAX_VIDEO_BITRATE, scaleResolutionDownBy: 1 },
-  { rid: "m", maxBitrate: 600_000, scaleResolutionDownBy: 2 },
-  { rid: "l", maxBitrate: 200_000, scaleResolutionDownBy: 4 },
-]
 
 // ضبط معدل البت وتفضيل التدهور على مُرسِل الفيديو بعد إنشاء الاتصال:
 // - maxBitrate يحدّ من الإغراق.
@@ -109,17 +102,16 @@ export function useWebrtcBroadcaster(opts: {
       peers.set(viewerSessionId, pc)
       updateCount()
 
-      // أضف مسارات الكاميرا الحية:
-      // - الفيديو عبر addTransceiver مع طبقات simulcast للتكيّف مع الشبكة.
-      // - الصوت عبر addTrack عادي.
+      // أضف مسارات الكاميرا الحية عبر addTrack لكلٍّ من الفيديو والصوت.
+      //
+      // مهم: المُشاهد هو صاحب العرض (offerer) ويرسل عرضاً باتجاه recvonly لمسارين
+      // فقط (فيديو ثم صوت). والكاميرا هي المُجيبة (answerer)، والإجابة يجب أن تنطبق
+      // على مسارات العرض ذاتها. addTrack يُعيد استخدام المُرسِل/الـ transceiver المطابق
+      // القادم من العرض تلقائياً، فيسري الفيديو والصوت معاً. أما addTransceiver فينشئ
+      // مساراً (m-line) جديداً غير موجود في العرض فلا يُتفاوض عليه في الإجابة، وكانت
+      // هذه سبب اختفاء الفيديو (شاشة سوداء، 0kbps) بينما يعمل الصوت.
       const videoTrack = stream.getVideoTracks()[0]
-      if (videoTrack) {
-        pc.addTransceiver(videoTrack, {
-          direction: "sendonly",
-          streams: [stream],
-          sendEncodings: SIMULCAST_ENCODINGS,
-        })
-      }
+      if (videoTrack) pc.addTrack(videoTrack, stream)
       const audioTrack = stream.getAudioTracks()[0]
       if (audioTrack) pc.addTrack(audioTrack, stream)
 
