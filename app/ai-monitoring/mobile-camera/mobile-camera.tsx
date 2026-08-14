@@ -106,8 +106,10 @@ export function MobileCamera() {
   const replaceVideoTrackRef = useRef<((t: MediaStreamTrack) => Promise<void>) | null>(null)
 
   // قناة تسجيل عبر canvas تُحاكي الفيديو الحالي، لتستمر عبر تبديل الكاميرا دون تجميد.
+  // نستخدم setInterval بدل requestAnimationFrame كي يستمر الرسم والتسجيل حتى عندما
+  // تكون الصفحة في الخلفية أو الشاشة مقفلة (rAF يتوقّف حينها).
   const recCanvasRef = useRef<HTMLCanvasElement | null>(null)
-  const recRafRef = useRef<number | null>(null)
+  const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const recordingActiveRef = useRef(false)
 
   const [inspectorName, setInspectorName] = useState("")
@@ -526,19 +528,31 @@ export function MobileCamera() {
         if (recCanvas.height !== h) recCanvas.height = h
       }
       syncSize()
+      // رسمة أولية تضمن أن للـ canvas محتوى فيبدأ captureStream ببثّ إطارات فوراً حتى
+      // قبل وصول أول إطار كاميرا (تفادي تسجيل فارغ في حال تأخّر الكاميرا).
+      if (rctx) {
+        rctx.fillStyle = "#000000"
+        rctx.fillRect(0, 0, recCanvas.width, recCanvas.height)
+      }
       recordingActiveRef.current = true
-      const drawLoop = () => {
+      const recStream = recCanvas.captureStream(24)
+      const vTrackForRec = recStream.getVideoTracks()[0] as
+        | (MediaStreamTrack & { requestFrame?: () => void })
+        | undefined
+      // حلقة رسم عبر setInterval (تستمر في الخلفية): ننسخ إطار الفيديو الحالي إلى الـ
+      // canvas ثم ندفع إطاراً يدوياً عند توفّر requestFrame لضمان تدفّق البيانات.
+      const drawFrame = () => {
         if (!recordingActiveRef.current) return
         const v = videoRef.current
         if (v && v.videoWidth) {
           syncSize()
           rctx?.drawImage(v, 0, 0, recCanvas.width, recCanvas.height)
         }
-        recRafRef.current = requestAnimationFrame(drawLoop)
+        vTrackForRec?.requestFrame?.()
       }
-      drawLoop()
+      recTimerRef.current = setInterval(drawFrame, 1000 / 24)
+      drawFrame()
 
-      const recStream = recCanvas.captureStream(24)
       const audioTrack = stream.getAudioTracks()[0]
       if (audioTrack) recStream.addTrack(audioTrack)
 
@@ -552,9 +566,9 @@ export function MobileCamera() {
       recorder.onstop = () => {
         // أوقف حلقة الرسم قبل بناء الملف.
         recordingActiveRef.current = false
-        if (recRafRef.current) {
-          cancelAnimationFrame(recRafRef.current)
-          recRafRef.current = null
+        if (recTimerRef.current) {
+          clearInterval(recTimerRef.current)
+          recTimerRef.current = null
         }
         const durationSeconds = Math.max(1, Math.round((Date.now() - recordStartRef.current) / 1000))
         // نبني الـ Blob بنوع المحتوى الأساسي فقط (بدون ";codecs=...") لأن @vercel/blob
@@ -607,7 +621,7 @@ export function MobileCamera() {
       if (analyzeIntervalRef.current) clearInterval(analyzeIntervalRef.current)
       if (recordTimerRef.current) clearInterval(recordTimerRef.current)
       recordingActiveRef.current = false
-      if (recRafRef.current) cancelAnimationFrame(recRafRef.current)
+      if (recTimerRef.current) clearInterval(recTimerRef.current)
       try {
         recorderRef.current?.stop()
       } catch {
