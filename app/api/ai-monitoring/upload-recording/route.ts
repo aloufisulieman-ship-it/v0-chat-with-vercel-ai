@@ -13,7 +13,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       onBeforeGenerateToken: async () => {
         await requireUser()
         return {
-          allowedContentTypes: ["video/webm", "video/mp4", "video/x-matroska", "video/ogg", "image/jpeg"],
+          // نُدرج صيغاً بلاحقة الترميز أيضاً احتياطاً لأن بعض المتصفحات ترسل النوع كاملاً
+          // (مثل "video/webm;codecs=vp9,opus") ومطابقة Vercel Blob تامة.
+          allowedContentTypes: [
+            "video/webm",
+            "video/webm;codecs=vp9,opus",
+            "video/webm;codecs=vp8,opus",
+            "video/mp4",
+            "video/x-matroska",
+            "video/ogg",
+            "image/jpeg",
+          ],
           maximumSizeInBytes: 500 * 1024 * 1024, // 500MB
           addRandomSuffix: false,
         }

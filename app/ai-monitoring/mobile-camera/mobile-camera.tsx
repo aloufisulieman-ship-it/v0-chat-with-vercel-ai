@@ -453,10 +453,13 @@ export function MobileCamera() {
       setRecordError(null)
       setRecordMsg(null)
       try {
+        // نمرّر نوع المحتوى الأساسي فقط (بدون لاحقة الترميز ";codecs=...") لأن Vercel Blob
+        // يطابق allowedContentTypes مطابقة تامة فيرفض مثل "video/webm;codecs=vp9,opus".
+        const baseContentType = (blob.type || `video/${ext}`).split(";")[0].trim()
         const uploaded = await upload(path, blob, {
           access: "public",
           handleUploadUrl: "/api/ai-monitoring/upload-recording",
-          contentType: blob.type || `video/${ext}`,
+          contentType: baseContentType,
         })
 
         // رفع المعاينة (اختياري — نتجاهل فشلها حتى لا يتعطّل حفظ الفيديو).
@@ -554,7 +557,11 @@ export function MobileCamera() {
           recRafRef.current = null
         }
         const durationSeconds = Math.max(1, Math.round((Date.now() - recordStartRef.current) / 1000))
-        const blob = new Blob(chunksRef.current, { type: mime.mimeType || "video/webm" })
+        // نبني الـ Blob بنوع المحتوى الأساسي فقط (بدون ";codecs=...") لأن @vercel/blob
+        // يشتقّ نوع الرفع من blob.type نفسه، و Vercel Blob يطابق allowedContentTypes تماماً
+        // فيرفض السلسلة التي تحمل لاحقة الترميز.
+        const baseMime = (mime.mimeType || "video/webm").split(";")[0].trim()
+        const blob = new Blob(chunksRef.current, { type: baseMime })
         chunksRef.current = []
         recorderRef.current = null
         // التقط المعاينة من الفيديو الحي قبل تحرير الكاميرا.
