@@ -454,17 +454,28 @@ export function LiveView({
               </div>
             ))}
 
-          {/* زر تفعيل/كتم صوت البث الحي — يظهر أثناء البث الحي المباشر فقط */}
-          {webrtcLive && (
-            <button
-              onClick={toggleAudio}
-              className="absolute left-3 top-14 z-10 inline-flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-xs font-medium text-white backdrop-blur transition-colors hover:bg-black/75"
-              aria-pressed={audioOn}
-            >
-              {audioOn ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
-              {audioOn ? "الصوت مفعّل" : "تفعيل الصوت"}
-            </button>
-          )}
+          {/* زر تفعيل/كتم صوت البث الحي — يظهر أثناء البث الحي المباشر فقط.
+              عند توفّر مسار صوت في البث يصبح الزر فعّالاً؛ وإن لم يصل صوت من المصدر
+              يظهر مؤشر معطّل واضح بدل زر لا يفعل شيئاً. */}
+          {webrtcLive &&
+            (hasAudio ? (
+              <button
+                onClick={toggleAudio}
+                className="absolute left-3 top-14 z-10 inline-flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-xs font-medium text-white backdrop-blur transition-colors hover:bg-black/75"
+                aria-pressed={audioOn}
+              >
+                {audioOn ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
+                {audioOn ? "الصوت مفعّل" : "تفعيل الصوت"}
+              </button>
+            ) : (
+              <div
+                className="absolute left-3 top-14 z-10 inline-flex items-center gap-1.5 rounded-full bg-black/40 px-3 py-1.5 text-xs font-medium text-white/60 backdrop-blur"
+                aria-label="لا يوجد صوت وارد من مصدر البث"
+              >
+                <VolumeX className="size-4" />
+                لا يوجد صوت من المصدر
+              </div>
+            ))}
 
           {/* مؤشر التسجيل الجاري (REC) */}
           {recording && (
