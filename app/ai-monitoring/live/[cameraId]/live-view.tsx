@@ -100,7 +100,7 @@ export function LiveView({
 
   // البث الحي المباشر (WebRTC): فيديو لحظي ندّاً لِند. يسقط تلقائياً إلى اللقطات
   // إن لم تكن الكاميرا تبث بثاً حياً.
-  const { videoRef, status: webrtcStatus, error: webrtcError, stats } = useWebrtcViewer({
+  const { videoRef, status: webrtcStatus, error: webrtcError, stats, hasAudio } = useWebrtcViewer({
     cameraId,
     enabled: true,
   })
@@ -110,12 +110,22 @@ export function LiveView({
   const [audioOn, setAudioOn] = useState(false)
   const toggleAudio = () => {
     const v = videoRef.current
-    if (!v) return
+    if (!v || !hasAudio) return
     const next = !audioOn
     v.muted = !next
     if (next) void v.play().catch(() => {})
     setAudioOn(next)
   }
+
+  // عند فقدان مسار الصوت (انقطاع/إعادة تفاوض) أعد الحالة إلى مكتوم حتى لا يبقى الزر
+  // يزعم أن الصوت مفعّل بلا مصدر فعلي.
+  useEffect(() => {
+    if (!hasAudio && audioOn) {
+      const v = videoRef.current
+      if (v) v.muted = true
+      setAudioOn(false)
+    }
+  }, [hasAudio, audioOn, videoRef])
 
   // التقاط لقطة من البث الحي (أو آخر إطار) ورفعها كدليل دائم ثم فتح نموذج مخالفة.
   const router = useRouter()
@@ -401,7 +411,7 @@ export function LiveView({
         </div>
       </div>
 
-      {/* شريط خطأ البث المباشر: يعرض رسالة 401/403 الكامل�� بدل رمز غامض */}
+      {/* شريط خط�� البث المباشر: يعرض رسالة 401/403 الكامل�� بدل رمز غامض */}
       {webrtcError && (
         <div
           role="alert"

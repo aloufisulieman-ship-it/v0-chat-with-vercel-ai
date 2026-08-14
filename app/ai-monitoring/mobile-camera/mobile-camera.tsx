@@ -192,27 +192,30 @@ export function MobileCamera() {
     // قيود 720p @ 24fps: توازن بين الوضوح والتأخير المنخفض على شبكات الجوّال،
     // ويتيح للناشر ضبط معدل البت التكيّفي لاحقاً. القيم "ideal" تسمح للمتصفح
     // بالتراجع لأقل دقة إن لزم بدل الفشل.
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: "environment" },
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-        frameRate: { ideal: 24, max: 30 },
-      },
-      audio: false,
-    })
-    // إضافة مسار الميكروفون (اختياري) لبثّ الصوت مع الفيديو للمدير. الفشل غير قاتل:
-    // إن رُفض الإذن أو لم يتوفر ميكروفون، يستمر البث بالفيديو فقط.
-    try {
-      const mic = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
-      const audioTrack = mic.getAudioTracks()[0]
-      if (audioTrack) {
-        audioTrack.enabled = micEnabledRef.current
-        stream.addTrack(audioTrack)
-      }
-    } catch {
-      /* الميكروف��ن غير متاح — بثّ فيديو فقط */
+    const videoConstraints: MediaTrackConstraints = {
+      facingMode: { ideal: "environment" },
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+      frameRate: { ideal: 24, max: 30 },
     }
+    // نطلب الفيديو والصوت في نداء getUserMedia واحد. هذا مهم على الجوّال: نداء
+    // getUserMedia ثانٍ للصوت أثناء بثّ الفيديو الأول يفشل كثيراً بصمت (خصوصاً iOS
+    // Safari وبعض إصدارات Android Chrome)، فيضيع الصوت دون أثر. الطلب الموحّد يلتقط
+    // الميكروفون بموثوقية. عند رفض إذن الميكروفون نتراجع إلى الفيديو فقط دون فشل البث.
+    let stream: MediaStream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: true })
+    } catch {
+      stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: false })
+    }
+    const audioTrack = stream.getAudioTracks()[0]
+    if (audioTrack) audioTrack.enabled = micEnabledRef.current
+    console.log(
+      "[v0] broadcaster ensureStream: video tracks =",
+      stream.getVideoTracks().length,
+      "audio tracks =",
+      stream.getAudioTracks().length,
+    )
     streamRef.current = stream
     // سجّل الكاميرا النشطة (المعرّف/الاتجاه) وحدّث قائمة الأجهزة لتفعيل زر التبديل.
     const vTrack = stream.getVideoTracks()[0]
