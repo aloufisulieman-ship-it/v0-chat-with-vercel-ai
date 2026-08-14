@@ -42,6 +42,8 @@ export function useWebrtcViewer(opts: { cameraId: string; enabled: boolean }) {
   const [error, setError] = useState<string | null>(null)
   // إحصاءات جودة الاتصال الحية (تُحدَّث كل ثانيتين أثناء البث).
   const [stats, setStats] = useState<ViewerStats | null>(null)
+  // هل يحتوي البث المستقبَل على مسار صوت؟ (لإظهار/تعطيل زر الصوت بشكل صحيح).
+  const [hasAudio, setHasAudio] = useState(false)
 
   const viewerSessionIdRef = useRef<string>("")
   if (!viewerSessionIdRef.current) viewerSessionIdRef.current = makeSessionId()
@@ -84,8 +86,22 @@ export function useWebrtcViewer(opts: { cameraId: string; enabled: boolean }) {
       pc.addTransceiver("audio", { direction: "recvonly" })
 
       pc.ontrack = (e) => {
-        if (videoRef.current && e.streams[0]) {
-          videoRef.current.srcObject = e.streams[0]
+        const remoteStream = e.streams[0] ?? null
+        // فحص تشخيصي يطلبه المدير: اطبع نوع المسار الوارد وعدد مسارات الفيديو/الصوت
+        // في البث المستقبَل عند وصول كل مسار جديد.
+        const videoCount = remoteStream ? remoteStream.getVideoTracks().length : 0
+        const audioCount = remoteStream ? remoteStream.getAudioTracks().length : 0
+        console.log(
+          "[v0] viewer ontrack: kind =",
+          e.track.kind,
+          "→ stream tracks: video =",
+          videoCount,
+          "audio =",
+          audioCount,
+        )
+        setHasAudio(audioCount > 0)
+        if (videoRef.current && remoteStream) {
+          videoRef.current.srcObject = remoteStream
           void videoRef.current.play().catch(() => {})
         }
       }
@@ -203,10 +219,11 @@ export function useWebrtcViewer(opts: { cameraId: string; enabled: boolean }) {
       if (retryTimer) clearInterval(retryTimer)
       if (statsTimer) clearInterval(statsTimer)
       setStats(null)
+      setHasAudio(false)
       teardownPeer()
       if (videoRef.current) videoRef.current.srcObject = null
     }
   }, [cameraId, enabled])
 
-  return { videoRef, status, error, stats }
+  return { videoRef, status, error, stats, hasAudio }
 }

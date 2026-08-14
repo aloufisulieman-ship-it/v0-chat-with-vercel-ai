@@ -100,7 +100,7 @@ export function LiveView({
 
   // البث الحي المباشر (WebRTC): فيديو لحظي ندّاً لِند. يسقط تلقائياً إلى اللقطات
   // إن لم تكن الكاميرا تبث بثاً حياً.
-  const { videoRef, status: webrtcStatus, error: webrtcError, stats } = useWebrtcViewer({
+  const { videoRef, status: webrtcStatus, error: webrtcError, stats, hasAudio } = useWebrtcViewer({
     cameraId,
     enabled: true,
   })
@@ -110,12 +110,22 @@ export function LiveView({
   const [audioOn, setAudioOn] = useState(false)
   const toggleAudio = () => {
     const v = videoRef.current
-    if (!v) return
+    if (!v || !hasAudio) return
     const next = !audioOn
     v.muted = !next
     if (next) void v.play().catch(() => {})
     setAudioOn(next)
   }
+
+  // عند فقدان مسار الصوت (انقطاع/إعادة تفاوض) أعد الحالة إلى مكتوم حتى لا يبقى الزر
+  // يزعم أن الصوت مفعّل بلا مصدر فعلي.
+  useEffect(() => {
+    if (!hasAudio && audioOn) {
+      const v = videoRef.current
+      if (v) v.muted = true
+      setAudioOn(false)
+    }
+  }, [hasAudio, audioOn, videoRef])
 
   // التقاط لقطة من البث الحي (أو آخر إطار) ورفعها كدليل دائم ثم فتح نموذج مخالفة.
   const router = useRouter()
@@ -401,7 +411,7 @@ export function LiveView({
         </div>
       </div>
 
-      {/* شريط خطأ البث المباشر: يعرض رسالة 401/403 الكامل�� بدل رمز غامض */}
+      {/* شريط خط�� البث المباشر: يعرض رسالة 401/403 الكامل�� بدل رمز غامض */}
       {webrtcError && (
         <div
           role="alert"
@@ -444,17 +454,28 @@ export function LiveView({
               </div>
             ))}
 
-          {/* زر تفعيل/كتم صوت البث الحي — يظهر أثناء البث الحي المباشر فقط */}
-          {webrtcLive && (
-            <button
-              onClick={toggleAudio}
-              className="absolute left-3 top-14 z-10 inline-flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-xs font-medium text-white backdrop-blur transition-colors hover:bg-black/75"
-              aria-pressed={audioOn}
-            >
-              {audioOn ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
-              {audioOn ? "الصوت مفعّل" : "تفعيل الصوت"}
-            </button>
-          )}
+          {/* زر تفعيل/كتم صوت البث الحي — يظهر أثناء البث الحي المباشر فقط.
+              عند توفّر مسار صوت في البث يصبح الزر فعّالاً؛ وإن لم يصل صوت من المصدر
+              يظهر مؤشر معطّل واضح بدل زر لا يفعل شيئاً. */}
+          {webrtcLive &&
+            (hasAudio ? (
+              <button
+                onClick={toggleAudio}
+                className="absolute left-3 top-14 z-10 inline-flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-xs font-medium text-white backdrop-blur transition-colors hover:bg-black/75"
+                aria-pressed={audioOn}
+              >
+                {audioOn ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
+                {audioOn ? "الصوت مفعّل" : "تفعيل الصوت"}
+              </button>
+            ) : (
+              <div
+                className="absolute left-3 top-14 z-10 inline-flex items-center gap-1.5 rounded-full bg-black/40 px-3 py-1.5 text-xs font-medium text-white/60 backdrop-blur"
+                aria-label="لا يوجد صوت وارد من مصدر البث"
+              >
+                <VolumeX className="size-4" />
+                لا يوجد صوت من المصدر
+              </div>
+            ))}
 
           {/* مؤشر التسجيل الجاري (REC) */}
           {recording && (
