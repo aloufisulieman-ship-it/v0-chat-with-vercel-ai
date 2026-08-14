@@ -40,25 +40,31 @@ export function GridView({ initial }: { initial: CameraStreamDto[] }) {
   )
   const cameras = data?.cameras ?? initial
 
-  const [now, setNow] = useState(() => Date.now())
+  // نبدأ بـ 0 (قيمة ثابتة على الخادم والعميل) لتفادي عدم تطابق الترطيب الناتج عن
+  // اختلاف Date.now() بين وقت SSR ووقت الترطيب. نضبط الوقت الحقيقي فور التركيب.
+  const [now, setNow] = useState(0)
   useEffect(() => {
+    setNow(Date.now())
     const t = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(t)
   }, [])
 
+  // حالة "حي" مع حارس now===0: قبل ضبط الوقت الحقيقي (SSR وأول رسم عميل) نعتبر
+  // الجميع غير متصل حتى يتطابق الترطيب ولا يومض الجدار.
+  const isLiveAt = (lastSeenAt: string) => now !== 0 && now - new Date(lastSeenAt).getTime() < LIVE_THRESHOLD_MS
+
   // الكاميرات الحية أولاً ثم غير المتصلة، وكل مجموعة مرتّبة بالأحدث.
   const sorted = useMemo(() => {
     return [...cameras].sort((a, b) => {
-      const la = now - new Date(a.lastSeenAt).getTime() < LIVE_THRESHOLD_MS ? 1 : 0
-      const lb = now - new Date(b.lastSeenAt).getTime() < LIVE_THRESHOLD_MS ? 1 : 0
+      const la = isLiveAt(a.lastSeenAt) ? 1 : 0
+      const lb = isLiveAt(b.lastSeenAt) ? 1 : 0
       if (la !== lb) return lb - la
       return new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime()
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cameras, now])
 
-  const liveCount = cameras.filter(
-    (c) => now - new Date(c.lastSeenAt).getTime() < LIVE_THRESHOLD_MS,
-  ).length
+  const liveCount = cameras.filter((c) => isLiveAt(c.lastSeenAt)).length
 
   if (cameras.length === 0) {
     return (
@@ -104,7 +110,7 @@ export function GridView({ initial }: { initial: CameraStreamDto[] }) {
 
       <div className={cn("grid gap-3", gridColsClass(liveCount || cameras.length))}>
         {sorted.map((cam, index) => {
-          const isLive = now - new Date(cam.lastSeenAt).getTime() < LIVE_THRESHOLD_MS
+          const isLive = isLiveAt(cam.lastSeenAt)
           // نفتح WebRTC للبطاقات الحية فقط وحتى الحدّ الأقصى (المرتّبة أولاً حية).
           const enableWebrtc = isLive && index < MAX_LIVE_PEERS
           return <GridTile key={cam.id} cam={cam} isLive={isLive} enableWebrtc={enableWebrtc} />
