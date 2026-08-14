@@ -25,12 +25,15 @@ import { upload } from "@vercel/blob/client"
 import { createRecording } from "@/app/actions/recordings"
 import { useWebrtcBroadcaster } from "./use-webrtc-broadcaster"
 
-// رفع الإطار إلى Blob بوتيرة سريعة (بث شبه حي، ~2.5 إطار/ثانية)،
-// والتحليل بالذكاء الاصطناعي أبطأ بكثير (كل 8 ثوانٍ) لإبقاء تكلفة AI ثابتة.
-const UPLOAD_INTERVAL_MS = 400
+// البث الحي الفعلي يذهب الآن عبر WebRTC (ندّ لِند) مباشرةً، فلم تعد لقطات Blob
+// تحمل الفيديو الحي. دورها اقتصر على: (1) صورة مصغّرة للجدار/اللوحة عندما لا يكون
+// هناك مشاهد WebRTC، و(2) إشارة "آخر ظهور". لذا نُبطئ الحلقة إلى كل ثانيتين بدل
+// 400ms — يحرّر رفع (uplink) الهاتف والخيط الرئيسي بما يقارب 5 أضعاف، فيقلّ تأخير
+// WebRTC. التحليل بالذكاء الاصطناعي يبقى منفصلاً كل 8 ثوانٍ عبر HTTP (لا يمسّ WebRTC).
+const UPLOAD_INTERVAL_MS = 2000
 const ANALYZE_INTERVAL_MS = 8000
-// تُعتبر الكاميرا "متصلة" إذا نجح آخر رفع خلال آخر 3 ثوانٍ.
-const CONNECTED_THRESHOLD_MS = 3000
+// تُعتبر الكاميرا "متصلة" إذا نجح آخر رفع خلال آخر 6 ثوانٍ (يناسب وتيرة الثانيتين).
+const CONNECTED_THRESHOLD_MS = 6000
 // دقة ومستوى ضغط أقل لتسريع الرفع وتقليل استهلاك البيانات (~640×480).
 const MAX_WIDTH = 640
 const JPEG_QUALITY = 0.45
@@ -147,8 +150,16 @@ export function MobileCamera() {
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error("متصفحك لا يدعم الوصول إلى الكاميرا.")
     }
+    // قيود 720p @ 24fps: توازن بين الوضوح والتأخير المنخفض على شبكات الجوّال،
+    // ويتيح للناشر ضبط معدل البت التكيّفي لاحقاً. القيم "ideal" تسمح للمتصفح
+    // بالتراجع لأقل دقة إن لزم بدل الفشل.
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: "environment" } },
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        frameRate: { ideal: 24, max: 30 },
+      },
       audio: false,
     })
     // إضافة مسار الميكروفون (اختياري) لبثّ الصوت مع الفيديو للمدير. الفشل غير قاتل:

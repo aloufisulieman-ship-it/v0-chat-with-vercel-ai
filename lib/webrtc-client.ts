@@ -1,15 +1,53 @@
 // إعدادات ودوال مشتركة لعميل WebRTC (المُرسِل والمُشاهد).
 
 // خوادم STUN عامة لاكتشاف العنوان العام واجتياز NAT في معظم الشبكات.
-// ملاحظة: الشبكات ذات الـ symmetric NAT قد تحتاج خادم TURN؛ إن لزم لاحقاً
-// يُضاف هنا { urls, username, credential } دون تغيير بقية الشيفرة.
-export const ICE_SERVERS: RTCIceServer[] = [
+const STUN_SERVERS: RTCIceServer[] = [
   { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
   { urls: ["stun:stun2.l.google.com:19302", "stun:stun3.l.google.com:19302"] },
 ]
 
+// خادم TURN اختياري يُهيّأ عبر متغيرات بيئة عامة (client-side). لازمٌ للشبكات ذات
+// الـ symmetric NAT / الجوّال حيث يفشل STUN وحده في تأسيس مسار مباشر. يدعم عدة
+// عناوين مفصولة بفواصل (udp/tcp/tls) لأفضل احتمال نجاح.
+//
+//   NEXT_PUBLIC_TURN_URL=turn:turn.example.com:3478,turns:turn.example.com:5349
+//   NEXT_PUBLIC_TURN_USERNAME=...
+//   NEXT_PUBLIC_TURN_CREDENTIAL=...
+//
+// عند غياب هذه المتغيرات نتراجع تلقائياً إلى STUN فقط (سلوك سابق دون كسر).
+function turnServer(): RTCIceServer | null {
+  const url = process.env.NEXT_PUBLIC_TURN_URL
+  const username = process.env.NEXT_PUBLIC_TURN_USERNAME
+  const credential = process.env.NEXT_PUBLIC_TURN_CREDENTIAL
+  if (!url) return null
+  const urls = url
+    .split(",")
+    .map((u) => u.trim())
+    .filter(Boolean)
+  if (urls.length === 0) return null
+  return { urls, username, credential }
+}
+
+// هل تمّت تهيئة TURN؟ (يُعرَض في مؤشر التشخيص على الجدار وصفحة الكاميرا).
+export const HAS_TURN = !!process.env.NEXT_PUBLIC_TURN_URL
+
+// قائمة خوادم ICE النهائية: STUN دائماً + TURN إن هُيّئ.
+export const ICE_SERVERS: RTCIceServer[] = (() => {
+  const turn = turnServer()
+  return turn ? [...STUN_SERVERS, turn] : STUN_SERVERS
+})()
+
+// لتشخيص فشل المسار المباشر: ضبط NEXT_PUBLIC_FORCE_TURN=1 يجبر استخدام relay فقط،
+// فإن نجح البث حينها عرفنا أن المشكلة في عبور NAT وأن TURN هو الحل.
+const FORCE_RELAY = process.env.NEXT_PUBLIC_FORCE_TURN === "1"
+
 export function createPeer(): RTCPeerConnection {
-  return new RTCPeerConnection({ iceServers: ICE_SERVERS, bundlePolicy: "max-bundle" })
+  const config: RTCConfiguration = {
+    iceServers: ICE_SERVERS,
+    bundlePolicy: "max-bundle",
+  }
+  if (FORCE_RELAY && HAS_TURN) config.iceTransportPolicy = "relay"
+  return new RTCPeerConnection(config)
 }
 
 export type SignalKind = "offer" | "answer" | "ice"

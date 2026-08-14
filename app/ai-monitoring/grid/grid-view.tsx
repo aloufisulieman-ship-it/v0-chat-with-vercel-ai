@@ -2,25 +2,22 @@
 
 import { useEffect, useMemo, useState } from "react"
 import useSWR from "swr"
-import Link from "next/link"
-import { Cctv, MapPin, Radio, UserRound, LayoutGrid } from "lucide-react"
+import { Cctv, LayoutGrid } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { HAS_TURN } from "@/lib/webrtc-client"
 import type { CameraStreamDto } from "../connected-cameras"
+import { GridTile } from "./grid-tile"
 
 // اعتبار الكاميرا "مباشرة" إذا كان آخر إطار خلال آخر 8 ثوانٍ.
 const LIVE_THRESHOLD_MS = 8000
 // جدار العرض يُحدَّث بوتيرة أسرع من اللوحة (كل ثانيتين) لأنه شاشة مراقبة حية.
 const POLL_MS = 2000
+// حدّ أقصى لعدد اتصالات WebRTC الحية المتزامنة على الجدار حمايةً لجهاز المدير.
+// البطاقات الحية الزائدة عن الحد تبقى على اللقطات.
+const MAX_LIVE_PEERS = 12
 
 const fetcher = (url: string) => fetch(url, { cache: "no-store" }).then((r) => r.json())
-
-// كسر الكاش لإطارات Blob (روابط http) بحيث تُحدَّث الصورة مع كل جلب.
-function frameSrc(url: string, version: string) {
-  if (!url) return "/placeholder.svg"
-  if (url.startsWith("http")) return `${url}?v=${encodeURIComponent(version)}`
-  return url
-}
 
 // أعمدة الشبكة حسب عدد الكاميرات الحية — نملأ الشاشة بكثافة مناسبة.
 function gridColsClass(count: number) {
@@ -81,6 +78,20 @@ export function GridView({ initial }: { initial: CameraStreamDto[] }) {
           جدار العرض المباشر
         </span>
         <span className="flex items-center gap-2 text-xs text-muted-foreground">
+          {/* شارة تشخيص عبور الشبكة: TURN مفعّل (اجتياز موثوق) أو STUN فقط. */}
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium",
+              HAS_TURN ? "bg-emerald-500/10 text-emerald-600" : "bg-amber-500/10 text-amber-600",
+            )}
+            title={
+              HAS_TURN
+                ? "خادم TURN مفعّل — اجتياز موثوق للشبكات الصعبة"
+                : "STUN فقط — قد يفشل الاتصال على شبكات NAT المتماثلة"
+            }
+          >
+            {HAS_TURN ? "TURN مفعّل" : "STUN فقط"}
+          </span>
           {liveCount > 0 && (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 px-2 py-0.5 font-semibold text-destructive">
               <span className="size-1.5 animate-pulse rounded-full bg-destructive" aria-hidden="true" />
@@ -92,67 +103,11 @@ export function GridView({ initial }: { initial: CameraStreamDto[] }) {
       </div>
 
       <div className={cn("grid gap-3", gridColsClass(liveCount || cameras.length))}>
-        {sorted.map((cam) => {
+        {sorted.map((cam, index) => {
           const isLive = now - new Date(cam.lastSeenAt).getTime() < LIVE_THRESHOLD_MS
-          const title = cam.inspectorName || cam.cameraId
-          return (
-            <Link
-              key={cam.id}
-              href={`/ai-monitoring/live/${encodeURIComponent(cam.cameraId)}`}
-              className={cn(
-                "group relative aspect-video overflow-hidden rounded-xl border bg-black transition-all focus:outline-none focus:ring-2 focus:ring-ring/40",
-                isLive ? "border-destructive/50" : "border-border opacity-70 hover:opacity-100",
-              )}
-              aria-label={`فتح البث المباشر — ${title}`}
-            >
-              {cam.lastFrameUrl ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  src={frameSrc(cam.lastFrameUrl, cam.lastSeenAt) || "/placeholder.svg"}
-                  alt={`آخر إطار من بث ${title}`}
-                  className="size-full object-cover"
-                />
-              ) : (
-                <div className="flex size-full items-center justify-center text-white/40">
-                  <Cctv className="size-8" />
-                </div>
-              )}
-
-              {/* شارة البث الحي */}
-              <div
-                className={cn(
-                  "absolute right-2 top-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold",
-                  isLive ? "bg-destructive text-white" : "bg-black/65 text-white/90",
-                )}
-              >
-                <span
-                  className={cn("size-2 rounded-full", isLive ? "animate-pulse bg-white" : "bg-white/50")}
-                  aria-hidden="true"
-                />
-                {isLive ? "بث حي" : "غير متصل"}
-              </div>
-
-              {/* شريط سفلي: الاسم والموقع */}
-              <div className="absolute inset-x-0 bottom-0 flex flex-col gap-0.5 bg-gradient-to-t from-black/85 to-transparent p-2.5">
-                <span className="flex items-center gap-1.5 truncate text-sm font-semibold text-white">
-                  <UserRound className="size-3.5 shrink-0" />
-                  <span className="truncate">{title}</span>
-                </span>
-                <span className="flex items-center gap-1.5 truncate text-xs text-white/70">
-                  <MapPin className="size-3 shrink-0" />
-                  <span className="truncate">{cam.cameraLocation || "موقع غير محدد"}</span>
-                </span>
-              </div>
-
-              {/* أيقونة الدخول عند المرور */}
-              <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/25">
-                <span className="flex items-center gap-1.5 rounded-full bg-primary/90 px-3 py-1.5 text-xs font-semibold text-primary-foreground opacity-0 transition-opacity group-hover:opacity-100">
-                  <Radio className="size-3.5" />
-                  مشاهدة مباشرة
-                </span>
-              </span>
-            </Link>
-          )
+          // نفتح WebRTC للبطاقات الحية فقط وحتى الحدّ الأقصى (المرتّبة أولاً حية).
+          const enableWebrtc = isLive && index < MAX_LIVE_PEERS
+          return <GridTile key={cam.id} cam={cam} isLive={isLive} enableWebrtc={enableWebrtc} />
         })}
       </div>
     </div>
