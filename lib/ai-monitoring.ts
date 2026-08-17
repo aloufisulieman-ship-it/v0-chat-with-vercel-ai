@@ -37,10 +37,12 @@ export const severityByType: Record<DetectionType, "low" | "medium" | "high" | "
 }
 
 // حالات الاكتشاف.
+// converted: تم قبول الاكتشاف وتحويله إلى مخالفة رسمية (VIO-YYYY-###).
 export const detectionStatusOptions = [
   { value: "new", label: "جديد" },
   { value: "acknowledged", label: "تم الاطّلاع" },
   { value: "resolved", label: "تمت المعالجة" },
+  { value: "converted", label: "تم التحويل لمخالفة" },
   { value: "false_positive", label: "إنذار خاطئ" },
 ] as const
 
@@ -54,6 +56,7 @@ export const detectionStatusStyles: Record<string, string> = {
   new: "bg-destructive/10 text-destructive border-destructive/20",
   acknowledged: "bg-accent/15 text-amber-700 dark:text-amber-400 border-accent/30",
   resolved: "bg-primary/10 text-primary border-primary/20",
+  converted: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
   false_positive: "bg-muted text-muted-foreground border-border",
 }
 

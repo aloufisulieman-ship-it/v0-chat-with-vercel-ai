@@ -13,7 +13,6 @@ import {
   Radio,
   Camera,
   Check,
-  CircleCheck,
   CircleX,
   Trash2,
   type LucideIcon,
@@ -39,6 +38,7 @@ import {
 } from "@/lib/ai-monitoring"
 import { updateDetectionStatus, deleteDetection } from "@/app/actions/ai-monitoring"
 import { ConnectedCameras } from "./connected-cameras"
+import { AcceptDetectionDialog, LinkedViolationLink } from "./accept-detection-dialog"
 
 export type DetectionDto = {
   id: number
@@ -55,6 +55,7 @@ export type DetectionDto = {
   acknowledgedBy: string
   resolvedBy: string
   notes: string
+  linkedViolationNo: string
 }
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
@@ -78,22 +79,24 @@ const typeTone: Record<DetectionType, string> = {
 }
 
 function isToday(iso: string) {
-  const d = new Date(iso)
-  const now = new Date()
-  return (
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate()
-  )
+  // نقارن التاريخ بتوقيت الرياض (وليس توقيت الخادم/المتصفح) لضمان ثبات عدّاد
+  // "اليوم" بين الخادم والعميل وصحّته بالنسبة للمستخدم السعودي.
+  const fmt = (date: Date) =>
+    date.toLocaleDateString("en-CA", { timeZone: "Asia/Riyadh" }) // YYYY-MM-DD
+  return fmt(new Date(iso)) === fmt(new Date())
 }
 
 function timeFmt(iso: string) {
   const d = new Date(iso)
+  // نثبّت المنطقة الزمنية على توقيت الرياض ليتطابق تنسيق الخادم (UTC) مع العميل
+  // (التوقيت المحلي) ويُمنع خطأ عدم تطابق الترطيب (hydration mismatch)، مع عرض
+  // التوقيت السعودي الصحيح للمستخدم بغضّ النظر عن منطقة المتصفح.
   return d.toLocaleString("ar", {
     hour: "2-digit",
     minute: "2-digit",
     day: "2-digit",
     month: "2-digit",
+    timeZone: "Asia/Riyadh",
   })
 }
 
@@ -248,7 +251,7 @@ export function MonitoringDashboard({
       <div>
         <div className="mb-3 flex items-center gap-2">
           <Radio className="size-4 text-primary" />
-          <h2 className="text-lg font-semibold text-foreground">مناطق الرصد الحية</h2>
+          <h2 className="text-lg font-semibold text-foreground">مناطق ال��صد الحية</h2>
         </div>
         {zones.length === 0 ? (
           <Card className="p-8 text-center text-sm text-muted-foreground">
@@ -467,35 +470,33 @@ export function MonitoringDashboard({
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
-                          {d.status === "new" && (
-                            <button
-                              onClick={() => changeStatus(d.id, "acknowledged")}
-                              disabled={pending === d.id}
-                              className="rounded-md p-1.5 text-amber-600 hover:bg-muted disabled:opacity-50"
-                              title="تم الاطّلاع"
-                            >
-                              <Check className="size-4" />
-                            </button>
-                          )}
-                          {d.status !== "resolved" && (
-                            <button
-                              onClick={() => changeStatus(d.id, "resolved")}
-                              disabled={pending === d.id}
-                              className="rounded-md p-1.5 text-primary hover:bg-muted disabled:opacity-50"
-                              title="تمت المعالجة"
-                            >
-                              <CircleCheck className="size-4" />
-                            </button>
-                          )}
-                          {d.status !== "false_positive" && (
-                            <button
-                              onClick={() => changeStatus(d.id, "false_positive")}
-                              disabled={pending === d.id}
-                              className="rounded-md p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-50"
-                              title="إنذار خاطئ"
-                            >
-                              <CircleX className="size-4" />
-                            </button>
+                          {d.status === "converted" && d.linkedViolationNo ? (
+                            <LinkedViolationLink documentNo={d.linkedViolationNo} />
+                          ) : null}
+                          {(d.status === "new" || d.status === "acknowledged") && (
+                            <>
+                              {d.status === "new" && (
+                                <button
+                                  onClick={() => changeStatus(d.id, "acknowledged")}
+                                  disabled={pending === d.id}
+                                  className="rounded-md p-1.5 text-amber-600 hover:bg-muted disabled:opacity-50"
+                                  title="تم الاطّلاع"
+                                >
+                                  <Check className="size-4" />
+                                </button>
+                              )}
+                              {/* قبول: يفتح نافذة القبول أو التحويل إلى مخالفة */}
+                              <AcceptDetectionDialog detection={d} />
+                              {/* رفض: إنذار خاطئ — بدون نافذة */}
+                              <button
+                                onClick={() => changeStatus(d.id, "false_positive")}
+                                disabled={pending === d.id}
+                                className="rounded-md p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-50"
+                                title="رفض"
+                              >
+                                <CircleX className="size-4" />
+                              </button>
+                            </>
                           )}
                           {isAdmin && (
                             <button
