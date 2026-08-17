@@ -49,12 +49,14 @@ function fmtBytes(bytes: number) {
 }
 
 function fmtDate(iso: string) {
+  // تثبيت المنطقة الزمنية على توقيت الرياض لمنع عدم تطابق الترطيب وعرض التوقيت السعودي.
   return new Date(iso).toLocaleString("ar", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "Asia/Riyadh",
   })
 }
 

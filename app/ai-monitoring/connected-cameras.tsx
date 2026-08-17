@@ -42,12 +42,15 @@ function relativeTime(iso: string, now: number) {
 }
 
 function fullTime(iso: string) {
+  // تثبيت المنطقة الزمنية على توقيت الرياض ليتطابق تنسيق الخادم مع العميل
+  // (منع خطأ عدم تطابق الترطيب) مع عرض التوقيت السعودي الصحيح.
   return new Date(iso).toLocaleString("ar", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
     day: "2-digit",
     month: "2-digit",
+    timeZone: "Asia/Riyadh",
   })
 }
 

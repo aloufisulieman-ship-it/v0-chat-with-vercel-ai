@@ -79,22 +79,24 @@ const typeTone: Record<DetectionType, string> = {
 }
 
 function isToday(iso: string) {
-  const d = new Date(iso)
-  const now = new Date()
-  return (
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate()
-  )
+  // نقارن التاريخ بتوقيت الرياض (وليس توقيت الخادم/المتصفح) لضمان ثبات عدّاد
+  // "اليوم" بين الخادم والعميل وصحّته بالنسبة للمستخدم السعودي.
+  const fmt = (date: Date) =>
+    date.toLocaleDateString("en-CA", { timeZone: "Asia/Riyadh" }) // YYYY-MM-DD
+  return fmt(new Date(iso)) === fmt(new Date())
 }
 
 function timeFmt(iso: string) {
   const d = new Date(iso)
+  // نثبّت المنطقة الزمنية على توقيت الرياض ليتطابق تنسيق الخادم (UTC) مع العميل
+  // (التوقيت المحلي) ويُمنع خطأ عدم تطابق الترطيب (hydration mismatch)، مع عرض
+  // التوقيت السعودي الصحيح للمستخدم بغضّ النظر عن منطقة المتصفح.
   return d.toLocaleString("ar", {
     hour: "2-digit",
     minute: "2-digit",
     day: "2-digit",
     month: "2-digit",
+    timeZone: "Asia/Riyadh",
   })
 }
 
@@ -249,7 +251,7 @@ export function MonitoringDashboard({
       <div>
         <div className="mb-3 flex items-center gap-2">
           <Radio className="size-4 text-primary" />
-          <h2 className="text-lg font-semibold text-foreground">مناطق الرصد الحية</h2>
+          <h2 className="text-lg font-semibold text-foreground">مناطق ال��صد الحية</h2>
         </div>
         {zones.length === 0 ? (
           <Card className="p-8 text-center text-sm text-muted-foreground">
