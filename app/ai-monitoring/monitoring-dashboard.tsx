@@ -13,7 +13,6 @@ import {
   Radio,
   Camera,
   Check,
-  CircleCheck,
   CircleX,
   Trash2,
   type LucideIcon,
@@ -39,6 +38,7 @@ import {
 } from "@/lib/ai-monitoring"
 import { updateDetectionStatus, deleteDetection } from "@/app/actions/ai-monitoring"
 import { ConnectedCameras } from "./connected-cameras"
+import { AcceptDetectionDialog, LinkedViolationLink } from "./accept-detection-dialog"
 
 export type DetectionDto = {
   id: number
@@ -55,6 +55,7 @@ export type DetectionDto = {
   acknowledgedBy: string
   resolvedBy: string
   notes: string
+  linkedViolationNo: string
 }
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
@@ -467,35 +468,33 @@ export function MonitoringDashboard({
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
-                          {d.status === "new" && (
-                            <button
-                              onClick={() => changeStatus(d.id, "acknowledged")}
-                              disabled={pending === d.id}
-                              className="rounded-md p-1.5 text-amber-600 hover:bg-muted disabled:opacity-50"
-                              title="تم الاطّلاع"
-                            >
-                              <Check className="size-4" />
-                            </button>
-                          )}
-                          {d.status !== "resolved" && (
-                            <button
-                              onClick={() => changeStatus(d.id, "resolved")}
-                              disabled={pending === d.id}
-                              className="rounded-md p-1.5 text-primary hover:bg-muted disabled:opacity-50"
-                              title="تمت المعالجة"
-                            >
-                              <CircleCheck className="size-4" />
-                            </button>
-                          )}
-                          {d.status !== "false_positive" && (
-                            <button
-                              onClick={() => changeStatus(d.id, "false_positive")}
-                              disabled={pending === d.id}
-                              className="rounded-md p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-50"
-                              title="إنذار خاطئ"
-                            >
-                              <CircleX className="size-4" />
-                            </button>
+                          {d.status === "converted" && d.linkedViolationNo ? (
+                            <LinkedViolationLink documentNo={d.linkedViolationNo} />
+                          ) : null}
+                          {(d.status === "new" || d.status === "acknowledged") && (
+                            <>
+                              {d.status === "new" && (
+                                <button
+                                  onClick={() => changeStatus(d.id, "acknowledged")}
+                                  disabled={pending === d.id}
+                                  className="rounded-md p-1.5 text-amber-600 hover:bg-muted disabled:opacity-50"
+                                  title="تم الاطّلاع"
+                                >
+                                  <Check className="size-4" />
+                                </button>
+                              )}
+                              {/* قبول: يفتح نافذة القبول أو التحويل إلى مخالفة */}
+                              <AcceptDetectionDialog detection={d} />
+                              {/* رفض: إنذار خاطئ — بدون نافذة */}
+                              <button
+                                onClick={() => changeStatus(d.id, "false_positive")}
+                                disabled={pending === d.id}
+                                className="rounded-md p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-50"
+                                title="رفض"
+                              >
+                                <CircleX className="size-4" />
+                              </button>
+                            </>
                           )}
                           {isAdmin && (
                             <button

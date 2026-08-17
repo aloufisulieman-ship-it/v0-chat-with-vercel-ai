@@ -346,7 +346,7 @@ export const attachment = pgTable("attachment", {
 // detectionType: أحد ����لأنواع الستة (no_ppe / traffic_congestion / unsafe_stacking /
 //   overspeed / restricted_area / pedestrian_near_forklift).
 // severity: low / medium / high / critical.
-// status: new / acknowledged / resolved / false_positive.
+// status: new / acknowledged / resolved / false_positive / converted.
 export const aiDetection = pgTable("ai_detections", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
@@ -363,6 +363,8 @@ export const aiDetection = pgTable("ai_detections", {
   acknowledgedBy: text("acknowledged_by").default(""),
   resolvedBy: text("resolved_by").default(""),
   notes: text("notes").default(""),
+  // رقم المخالفة المرتبطة (VIO-YYYY-###) عند تحويل الاكتشاف إلى مخالفة رسمية.
+  linkedViolationNo: text("linked_violation_no").default(""),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 

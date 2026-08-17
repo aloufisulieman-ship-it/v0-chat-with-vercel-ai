@@ -27,6 +27,7 @@ export default async function AiMonitoringPage() {
     acknowledgedBy: r.acknowledgedBy ?? "",
     resolvedBy: r.resolvedBy ?? "",
     notes: r.notes ?? "",
+    linkedViolationNo: r.linkedViolationNo ?? "",
   }))
 
   return (
