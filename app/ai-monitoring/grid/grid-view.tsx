@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 import { HAS_TURN } from "@/lib/webrtc-client"
 import type { CameraStreamDto } from "../connected-cameras"
 import { GridTile } from "./grid-tile"
+import { useI18n } from "@/lib/i18n/client"
 
 // اعتبار الكاميرا "مباشرة" إذا كان آخر إطار خلال آخر 8 ثوانٍ.
 const LIVE_THRESHOLD_MS = 8000
@@ -28,6 +29,7 @@ function gridColsClass(count: number) {
 }
 
 export function GridView({ initial }: { initial: CameraStreamDto[] }) {
+  const { t, formatNumber } = useI18n()
   const { data } = useSWR<{ cameras: CameraStreamDto[] }>(
     "/api/ai-monitoring/active-cameras",
     fetcher,
@@ -70,8 +72,8 @@ export function GridView({ initial }: { initial: CameraStreamDto[] }) {
     return (
       <Card className="flex flex-col items-center gap-2 p-12 text-center">
         <Cctv className="size-10 text-muted-foreground/60" />
-        <p className="text-sm text-muted-foreground">لا توجد كاميرات نشطة لعرضها على الجدار.</p>
-        <p className="text-xs text-muted-foreground/70">ابدأ بثاً من صفحة كاميرا الهاتف لعرضه هنا.</p>
+        <p className="text-sm text-muted-foreground">{t("aiMonitoring.cam.gridEmptyTitle")}</p>
+        <p className="text-xs text-muted-foreground/70">{t("aiMonitoring.cam.gridEmptyHint")}</p>
       </Card>
     )
   }
@@ -81,7 +83,7 @@ export function GridView({ initial }: { initial: CameraStreamDto[] }) {
       <div className="flex items-center justify-between">
         <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
           <LayoutGrid className="size-4 text-primary" />
-          جدار العرض المباشر
+          {t("aiMonitoring.cam.gridWallTitle")}
         </span>
         <span className="flex items-center gap-2 text-xs text-muted-foreground">
           {/* شارة تشخيص عبور الشبكة: TURN مفعّل (اجتياز موثوق) أو STUN فقط. */}
@@ -90,21 +92,17 @@ export function GridView({ initial }: { initial: CameraStreamDto[] }) {
               "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium",
               HAS_TURN ? "bg-emerald-500/10 text-emerald-600" : "bg-amber-500/10 text-amber-600",
             )}
-            title={
-              HAS_TURN
-                ? "خادم TURN مفعّل — اجتياز موثوق للشبكات الصعبة"
-                : "STUN فقط — قد يفشل الاتصال على شبكات NAT المتماثلة"
-            }
+            title={HAS_TURN ? t("aiMonitoring.cam.gridTurnTip") : t("aiMonitoring.cam.gridStunTip")}
           >
-            {HAS_TURN ? "TURN مفعّل" : "STUN فقط"}
+            {HAS_TURN ? t("aiMonitoring.cam.gridBadgeTurn") : t("aiMonitoring.cam.gridBadgeStun")}
           </span>
           {liveCount > 0 && (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 px-2 py-0.5 font-semibold text-destructive">
               <span className="size-1.5 animate-pulse rounded-full bg-destructive" aria-hidden="true" />
-              {liveCount} بث حي الآن
+              {t("aiMonitoring.cam.liveNowCount").replace("{n}", formatNumber(liveCount))}
             </span>
           )}
-          {cameras.length} كاميرا
+          {t("aiMonitoring.cam.camerasCount").replace("{n}", formatNumber(cameras.length))}
         </span>
       </div>
 

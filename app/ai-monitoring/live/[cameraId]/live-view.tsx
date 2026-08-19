@@ -28,10 +28,13 @@ import { upload } from "@vercel/blob/client"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { toast } from "@/hooks/use-toast"
-import { detectionTypeLabels, severityLabels, severityStyles } from "@/lib/ai-monitoring"
+import { severityStyles } from "@/lib/ai-monitoring"
 import type { CameraLiveStatus } from "@/app/actions/ai-monitoring"
 import { createRecording } from "@/app/actions/recordings"
 import { useWebrtcViewer } from "./use-webrtc-viewer"
+import { useI18n } from "@/lib/i18n/client"
+import { detectionTypeLabel, severityLabel } from "@/lib/i18n/labels"
+import type { TFunction } from "@/lib/i18n/translate"
 
 // اختيار أفضل صيغة تسجيل مدعومة في المتصفح (WebM أولاً ثم MP4).
 function pickRecordingMime(): { mimeType: string; ext: string } {
@@ -60,14 +63,14 @@ const POLL_INTERVAL_MS = 400
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json() as Promise<CameraLiveStatus>)
 
-function relativeTime(iso: string, now: number) {
+function relativeTime(iso: string, now: number, t: TFunction, fmt: (n: number) => string) {
   const diff = Math.max(0, Math.round((now - new Date(iso).getTime()) / 1000))
-  if (diff < 2) return "الآن"
-  if (diff < 60) return `قبل ${diff} ثانية`
+  if (diff < 2) return t("aiMonitoring.cam.now")
+  if (diff < 60) return t("aiMonitoring.cam.agoSeconds").replace("{n}", fmt(diff))
   const mins = Math.floor(diff / 60)
-  if (mins < 60) return `قبل ${mins} دقيقة`
+  if (mins < 60) return t("aiMonitoring.cam.agoMinutes").replace("{n}", fmt(mins))
   const hours = Math.floor(mins / 60)
-  return `قبل ${hours} ساعة`
+  return t("aiMonitoring.cam.agoHours").replace("{n}", fmt(hours))
 }
 
 export function LiveView({
@@ -77,6 +80,7 @@ export function LiveView({
   cameraId: string
   initial: CameraLiveStatus
 }) {
+  const { t, formatNumber } = useI18n()
   const { data } = useSWR<CameraLiveStatus>(
     `/api/ai-monitoring/live-status?cameraId=${encodeURIComponent(cameraId)}`,
     fetcher,
@@ -91,8 +95,8 @@ export function LiveView({
   // مؤقت محلي كل ثانية لتحديث الوقت النسبي ومؤشر الاتصال بين عمليات الجلب.
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(t)
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
   }, [])
 
   const camera = data?.camera ?? null
@@ -120,11 +124,12 @@ export function LiveView({
   // إظهار خطأ المايكروفون كإشعار عربي واضح عند تغيّره.
   useEffect(() => {
     if (talkError) {
-      toast({ title: "تعذّر تشغيل المايكروفون", description: talkError, variant: "destructive" })
+      toast({ title: t("aiMonitoring.cam.micToastFailed"), description: talkError, variant: "destructive" })
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [talkError])
 
-  // كتم الصوت افتراضاً (شرط التشغيل التلقائي)؛ المدير يفعّله بنقرة (إيماءة المستخدم).
+  // كتم الصوت افتراضاً (شرط التشغيل التلقائي)؛ الم��ير يفعّله بنقرة (إيماءة المستخدم).
   const [audioOn, setAudioOn] = useState(false)
   const toggleAudio = () => {
     const v = videoRef.current
@@ -184,7 +189,7 @@ export function LiveView({
     try {
       const dataUrl = await captureDataUrl()
       if (!dataUrl) {
-        setCaptureError("تعذّر التقاط لقطة الآن. حاول مرة أخرى.")
+        setCaptureError(t("aiMonitoring.cam.captureFailedNow"))
         return
       }
       const res = await fetch("/api/ai-monitoring/live-snapshot", {
@@ -209,7 +214,7 @@ export function LiveView({
       if (detectedBy) params.set("detectedBy", detectedBy)
       router.push(`/violations?${params.toString()}`)
     } catch (e) {
-      setCaptureError(e instanceof Error ? e.message : "تعذّر التقاط اللقطة")
+      setCaptureError(e instanceof Error ? e.message : t("aiMonitoring.cam.captureFailed"))
     } finally {
       setCapturing(false)
     }
@@ -229,10 +234,10 @@ export function LiveView({
   // مؤقّت عدّاد مدة التسجيل (ثوانٍ) أثناء التسجيل فقط.
   useEffect(() => {
     if (!recording) return
-    const t = setInterval(() => {
+    const id = setInterval(() => {
       setRecSeconds(Math.max(0, Math.round((Date.now() - recordStartRef.current) / 1000)))
     }, 500)
-    return () => clearInterval(t)
+    return () => clearInterval(id)
   }, [recording])
 
   // التقاط إطار معاينة (poster) من الفيديو الحي الحالي.
@@ -252,7 +257,7 @@ export function LiveView({
     const video = videoRef.current
     const stream = (video?.srcObject as MediaStream | null) ?? null
     if (typeof MediaRecorder === "undefined" || !stream) {
-      toast({ title: "تعذّر بدء التسجيل", description: "البث الحي غير متاح الآن.", variant: "destructive" })
+      toast({ title: t("aiMonitoring.cam.recordStartFailed"), description: t("aiMonitoring.cam.liveUnavailable"), variant: "destructive" })
       return
     }
     const mime = pickRecordingMime()
@@ -272,7 +277,7 @@ export function LiveView({
       recorder.start(1000)
       setRecording(true)
     } catch {
-      toast({ title: "تعذّر بدء التسجيل", variant: "destructive" })
+      toast({ title: t("aiMonitoring.cam.recordStartFailed"), variant: "destructive" })
     }
   }
 
@@ -292,7 +297,7 @@ export function LiveView({
     chunksRef.current = []
     recorderRef.current = null
     if (blob.size === 0) {
-      toast({ title: "المقطع فارغ", description: "لم يُسجَّل أي محتوى.", variant: "destructive" })
+      toast({ title: t("aiMonitoring.cam.clipEmpty"), description: t("aiMonitoring.cam.clipEmptyDesc"), variant: "destructive" })
       return
     }
     setSavingClip(true)
@@ -333,14 +338,14 @@ export function LiveView({
       })
 
       toast({
-        title: "تم حفظ المقطع في التسجيلات",
-        description: "افتح صفحة التسجيلات لالتقاط لقطة وإنشاء مخالفة من هذا المقطع.",
+        title: t("aiMonitoring.cam.clipSaved"),
+        description: t("aiMonitoring.cam.clipSavedDesc"),
       })
       router.push("/ai-monitoring/recordings")
     } catch (e) {
       toast({
-        title: "تعذّر حفظ المقطع",
-        description: e instanceof Error ? e.message : "حدث خطأ أثناء الرفع.",
+        title: t("aiMonitoring.cam.clipSaveFailed"),
+        description: e instanceof Error ? e.message : t("aiMonitoring.cam.uploadError"),
         variant: "destructive",
       })
     } finally {
@@ -360,9 +365,9 @@ export function LiveView({
     return "weak" as const
   })()
   const qualityMeta = {
-    good: { label: "اتصال ممتاز", cls: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400", Icon: Signal },
-    medium: { label: "اتصال متوسط", cls: "bg-amber-500/15 text-amber-600 dark:text-amber-400", Icon: SignalMedium },
-    weak: { label: "اتصال ضعيف", cls: "bg-destructive/15 text-destructive", Icon: SignalLow },
+    good: { label: t("aiMonitoring.cam.qualExcellent"), cls: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400", Icon: Signal },
+    medium: { label: t("aiMonitoring.cam.qualMediumFull"), cls: "bg-amber-500/15 text-amber-600 dark:text-amber-400", Icon: SignalMedium },
+    weak: { label: t("aiMonitoring.cam.qualWeakFull"), cls: "bg-destructive/15 text-destructive", Icon: SignalLow },
   } as const
 
   // كسر الكاش: يتغيّر مع كل إطار جديد (lastSeenAt) لإجبار تحديث الصورة.
@@ -381,7 +386,7 @@ export function LiveView({
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowRight className="size-4" />
-          العودة للوحة المراقبة
+          {t("aiMonitoring.cam.back")}
         </Link>
         <div className="flex items-center gap-2">
         {/* مؤشر جودة الاتصال — يظهر أثناء البث الحي المباشر فقط */}
@@ -393,7 +398,7 @@ export function LiveView({
             )}
             title={
               stats
-                ? `${stats.kbps} ك.بت/ث · ${stats.fps} إطار/ث${stats.rttMs ? ` · ${stats.rttMs}ms` : ""}`
+                ? `${t("aiMonitoring.cam.kbpsFps").replace("{kbps}", formatNumber(stats.kbps)).replace("{fps}", formatNumber(stats.fps))}${stats.rttMs ? ` · ${stats.rttMs}ms` : ""}`
                 : undefined
             }
           >
