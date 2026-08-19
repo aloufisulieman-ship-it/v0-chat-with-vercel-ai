@@ -7,8 +7,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { authClient } from "@/lib/auth-client"
 import { toast } from "@/hooks/use-toast"
+import { useI18n } from "@/lib/i18n/client"
 
 export function ChangePasswordForm() {
+  const { t } = useI18n()
   const [current, setCurrent] = useState("")
   const [next, setNext] = useState("")
   const [confirm, setConfirm] = useState("")
@@ -17,11 +19,11 @@ export function ChangePasswordForm() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (next.length < 8) {
-      toast({ title: "كلمة المرور قصيرة", description: "يجب أن تكون 8 أحرف على الأقل.", variant: "destructive" })
+      toast({ title: t("changePassword.tooShortTitle"), description: t("changePassword.tooShortDesc"), variant: "destructive" })
       return
     }
     if (next !== confirm) {
-      toast({ title: "غير متطابقة", description: "تأكيد كلمة المرور لا يطابق الكلمة الجديدة.", variant: "destructive" })
+      toast({ title: t("changePassword.mismatchTitle"), description: t("changePassword.mismatchDesc"), variant: "destructive" })
       return
     }
     setLoading(true)
@@ -33,13 +35,13 @@ export function ChangePasswordForm() {
     setLoading(false)
     if (error) {
       toast({
-        title: "تعذّر تغيير كلمة المرور",
-        description: error.message === "Invalid password" ? "كلمة المرور الحالية غير صحيحة." : "حدث خطأ، حاول مجدداً.",
+        title: t("changePassword.failedTitle"),
+        description: error.message === "Invalid password" ? t("changePassword.wrongCurrent") : t("changePassword.genericError"),
         variant: "destructive",
       })
       return
     }
-    toast({ title: "تم تغيير كلمة المرور", description: "سيتم استخدام كلمة المرور الجديدة في الدخول القادم." })
+    toast({ title: t("changePassword.successTitle"), description: t("changePassword.successDesc") })
     setCurrent("")
     setNext("")
     setConfirm("")
@@ -48,7 +50,7 @@ export function ChangePasswordForm() {
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
       <div className="grid gap-2">
-        <Label htmlFor="cp-current">كلمة المرور الحالية</Label>
+        <Label htmlFor="cp-current">{t("changePassword.currentLabel")}</Label>
         <Input
           id="cp-current"
           type="password"
@@ -59,19 +61,19 @@ export function ChangePasswordForm() {
         />
       </div>
       <div className="grid gap-2">
-        <Label htmlFor="cp-new">كلمة المرور الجديدة</Label>
+        <Label htmlFor="cp-new">{t("changePassword.newLabel")}</Label>
         <Input
           id="cp-new"
           type="password"
           dir="ltr"
           value={next}
           onChange={(e) => setNext(e.target.value)}
-          placeholder="8 أحرف على الأقل"
+          placeholder={t("changePassword.newPlaceholder")}
           required
         />
       </div>
       <div className="grid gap-2">
-        <Label htmlFor="cp-confirm">تأكيد كلمة المرور</Label>
+        <Label htmlFor="cp-confirm">{t("changePassword.confirmLabel")}</Label>
         <Input
           id="cp-confirm"
           type="password"
@@ -83,7 +85,7 @@ export function ChangePasswordForm() {
       </div>
       <Button type="submit" disabled={loading} className="gap-2 self-start">
         {loading ? <Loader2 className="size-4 animate-spin" /> : <KeyRound className="size-4" />}
-        تحديث كلمة المرور
+        {t("changePassword.submit")}
       </Button>
     </form>
   )

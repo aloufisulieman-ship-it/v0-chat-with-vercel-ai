@@ -14,6 +14,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { toast } from "@/hooks/use-toast"
+import { useI18n } from "@/lib/i18n/client"
 
 export function DeleteButton({
   id,
@@ -22,17 +23,18 @@ export function DeleteButton({
   id: number
   action: (id: number) => Promise<void>
 }) {
+  const { t } = useI18n()
   const [isPending, startTransition] = useTransition()
 
   function onConfirm() {
     startTransition(async () => {
       try {
         await action(id)
-        toast({ title: "تم الحذف", description: "تم حذف السجل بنجاح." })
+        toast({ title: t("deleteBtn.deletedTitle"), description: t("deleteBtn.deletedDesc") })
       } catch (err) {
         toast({
-          title: "تعذّر الحذف",
-          description: err instanceof Error ? err.message : "حدث خطأ غير متوقع.",
+          title: t("deleteBtn.failedTitle"),
+          description: err instanceof Error ? err.message : t("deleteBtn.failedDesc"),
           variant: "destructive",
         })
       }
@@ -44,7 +46,7 @@ export function DeleteButton({
       <AlertDialogTrigger asChild>
         <button
           className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-          aria-label="حذف"
+          aria-label={t("deleteBtn.aria")}
           disabled={isPending}
         >
           <Trash2 className="size-4" />
@@ -52,13 +54,13 @@ export function DeleteButton({
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
-          <AlertDialogDescription>هل أنت متأكد من حذف هذا السجل؟ لا يمكن التراجع عن هذا الإجراء.</AlertDialogDescription>
+          <AlertDialogTitle>{t("deleteBtn.confirmTitle")}</AlertDialogTitle>
+          <AlertDialogDescription>{t("deleteBtn.confirmDesc")}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>إلغاء</AlertDialogCancel>
+          <AlertDialogCancel>{t("deleteBtn.cancel")}</AlertDialogCancel>
           <AlertDialogAction onClick={onConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-            حذف
+            {t("deleteBtn.confirm")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -11,8 +11,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card } from "@/components/ui/card"
 import { ShieldCheck } from "lucide-react"
+import { useI18n } from "@/lib/i18n/client"
 
 export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
+  const { t } = useI18n()
   const router = useRouter()
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
@@ -34,7 +36,7 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
     setLoading(false)
 
     if (error) {
-      setError(error.message ?? "حدث خطأ ما، يرجى المحاولة مرة أخرى")
+      setError(error.message ?? t("auth.genericError"))
       return
     }
 
@@ -50,22 +52,22 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
             <ShieldCheck className="size-6" />
           </div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground text-balance">
-            {isSignUp ? "إنشاء حساب جديد" : "نظام إدارة الصحة والسلامة"}
+            {isSignUp ? t("auth.signUpTitle") : t("auth.signInTitle")}
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {isSignUp ? "سجّل لبدء إدارة السلامة في شركتك" : "سجّل الدخول للمتابعة إلى لوحة التحكم"}
+            {isSignUp ? t("auth.signUpSubtitle") : t("auth.signInSubtitle")}
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           {isSignUp && (
             <div className="flex flex-col gap-2">
-              <Label htmlFor="name">الاسم الكامل</Label>
+              <Label htmlFor="name">{t("auth.fullName")}</Label>
               <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name" />
             </div>
           )}
           <div className="flex flex-col gap-2">
-            <Label htmlFor="email">البريد الإلكتروني</Label>
+            <Label htmlFor="email">{t("auth.email")}</Label>
             <Input
               id="email"
               type="email"
@@ -77,7 +79,7 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
             />
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="password">كلمة المرور</Label>
+            <Label htmlFor="password">{t("auth.password")}</Label>
             <Input
               id="password"
               type="password"
@@ -97,17 +99,17 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
           )}
 
           <Button type="submit" disabled={loading} className="w-full">
-            {loading ? "يرجى الانتظار..." : isSignUp ? "إنشاء الحساب" : "تسجيل الدخول"}
+            {loading ? t("auth.pleaseWait") : isSignUp ? t("auth.createAccount") : t("auth.login")}
           </Button>
         </form>
 
         <p className="text-sm text-muted-foreground text-center mt-6">
-          {isSignUp ? "لديك حساب بالفعل؟ " : "ليس لديك حساب؟ "}
+          {isSignUp ? t("auth.haveAccount") : t("auth.noAccount")}
           <Link
             href={isSignUp ? "/sign-in" : "/sign-up"}
             className="text-foreground font-medium underline-offset-4 hover:underline"
           >
-            {isSignUp ? "تسجيل الدخول" : "إنشاء حساب"}
+            {isSignUp ? t("auth.signInLink") : t("auth.signUpLink")}
           </Link>
         </p>
       </Card>

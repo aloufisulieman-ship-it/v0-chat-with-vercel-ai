@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { Eraser, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useI18n } from "@/lib/i18n/client"
 
 export function SignaturePad({
   onSave,
@@ -11,6 +12,7 @@ export function SignaturePad({
   onSave: (file: File) => void | Promise<void>
   saving?: boolean
 }) {
+  const { t } = useI18n()
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const drawing = useRef(false)
   const [hasInk, setHasInk] = useState(false)
@@ -92,19 +94,19 @@ export function SignaturePad({
           onPointerMove={move}
           onPointerUp={end}
           onPointerLeave={end}
-          aria-label="منطقة التوقيع"
+          aria-label={t("signaturePad.areaLabel")}
         />
       </div>
       <div className="flex items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground">وقّع داخل الإطار باستخدام الماوس أو إصبعك.</p>
+        <p className="text-xs text-muted-foreground">{t("signaturePad.hint")}</p>
         <div className="flex gap-2">
           <Button type="button" variant="outline" size="sm" onClick={clear} className="gap-1.5 bg-transparent">
             <Eraser className="size-3.5" />
-            مسح
+            {t("signaturePad.clear")}
           </Button>
           <Button type="button" size="sm" onClick={save} disabled={!hasInk || saving} className="gap-1.5">
             <Check className="size-3.5" />
-            {saving ? "جارٍ الحفظ..." : "حفظ التوقيع"}
+            {saving ? t("signaturePad.saving") : t("signaturePad.save")}
           </Button>
         </div>
       </div>

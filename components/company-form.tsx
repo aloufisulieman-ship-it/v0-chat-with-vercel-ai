@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { saveCompany } from "@/app/actions/hse"
+import { useI18n } from "@/lib/i18n/client"
 
 type Company = {
   name: string
@@ -18,6 +19,7 @@ type Company = {
 } | null
 
 export function CompanyForm({ company }: { company: Company }) {
+  const { t } = useI18n()
   const [isPending, startTransition] = useTransition()
   const [saved, setSaved] = useState(false)
 
@@ -32,43 +34,43 @@ export function CompanyForm({ company }: { company: Company }) {
   return (
     <form action={handleSubmit} className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
-        <Label htmlFor="name">اسم المنشأة</Label>
-        <Input id="name" name="name" defaultValue={company?.name ?? ""} placeholder="مثال: شركة الصناعات المتكاملة" required />
+        <Label htmlFor="name">{t("companyForm.name")}</Label>
+        <Input id="name" name="name" defaultValue={company?.name ?? ""} placeholder={t("companyForm.namePlaceholder")} required />
       </div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor="industry">القطاع / النشاط</Label>
-        <Input id="industry" name="industry" defaultValue={company?.industry ?? ""} placeholder="مثال: تصنيع" />
+        <Label htmlFor="industry">{t("companyForm.industry")}</Label>
+        <Input id="industry" name="industry" defaultValue={company?.industry ?? ""} placeholder={t("companyForm.industryPlaceholder")} />
       </div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor="address">العنوان</Label>
-        <Input id="address" name="address" defaultValue={company?.address ?? ""} placeholder="المدينة - المنطقة" />
+        <Label htmlFor="address">{t("companyForm.address")}</Label>
+        <Input id="address" name="address" defaultValue={company?.address ?? ""} placeholder={t("companyForm.addressPlaceholder")} />
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-2">
-          <Label htmlFor="phone">رقم الهاتف</Label>
+          <Label htmlFor="phone">{t("companyForm.phone")}</Label>
           <Input id="phone" name="phone" defaultValue={company?.phone ?? ""} dir="ltr" placeholder="+966..." />
         </div>
         <div className="flex flex-col gap-2">
-          <Label htmlFor="email">البريد الإلكتروني</Label>
+          <Label htmlFor="email">{t("companyForm.email")}</Label>
           <Input id="email" name="email" type="email" defaultValue={company?.email ?? ""} dir="ltr" placeholder="info@company.com" />
         </div>
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-2">
-          <Label htmlFor="employeeCount">عدد الموظفين</Label>
+          <Label htmlFor="employeeCount">{t("companyForm.employeeCount")}</Label>
           <Input id="employeeCount" name="employeeCount" type="number" min="0" defaultValue={company?.employeeCount ?? 0} />
         </div>
         <div className="flex flex-col gap-2">
-          <Label htmlFor="hseManager">مدير السلامة (HSE)</Label>
-          <Input id="hseManager" name="hseManager" defaultValue={company?.hseManager ?? ""} placeholder="الاسم" />
+          <Label htmlFor="hseManager">{t("companyForm.hseManager")}</Label>
+          <Input id="hseManager" name="hseManager" defaultValue={company?.hseManager ?? ""} placeholder={t("companyForm.hseManagerPlaceholder")} />
         </div>
       </div>
       <div className="flex items-center gap-3">
         <Button type="submit" className="gap-2" disabled={isPending}>
           <Save className="size-4" />
-          {isPending ? "جارٍ الحفظ..." : "حفظ معلومات المنشأة"}
+          {isPending ? t("companyForm.saving") : t("companyForm.save")}
         </Button>
-        {saved && <span className="text-sm text-primary">تم الحفظ بنجاح</span>}
+        {saved && <span className="text-sm text-primary">{t("companyForm.savedOk")}</span>}
       </div>
     </form>
   )

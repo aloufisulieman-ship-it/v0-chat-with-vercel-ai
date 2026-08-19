@@ -32,8 +32,10 @@ import {
   updateUserPermissions,
 } from "@/app/actions/users"
 import { parsePermissions } from "@/lib/permissions"
-import { departmentOptions, departmentLabels, moduleLabels } from "@/lib/labels"
+import { departmentOptions } from "@/lib/labels"
 import { toast } from "@/hooks/use-toast"
+import { useI18n } from "@/lib/i18n/client"
+import { departmentLabel, moduleLabel } from "@/lib/i18n/labels"
 
 type UserRow = {
   id: string
@@ -46,22 +48,22 @@ type UserRow = {
   createdAt: Date
 }
 
-const roleLabels: Record<string, string> = {
-  admin: "مدير النظام",
-  manager: "مدير",
-  user: "مستخدم",
-}
-
 const statusStyles: Record<string, string> = {
   approved: "bg-primary/15 text-primary",
   pending: "bg-accent/15 text-accent",
   rejected: "bg-destructive/15 text-destructive",
 }
 
-const statusLabels: Record<string, string> = {
-  approved: "معتمد",
-  pending: "بانتظار الموافقة",
-  rejected: "مرفوض",
+const roleLabelKeys: Record<string, string> = {
+  admin: "usersManager.roleAdmin",
+  manager: "usersManager.roleManager",
+  user: "usersManager.roleUser",
+}
+
+const statusLabelKeys: Record<string, string> = {
+  approved: "usersManager.statusApproved",
+  pending: "usersManager.statusPending",
+  rejected: "usersManager.statusRejected",
 }
 
 function RoleSelect({
@@ -75,15 +77,16 @@ function RoleSelect({
   disabled: boolean
   onChange: (id: string, role: "admin" | "manager" | "user") => void
 }) {
+  const { t } = useI18n()
   return (
     <Select value={role} disabled={disabled} onValueChange={(v) => onChange(userId, v as "admin" | "manager" | "user")}>
       <SelectTrigger className="h-9 w-36">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="admin">مدير النظام</SelectItem>
-        <SelectItem value="manager">مدير</SelectItem>
-        <SelectItem value="user">مستخدم</SelectItem>
+        <SelectItem value="admin">{t("usersManager.roleAdmin")}</SelectItem>
+        <SelectItem value="manager">{t("usersManager.roleManager")}</SelectItem>
+        <SelectItem value="user">{t("usersManager.roleUser")}</SelectItem>
       </SelectContent>
     </Select>
   )
@@ -96,15 +99,16 @@ function DepartmentSelect({
   value: string
   onChange: (v: string) => void
 }) {
+  const { t } = useI18n()
   return (
     <Select value={value || undefined} onValueChange={onChange}>
       <SelectTrigger>
-        <SelectValue placeholder="اختر القسم" />
+        <SelectValue placeholder={t("usersManager.selectDepartment")} />
       </SelectTrigger>
       <SelectContent>
         {departmentOptions.map((d) => (
           <SelectItem key={d.value} value={d.value}>
-            {d.label}
+            {departmentLabel(t, d.value)}
           </SelectItem>
         ))}
       </SelectContent>
@@ -113,6 +117,7 @@ function DepartmentSelect({
 }
 
 function CreateUserDialog() {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
@@ -135,10 +140,10 @@ function CreateUserDialog() {
     startTransition(async () => {
       const res = await createUser({ name, email, password, role, department, permissions: perms })
       if (res.error) {
-        toast({ title: "تعذّر الإنشاء", description: res.error, variant: "destructive" })
+        toast({ title: t("usersManager.createFailed"), description: res.error, variant: "destructive" })
         return
       }
-      toast({ title: "تم إنشاء المستخدم", description: `${name} يمكنه الآن تسجيل الدخول.` })
+      toast({ title: t("usersManager.createdTitle"), description: t("usersManager.createdDesc").replace("{name}", name) })
       reset()
       setOpen(false)
     })
@@ -363,7 +368,7 @@ export function UsersManager({ users, currentUserId }: { users: UserRow[]; curre
                 <th className="px-4 py-3 font-medium">الصلاحيات</th>
                 <th className="px-4 py-3 font-medium">الحالة</th>
                 <th className="px-4 py-3 font-medium">الدور</th>
-                <th className="px-4 py-3 font-medium text-center">الإجراءات</th>
+                <th className="px-4 py-3 font-medium text-center">ال��جراءات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
