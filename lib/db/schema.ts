@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, serial, integer, date, numeric } from "drizzle-orm/pg-core"
+import { pgTable, text, timestamp, boolean, serial, integer, date, uniqueIndex, index } from "drizzle-orm/pg-core"
 
 // ---------- Better Auth tables (do not rename columns) ----------
 export const user = pgTable("user", {
@@ -54,35 +54,6 @@ export const verification = pgTable("verification", {
   expiresAt: timestamp("expiresAt").notNull(),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
-})
-
-// ---------- AI camera monitoring ----------
-export const aiDetection = pgTable("ai_detections", {
-  id: serial("id").primaryKey(),
-  detectionId: text("detection_id").notNull().unique(),
-  cameraId: text("camera_id").notNull(),
-  cameraLocation: text("camera_location").notNull(),
-  detectionType: text("detection_type").notNull(),
-  severity: text("severity").notNull(),
-  confidenceScore: numeric("confidence_score", { precision: 5, scale: 2 }).notNull(),
-  snapshotUrl: text("snapshot_url").notNull(),
-  boundingBox: text("bounding_box"),
-  detectedAt: timestamp("detected_at").notNull().defaultNow(),
-  status: text("status").notNull().default("new"),
-  acknowledgedBy: text("acknowledged_by"),
-  resolvedBy: text("resolved_by"),
-  notes: text("notes").default(""),
-  createdBy: text("created_by").notNull(),
-})
-
-export const aiMonitoringNotification = pgTable("ai_monitoring_notifications", {
-  id: serial("id").primaryKey(),
-  userId: text("user_id").notNull(),
-  detectionId: integer("detection_id").notNull(),
-  title: text("title").notNull(),
-  message: text("message").notNull(),
-  readAt: timestamp("read_at"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
 })
 
 // ---------- HSE app tables (scoped by userId, no FK) ----------
@@ -307,6 +278,8 @@ export const violation = pgTable("violation", {
   category: text("category").default("internal"),
   // مصدر إدخال المخالفة: electronic (عبر النظام) | manual (نموذج ورقي ممسوح).
   entryMode: text("entry_mode").notNull().default("electronic"),
+  // اسم المفتش/الموظف الذي رصد المخالفة (يُعبّأ تلقائياً عند الرصد بالذكاء الاصطناعي).
+  detectedBy: text("detected_by").default(""),
   internalAction: text("internal_action").default(""),
   violationDate: date("violationDate"),
   violationTime: text("violationTime").default(""),
@@ -366,6 +339,114 @@ export const attachment = pgTable("attachment", {
   filename: text("filename").notNull().default(""),
   contentType: text("contentType").notNull().default(""),
   size: integer("size").notNull().default(0),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
+// ---------- المراقبة الذكية بالذكاء الاصطناعي (كاميرات ساحات الرافعات) ----------
+// detectionType: أحد ����لأنواع الستة (no_ppe / traffic_congestion / unsafe_stacking /
+//   overspeed / restricted_area / pedestrian_near_forklift).
+// severity: low / medium / high / critical.
+// status: new / acknowledged / resolved / false_positive / converted.
+export const aiDetection = pgTable("ai_detections", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  detectionId: text("detection_id").notNull(), // AID-YYYY-###
+  cameraId: text("camera_id").notNull().default(""),
+  inspectorName: text("inspector_name").notNull().default(""), // اسم المفتش/الموظف صاحب الجلسة
+  cameraLocation: text("camera_location").notNull().default(""),
+  detectionType: text("detection_type").notNull().default("no_ppe"),
+  severity: text("severity").notNull().default("low"),
+  confidenceScore: integer("confidence_score").notNull().default(0), // 0-100
+  snapshotUrl: text("snapshot_url").notNull().default(""),
+  detectedAt: timestamp("detected_at").notNull().defaultNow(),
+  status: text("status").notNull().default("new"),
+  acknowledgedBy: text("acknowledged_by").default(""),
+  resolvedBy: text("resolved_by").default(""),
+  notes: text("notes").default(""),
+  // رقم المخالفة المرتبطة (VIO-YYYY-###) عند تحويل الاكتشاف إلى مخالفة رسمية.
+  linkedViolationNo: text("linked_violation_no").default(""),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
+// إشعارات المراقبة الذكية — سجل لكل مستلم عن كل اكتشاف عالي الخطورة/حرج.
+// (مدموج من فرع ai-smart-monitoring مع مواءمة الأنواع لبنية main:
+// userId نصّي مطابق لجدول user، وdetectionId يشير إلى aiDetection.id الرقمي.)
+export const aiMonitoringNotification = pgTable("ai_monitoring_notifications", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  detectionId: integer("detection_id").notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+})
+
+// كاميرات الهاتف المتصلة حالياً — سجل واحد لكل كاميرا (userId + cameraId فريد).
+// يُحدّث lastFrameUrl و lastSeenAt مع كل استدعا�� لمسار /api/ai-monitoring/analyze،
+// ما يتيح للوحة المدير عرض بث "شبه حي" لكل كاميرا نشطة.
+export const activeCameraStream = pgTable(
+  "active_camera_streams",
+  {
+    id: serial("id").primaryKey(),
+    userId: text("userId").notNull(),
+    cameraId: text("camera_id").notNull(),
+    inspectorName: text("inspector_name").notNull().default(""), // اسم المفتش/الموظف الذي بدأ الجلسة
+    cameraLocation: text("camera_location").notNull().default(""),
+    lastFrameUrl: text("last_frame_url").notNull().default(""),
+    lastSeenAt: timestamp("last_seen_at").notNull().defaultNow(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (t) => ({
+    userCameraUnique: uniqueIndex("active_cam_user_camera_idx").on(t.userId, t.cameraId),
+  }),
+)
+
+// قناة إشارات WebRTC (signaling) عبر قاعدة البيانات — بديل خفيف عن WebSocket يناسب
+// بيئة الخوادم بلا حالة. تُخزَّن هنا عروض/إجابات SDP ومرشحات ICE مؤقتاً بين
+// الكاميرا (المُرسِل) والمدير (المشاهد)، ويُستقصى منها كل ~ثانية أثناء إنشاء الاتصال فقط.
+// بعد نجاح الاتصال ينتقل الفيديو مباشرةً بين الطرفين (P2P) دون المرور بالخادم.
+export const webrtcSignal = pgTable(
+  "webrtc_signals",
+  {
+    id: serial("id").primaryKey(),
+    cameraId: text("camera_id").notNull(), // جلسة الكاميرا الهدف
+    viewerSessionId: text("viewer_session_id").notNull(), // جلسة تفاوض المشاهد (تسمح بإعادة الاتصال)
+    sender: text("sender").notNull(), // "camera" | "viewer"
+    kind: text("kind").notNull(), // "offer" | "answer" | "ice"
+    payload: text("payload").notNull(), // SDP أو مرشّح ICE مُرمَّز JSON
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    lookupIdx: index("webrtc_lookup_idx").on(t.cameraId, t.viewerSessionId, t.id),
+  }),
+)
+
+// تسجيلات الفيديو المرفوعة من كاميرا الهاتف إلى Vercel Blob.
+// userId = مالك التسجيل (الحساب الذي سجّل)، ونطاق العرض مقصور عليه.
+export const videoRecording = pgTable("video_recordings", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  cameraId: text("camera_id").notNull().default(""),
+  cameraName: text("camera_name").notNull().default(""),
+  videoUrl: text("video_url").notNull(),
+  posterUrl: text("poster_url").notNull().default(""),
+  durationSeconds: integer("duration_seconds").notNull().default(0),
+  fileSizeBytes: integer("file_size_bytes").notNull().default(0),
+  recordedBy: text("recorded_by").notNull().default(""),
+  recordedAt: timestamp("recorded_at").notNull().defaultNow(),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
+// اللقطات المستخرجة من تسجيل فيديو عبر مشغّل المراجعة.
+export const videoScreenshot = pgTable("video_screenshots", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  recordingId: integer("recording_id").notNull(),
+  cameraId: text("camera_id").notNull().default(""),
+  imageUrl: text("image_url").notNull(),
+  atSeconds: integer("at_seconds").notNull().default(0),
+  linkedViolationId: integer("linked_violation_id"),
+  capturedAt: timestamp("captured_at").notNull().defaultNow(),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 

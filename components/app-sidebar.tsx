@@ -15,6 +15,7 @@ import {
   Ban,
   Banknote,
   Footprints,
+  Cctv,
   CheckSquare,
   BarChart3,
   Settings,
@@ -23,7 +24,6 @@ import {
   UserCog,
   LogOut,
   X,
-  ScanEye,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { authClient } from "@/lib/auth-client"
@@ -42,7 +42,7 @@ const nav: { href: string; label: string; icon: typeof LayoutDashboard; module: 
   { href: "/employees", label: "سجل الموظفين", icon: Users, module: "training" },
   { href: "/violations", label: "المخالفات", icon: Ban, module: "violations" },
   { href: "/patrol", label: "الجولة التفتيشية", icon: Footprints, module: "violations" },
-  { href: "/ai-monitoring", label: "المراقبة الذكية", icon: ScanEye, module: "ai_monitoring" },
+  { href: "/ai-monitoring", label: "المراقبة الذكية (AI)", icon: Cctv, module: "ai_monitoring" },
   { href: "/hr", label: "الموارد البشرية", icon: UserCog, module: "hr" },
   { href: "/finance", label: "المالية", icon: Banknote, module: "finance" },
   { href: "/actions", label: "الإجراءات التصحيحية", icon: CheckSquare, module: "actions" },
@@ -72,9 +72,12 @@ export function AppSidebar({
 
   // Dashboard and settings are always available so no user gets locked out (settings holds password change).
   const alwaysOn: ModuleKey[] = ["dashboard", "settings"]
-  const visible = nav.filter(
-    (item) => alwaysOn.includes(item.module) || hasModuleAccess(user?.role, user?.permissions, item.module),
-  )
+  // صفحات المراقبة الذكية (المراجعة) مقصورة على مسؤول HSE: admin أو manager.
+  const isReviewer = user?.role === "admin" || user?.role === "manager"
+  const visible = nav.filter((item) => {
+    if (item.href === "/ai-monitoring") return isReviewer
+    return alwaysOn.includes(item.module) || hasModuleAccess(user?.role, user?.permissions, item.module)
+  })
   const items =
     user?.role === "admin" ? [...visible, { href: "/users", label: "إدارة المستخدمين", icon: Users }] : visible
 

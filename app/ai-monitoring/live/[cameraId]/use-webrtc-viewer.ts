@@ -1,0 +1,305 @@
+"use client"
+
+import { useCallback, useEffect, useRef, useState } from "react"
+import { createPeer, pollSignals, postSignal, type IncomingSignal } from "@/lib/webrtc-client"
+
+// خطاف المُشاهد (المدير): يطلب بثاً حياً من كاميرا مفتش عبر WebRTC ويعرضه في <video>.
+//
+// ينشئ عرضاً (offer) من نوع استقبال-فقط ويرسله للكاميرا عبر قناة الإشارات، ثم
+// يستقصي الإجابة ومرشحات ICE. عند نجاح الاتصال ينتقل الفيديو ندّاً لِند. إذا لم
+// تكن الكاميرا تبث (لا إجابة) يبقى في حالة "connecting" فيسقط العرض إلى اللقطات.
+const POLL_MS = 1000
+const RETRY_MS = 9000
+// وتيرة قياس جودة الاتصال (bitrate/rtt) عبر getStats.
+const STATS_MS = 2000
+
+export type ViewerStatus = "connecting" | "live"
+
+// إحصاءات جودة الاتصال الحية للمُشاهد.
+export type ViewerStats = {
+  // معدل تدفق الفيديو الوارد بالكيلوبت/الثانية.
+  kbps: number
+  // زمن الذهاب والإياب بالمللي ثانية (round-trip time).
+  rttMs: number
+  // عدد الإطارات المستقبَلة في الثانية.
+  fps: number
+}
+
+function makeSessionId(): string {
+  try {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID()
+  } catch {
+    /* تجاهل */
+  }
+  return `v-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+export function useWebrtcViewer(opts: { cameraId: string; enabled: boolean }) {
+  const { cameraId, enabled } = opts
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const [status, setStatus] = useState<ViewerStatus>("connecting")
+  // رسالة خطأ الصلاحيات/الشبكة الكاملة (مثل: "HTTP 403 — مشاهدة البث مقصورة…").
+  const [error, setError] = useState<string | null>(null)
+  // إحصاءات جودة الاتصال الحية (تُحدَّث كل ثانيتين أثناء البث).
+  const [stats, setStats] = useState<ViewerStats | null>(null)
+  // هل يحتوي البث المستقبَل على مسار صوت؟ (لإظهار/تعطيل زر الصوت بشكل صحيح).
+  const [hasAudio, setHasAudio] = useState(false)
+
+  // حالة التحدّث (talk-back): هل أُضيف مسار المايكروفون إلى التفاوض بعد؟
+  const [talkEnabled, setTalkEnabled] = useState(false)
+  // هل المايكروفون يبثّ صوت المدير حالياً (غير مكتوم)؟ لعرض مؤشر "تتحدث الآن".
+  const [talkActive, setTalkActive] = useState(false)
+  // رسالة خطأ المايكروفون بالعربية (رفض الصلاحية/عدم وجود جهاز…).
+  const [talkError, setTalkError] = useState<string | null>(null)
+  // مسار وتدفّق المايكروفون المحلي — يُحفظ في refs ليبقى ثابتاً عبر إعادة التفاوض.
+  const micStreamRef = useRef<MediaStream | null>(null)
+  const micTrackRef = useRef<MediaStreamTrack | null>(null)
+
+  const viewerSessionIdRef = useRef<string>("")
+  if (!viewerSessionIdRef.current) viewerSessionIdRef.current = makeSessionId()
+
+  useEffect(() => {
+    if (!enabled || !cameraId) return
+
+    let stopped = false
+    let pc: RTCPeerConnection | null = null
+    let lastId = 0
+    let pollTimer: ReturnType<typeof setInterval> | null = null
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
+    let statsTimer: ReturnType<typeof setInterval> | null = null
+    // للحساب التفاضلي لمعدل التدفق: آخر قراءة للبايتات/الإطارات والزمن.
+    let lastBytes = 0
+    let lastFrames = 0
+    let lastStatsTs = 0
+    const viewerSessionId = viewerSessionIdRef.current
+
+    const teardownPeer = () => {
+      if (pc) {
+        try {
+          pc.close()
+        } catch {
+          /* تجاهل */
+        }
+        pc = null
+      }
+    }
+
+    // إنشاء اتصال جديد وإرسال عرض استقبال-فقط إلى الكاميرا.
+    const startNegotiation = async () => {
+      teardownPeer()
+      if (stopped) return
+      setStatus("connecting")
+      pc = createPeer()
+
+      pc.addTransceiver("video", { direction: "recvonly" })
+      // استقبال الصوت أيضاً (صوت الميكروفون من كاميرا المفتش).
+      pc.addTransceiver("audio", { direction: "recvonly" })
+
+      // صوت ثنائي الاتجاه (talk-back): عند تفعيل المايكروفون نضيف مساراً سمعياً ثالثاً
+      // باتجاه sendonly لإرسال صوت المدير إلى الكاميرا. يُضاف فقط بعد أن يمنح المستخدم
+      // صلاحية المايكروفون (لا نطلبها قبل رغبته بالتحدّث). المُشاهد هو صاحب العرض
+      // (offerer) فيحقّ له تعريف هذا المسار، وتستقبله الكاميرا وتشغّله لدى المفتش.
+      if (talkEnabled && micTrackRef.current) {
+        pc.addTransceiver(micTrackRef.current, { direction: "sendonly" })
+      }
+
+      pc.ontrack = (e) => {
+        const remoteStream = e.streams[0] ?? null
+        // فحص تشخيصي يطلبه المدير: اطبع نوع المسار الوارد وعدد مسارات الفيديو/الصوت
+        // في البث المستقبَل عند وصول كل مسار جديد.
+        const videoCount = remoteStream ? remoteStream.getVideoTracks().length : 0
+        const audioCount = remoteStream ? remoteStream.getAudioTracks().length : 0
+        console.log(
+          "[v0] viewer ontrack: kind =",
+          e.track.kind,
+          "→ stream tracks: video =",
+          videoCount,
+          "audio =",
+          audioCount,
+        )
+        setHasAudio(audioCount > 0)
+        if (videoRef.current && remoteStream) {
+          videoRef.current.srcObject = remoteStream
+          void videoRef.current.play().catch(() => {})
+        }
+      }
+      pc.onicecandidate = (e) => {
+        if (e.candidate) {
+          void postSignal({
+            role: "viewer",
+            viewerSessionId,
+            kind: "ice",
+            payload: e.candidate.toJSON(),
+            cameraId,
+          })
+        }
+      }
+      pc.onconnectionstatechange = () => {
+        if (!pc) return
+        if (pc.connectionState === "connected") setStatus("live")
+        else if (["failed", "disconnected", "closed"].includes(pc.connectionState)) setStatus("connecting")
+      }
+
+      try {
+        const offer = await pc.createOffer()
+        await pc.setLocalDescription(offer)
+        await postSignal({ role: "viewer", viewerSessionId, kind: "offer", payload: offer, cameraId })
+      } catch {
+        /* ستُعاد المحاولة دورياً */
+      }
+    }
+
+    const handleSignal = async (s: IncomingSignal) => {
+      if (!pc) return
+      if (s.kind === "answer") {
+        try {
+          await pc.setRemoteDescription(s.payload as RTCSessionDescriptionInit)
+        } catch {
+          /* تجاهل */
+        }
+      } else if (s.kind === "ice" && s.payload) {
+        try {
+          await pc.addIceCandidate(s.payload as RTCIceCandidateInit)
+        } catch {
+          /* تجاهل */
+        }
+      }
+    }
+
+    const tick = async () => {
+      if (stopped) return
+      const { signals, error: pollError } = await pollSignals({
+        role: "viewer",
+        after: lastId,
+        viewerSessionId,
+        cameraId,
+      })
+      // إظهار رسالة الخطأ الحقيقية (401/403…) بدل بقاء الحالة "جارٍ الاتصال" بلا سبب.
+      setError(pollError)
+      for (const s of signals) {
+        lastId = Math.max(lastId, s.id)
+        await handleSignal(s)
+      }
+    }
+
+    // إعادة المحاولة دورياً إن لم يكتمل الاتصال (الكاميرا قد تبدأ البث لاحقاً).
+    const scheduleRetry = () => {
+      retryTimer = setInterval(() => {
+        if (stopped) return
+        if (!pc || pc.connectionState !== "connected") void startNegotiation()
+      }, RETRY_MS)
+    }
+
+    // قياس جودة الاتصال: نقرأ inbound-rtp للفيديو ونشتق معدل التدفق وعدد الإطارات،
+    // وncandidate-pair النشط لزمن الذهاب والإياب (RTT).
+    const sampleStats = async () => {
+      if (stopped || !pc || pc.connectionState !== "connected") return
+      try {
+        const report = await pc.getStats()
+        let bytes = 0
+        let frames = 0
+        let rttMs = 0
+        const now = Date.now()
+        report.forEach((s) => {
+          if (s.type === "inbound-rtp" && (s as { kind?: string }).kind === "video") {
+            bytes = (s as { bytesReceived?: number }).bytesReceived ?? bytes
+            frames = (s as { framesDecoded?: number }).framesDecoded ?? frames
+          }
+          if (s.type === "candidate-pair" && (s as { nominated?: boolean }).nominated) {
+            const rtt = (s as { currentRoundTripTime?: number }).currentRoundTripTime
+            if (typeof rtt === "number") rttMs = Math.round(rtt * 1000)
+          }
+        })
+        if (lastStatsTs > 0) {
+          const dt = (now - lastStatsTs) / 1000
+          if (dt > 0) {
+            const kbps = Math.max(0, Math.round(((bytes - lastBytes) * 8) / 1000 / dt))
+            const fps = Math.max(0, Math.round((frames - lastFrames) / dt))
+            setStats({ kbps, rttMs, fps })
+          }
+        }
+        lastBytes = bytes
+        lastFrames = frames
+        lastStatsTs = now
+      } catch {
+        /* تجاهل قراءة فاشلة */
+      }
+    }
+
+    void startNegotiation()
+    pollTimer = setInterval(tick, POLL_MS)
+    statsTimer = setInterval(sampleStats, STATS_MS)
+    scheduleRetry()
+
+    return () => {
+      stopped = true
+      if (pollTimer) clearInterval(pollTimer)
+      if (retryTimer) clearInterval(retryTimer)
+      if (statsTimer) clearInterval(statsTimer)
+      setStats(null)
+      setHasAudio(false)
+      teardownPeer()
+      if (videoRef.current) videoRef.current.srcObject = null
+    }
+    // ملاحظة: talkEnabled ضمن التبعيّات عمداً — أول تفعيل للمايكروفون يعيد التفاوض
+    // مرّة واحدة لإضافة مسار الصوت الصادر، وبعدها يتم الكتم/إلغاء الكتم دون إعادة تفاوض.
+  }, [cameraId, enabled, talkEnabled])
+
+  // تنظيف المايكروفون عند مغادرة الصفحة فقط (منفصل عن دورة حياة الاتصال حتى لا
+  // يُغلق المايكروفون في كل إعادة تفاوض).
+  useEffect(() => {
+    return () => {
+      micStreamRef.current?.getTracks().forEach((t) => t.stop())
+      micStreamRef.current = null
+      micTrackRef.current = null
+    }
+  }, [])
+
+  // تبديل التحدّث: أول ضغطة تطلب صلاحية المايكروفون وتضيف مساره (إعادة تفاوض واحدة)،
+  // والضغطات التالية تكتم/تُلغي الكتم فوراً دون قطع البث الحي.
+  const toggleTalk = useCallback(async () => {
+    setTalkError(null)
+
+    // كتم/إلغاء الكتم بعد أن أصبح المايكروفون مُفعّلاً (لا حاجة لإعادة تفاوض).
+    if (talkEnabled && micTrackRef.current) {
+      const next = !micTrackRef.current.enabled
+      micTrackRef.current.enabled = next
+      setTalkActive(next)
+      return
+    }
+
+    // أول تفعيل: اطلب صلاحية المايكروفون من المتصفح.
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setTalkError("المتصفح لا يدعم الوصول إلى المايكروفون.")
+      return
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      })
+      const track = stream.getAudioTracks()[0]
+      if (!track) {
+        stream.getTracks().forEach((t) => t.stop())
+        setTalkError("تعذّر العثور على مايكروفون متاح.")
+        return
+      }
+      track.enabled = true
+      micStreamRef.current = stream
+      micTrackRef.current = track
+      // إعادة تفاوض واحدة لإضافة مسار الصوت الصادر إلى الاتصال الحالي.
+      setTalkEnabled(true)
+      setTalkActive(true)
+    } catch (e) {
+      const err = e as DOMException
+      if (err?.name === "NotAllowedError" || err?.name === "SecurityError") {
+        setTalkError("تم رفض إذن المايكروفون. فعّله من إعدادات المتصفح لتتمكّن من التحدّث.")
+      } else if (err?.name === "NotFoundError" || err?.name === "OverconstrainedError") {
+        setTalkError("لا يوجد مايكروفون متاح على هذا الجهاز.")
+      } else {
+        setTalkError("تعذّر تشغيل المايكروفون. حاول مرة أخرى.")
+      }
+    }
+  }, [talkEnabled])
+
+  return { videoRef, status, error, stats, hasAudio, talkActive, talkError, toggleTalk }
+}

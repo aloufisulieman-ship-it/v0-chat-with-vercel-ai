@@ -1,9 +1,12 @@
-import { getDetections } from '@/app/actions/ai-monitoring'
+import { NextResponse } from "next/server"
+import { getDetections } from "@/app/actions/ai-monitoring"
 
+// بث الاكتشافات للوحة المراقبة (يُستدعى دورياً عبر SWR).
 export async function GET() {
   try {
-    return Response.json(await getDetections())
+    const rows = await getDetections()
+    return NextResponse.json({ detections: rows })
   } catch {
-    return Response.json({ error: 'غير مصرح' }, { status: 401 })
+    return NextResponse.json({ detections: [] }, { status: 200 })
   }
 }

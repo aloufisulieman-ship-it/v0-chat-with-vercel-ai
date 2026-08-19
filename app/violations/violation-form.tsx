@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useTransition } from "react"
+import { useState, useRef, useTransition, useEffect } from "react"
 import { FileWarning, PenLine, X, ChevronRight, ChevronLeft, Camera, FileText, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -149,34 +149,62 @@ function SignaturePad({ label, value, onChange }: { label: string; value: string
   )
 }
 
-export type ViolationPrefill = {
-  violationType?: string
-  place?: string
-  violationDate?: string
-  violationTime?: string
-  description?: string
-  images?: string[]
-}
-
-export function ViolationFormDialog({ employees = [], prefill, triggerLabel = "تسجيل مخالفة جديدة" }: { employees?: EmployeeRecord[]; prefill?: ViolationPrefill; triggerLabel?: string }) {
-  const [open, setOpen] = useState(false)
+export function ViolationFormDialog({
+  employees = [],
+  initialEvidence,
+  initialDetectedBy = "",
+  autoOpen = false,
+}: {
+  employees?: EmployeeRecord[]
+  // صورة إثبات مبدئية (data URL) تُحمّل مسبقاً — مثلاً لقطة من تسجيل فيديو.
+  initialEvidence?: string
+  // اسم المفتش الذي رصد المخالفة (يُعبّأ مسبقاً عند القدوم من رصد الذكاء الاصطناعي).
+  initialDetectedBy?: string
+  // فتح النموذج تلقائياً عند التحميل (عند القدوم من صفحة التسجيلات).
+  autoOpen?: boolean
+}) {
+  const [open, setOpen] = useState(autoOpen)
   const [step, setStep] = useState(1)
   const [isPending, startTransition] = useTransition()
 
   const [form, setForm] = useState({
     employeeRefId: "", employeeName: "", employeeNo: "", nationality: "", companyName: "",
-    documentNo: "MHS-IMS-PR-HSE-647", violationDate: prefill?.violationDate ?? "", violationTime: prefill?.violationTime ?? "",
-    place: prefill?.place ?? "", violationType: prefill?.violationType ?? "", category: "", internalAction: "", actionDetail: "",
-    description: prefill?.description ?? "", witnesses: "",
+    documentNo: "MHS-IMS-PR-HSE-647", violationDate: "", violationTime: "",
+    place: "", violationType: "", category: "", internalAction: "", actionDetail: "",
+    description: "", witnesses: "",
     evidences: "", proposedAction: "", status: "open", entryMode: "electronic",
+    detectedBy: initialDetectedBy,
   })
 
-  const [images, setImages] = useState<string[]>(prefill?.images ?? [])
+  // إذا كانت صورة الإثبات المبدئية data URL نضعها مباشرة؛ وإن كانت رابط Blob (http)
+  // نحوّلها لاحقاً إلى data URL عبر useEffect حتى تُضمّن ضمن حمولة الحفظ.
+  const isDataUrl = (v?: string) => !!v && v.startsWith("data:")
+  const [images, setImages] = useState<string[]>(isDataUrl(initialEvidence) ? [initialEvidence as string] : [])
   // النماذج الورقية الممسوحة للمخالفة اليدوية: { name, dataUrl }
   const [manualDocs, setManualDocs] = useState<{ name: string; dataUrl: string }[]>([])
   const [editorSignature, setEditorSignature] = useState("")
   const [violatorSignature, setViolatorSignature] = useState("")
   const [managerSignature, setManagerSignature] = useState("")
+
+  // تحويل رابط لقطة (Blob http) إلى data URL مضغوط لتضمينه ضمن أدلة المخالفة.
+  useEffect(() => {
+    if (!initialEvidence || isDataUrl(initialEvidence)) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch(initialEvidence, { cache: "no-store" })
+        const blob = await res.blob()
+        const file = new File([blob], "screenshot.jpg", { type: blob.type || "image/jpeg" })
+        const dataUrl = await compressImage(file, 1200, 0.7)
+        if (!cancelled) setImages((prev) => (prev.length ? prev : [dataUrl]))
+      } catch {
+        /* يتجاهل — يمكن للمراجع رفع الصورة يدوياً */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [initialEvidence])
 
   function resetForm() {
     setStep(1)
@@ -186,8 +214,9 @@ export function ViolationFormDialog({ employees = [], prefill, triggerLabel = "�
       place: "", violationType: "", category: "", internalAction: "", actionDetail: "",
       description: "", witnesses: "",
       evidences: "", proposedAction: "", status: "open", entryMode: "electronic",
+      detectedBy: initialDetectedBy,
     })
-    setImages([])
+    setImages(isDataUrl(initialEvidence) ? [initialEvidence as string] : [])
     setManualDocs([])
     setEditorSignature("")
     setViolatorSignature("")
@@ -270,7 +299,7 @@ export function ViolationFormDialog({ employees = [], prefill, triggerLabel = "�
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetForm() }}>
       <DialogTrigger asChild>
-        <Button className="gap-2"><FileWarning className="size-4" /> {triggerLabel}</Button>
+        <Button className="gap-2"><FileWarning className="size-4" /> تسجيل مخالفة جديدة</Button>
       </DialogTrigger>
       <DialogContent className="max-h-[92svh] overflow-y-auto sm:max-w-2xl" dir="rtl">
         <DialogHeader>
@@ -314,7 +343,7 @@ export function ViolationFormDialog({ employees = [], prefill, triggerLabel = "�
                 <div className="flex flex-col gap-2 pt-1">
                   <label className="flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-border p-4 cursor-pointer hover:bg-muted/50 transition-colors">
                     <Upload className="size-6 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">أرفق النموذج الورقي الممسوح (PDF أو صورة أو مستند)</span>
+                    <span className="text-xs text-muted-foreground">أرفق النموذج الورقي المم��وح (PDF أو صورة أو مستند)</span>
                     <input type="file" accept="image/*,application/pdf,.doc,.docx" multiple className="hidden" onChange={handleDocUpload} />
                   </label>
                   {manualDocs.length > 0 && (
@@ -371,10 +400,18 @@ export function ViolationFormDialog({ employees = [], prefill, triggerLabel = "�
               <Label>الوقت</Label>
               <Input value={form.violationTime} onChange={e => setForm(f => ({ ...f, violationTime: e.target.value }))} placeholder="مثال: 10:30 صباحاً" />
             </div>
-            <div className="flex flex-col gap-1">
-              <Label>المكان <span className="text-destructive">*</span></Label>
-              <Input value={form.place} onChange={e => setForm(f => ({ ...f, place: e.target.value }))} placeholder="موقع المخالفة" />
-            </div>
+                    <div className="flex flex-col gap-1">
+                      <Label>المكان <span className="text-destructive">*</span></Label>
+                      <Input value={form.place} onChange={e => setForm(f => ({ ...f, place: e.target.value }))} placeholder="موقع المخالفة" />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <Label>رُصدت بواسطة</Label>
+                      <Input
+                        value={form.detectedBy}
+                        onChange={e => setForm(f => ({ ...f, detectedBy: e.target.value }))}
+                        placeholder="اسم المفتش/الموظف الذي رصد المخالفة"
+                      />
+                    </div>
             <div className="flex flex-col gap-1">
               <Label>الحال��</Label>
               <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v }))}>

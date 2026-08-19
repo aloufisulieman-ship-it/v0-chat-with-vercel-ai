@@ -20,12 +20,17 @@ import {
   observation,
   attachment,
   user,
+  aiDetection,
 } from "@/lib/db/schema"
 import { and, desc, eq } from "drizzle-orm"
 import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
-import { requireModuleUserId, requireUser } from "@/lib/session"
+import { requireModuleUserId, requireUser, requireHseReviewerId } from "@/lib/session"
 import { severityLabels, statusLabels, permitTypePrefix, permitTypeExtraFields } from "@/lib/labels"
+import {
+  detectionTypeLabels,
+  severityLabels as detectionSeverityLabels,
+} from "@/lib/ai-monitoring"
 import { effectiveViolationStatus } from "@/lib/violation-status"
 import { put } from "@vercel/blob"
 
@@ -782,7 +787,7 @@ export async function createViolationFull(formData: FormData) {
   // تُضبط حالة الجهة المعنية فقط، ويبقى الحقل المعاكس null دائماً.
   const category = str(formData.get("category"))
   if (category !== "internal" && category !== "external") {
-    throw new Error("يجب تحديد تصنيف المخالفة: داخلية أو خارجية")
+    throw new Error("يجب تحديد تصنيف المخ��لفة: داخلية أو خارجية")
   }
   const isExternal = category === "external"
 
@@ -800,6 +805,7 @@ export async function createViolationFull(formData: FormData) {
       violationType: str(formData.get("violationType")),
       category,
       entryMode: str(formData.get("entryMode"), "electronic"),
+      detectedBy: str(formData.get("detectedBy")),
       internalAction: str(formData.get("internalAction")),
       violationDate: dateOrNull(formData.get("violationDate")),
       violationTime: str(formData.get("violationTime")),
@@ -863,6 +869,103 @@ export async function createViolationFull(formData: FormData) {
   return { documentNo }
 }
 
+// قبول اكتشاف من المراقبة الذكية وتحويله إلى مخالفة رسمية.
+// يُنشئ سجل مخالفة برقم تلقائي (VIO-YYYY-###) ويوجّهه حصرياً حسب التصنيف:
+//   داخلية → مسار الموارد البشرية (hrStatus=pending، financeStatus=null)
+//   خارجية → مسار المالية (financeStatus=pending، رقم التسوية فارغ، hrStatus=null)
+// ثم يحدّث حالة الاكتشاف إلى "converted" ويربطه برقم المخالفة الجديد.
+export async function acceptDetectionAsViolation(
+  detectionId: number,
+  category: "internal" | "external",
+) {
+  const userId = await requireHseReviewerId()
+  if (category !== "internal" && category !== "external") {
+    throw new Error("يجب تحديد تصنيف المخالفة: داخلية أو خارجية")
+  }
+
+  const [det] = await db.select().from(aiDetection).where(eq(aiDetection.id, detectionId)).limit(1)
+  if (!det) throw new Error("الاكتشاف غير موجود")
+  if (det.status === "converted" && det.linkedViolationNo) {
+    // مُحوّل مسبقاً — أعد رقم المخالفة القائم دون إنشاء تكرار.
+    return { documentNo: det.linkedViolationNo }
+  }
+
+  const actorRows = await db.select({ name: user.name }).from(user).where(eq(user.id, userId)).limit(1)
+  const actor = actorRows[0]?.name || "مستخدم"
+
+  // رقم مخالفة تسلسلي حسب السنة (بنفس آلية createViolationFull).
+  const year = new Date().getFullYear()
+  const existing = await db
+    .select({ documentNo: violation.documentNo })
+    .from(violation)
+    .orderBy(desc(violation.createdAt))
+  const maxSeq = existing
+    .map((v) => v.documentNo ?? "")
+    .filter((n) => n.startsWith(`VIO-${year}-`))
+    .reduce((max, n) => {
+      const seq = parseInt(n.split("-")[2] ?? "0", 10)
+      return seq > max ? seq : max
+    }, 0)
+  const documentNo = `VIO-${year}-${String(maxSeq + 1).padStart(3, "0")}`
+
+  const typeLabel = detectionTypeLabels[det.detectionType] ?? det.detectionType
+  const sevLabel = detectionSeverityLabels[det.severity] ?? det.severity
+  const now = new Date()
+  const isExternal = category === "external"
+  const description =
+    (det.notes && det.notes.trim().length > 0 ? det.notes.trim() : typeLabel) +
+    ` — درجة الخطورة: ${sevLabel} (رصد آلي بالمراقبة الذكية، نسبة الثقة ${det.confidenceScore}%).`
+
+  const [inserted] = await db
+    .insert(violation)
+    .values({
+      userId,
+      documentNo,
+      employeeName: "غير محدد — رصد آلي",
+      violationType: typeLabel,
+      category,
+      entryMode: "electronic",
+      detectedBy: det.inspectorName || actor,
+      violationDate: now.toISOString().slice(0, 10),
+      violationTime: now.toTimeString().slice(0, 5),
+      place: det.cameraLocation || "",
+      description,
+      status: "open",
+      hrStatus: isExternal ? null : "pending",
+      financeStatus: isExternal ? "pending" : null,
+      settlementNumber: "",
+    })
+    .returning({ id: violation.id })
+
+  const recordId = inserted.id
+
+  // أرفق لقطة الإثبات (رابط Blob) كمرفق صورة للمخالفة — أفضل جهد لا يُفشل العملية.
+  try {
+    if (det.snapshotUrl && det.snapshotUrl.startsWith("http")) {
+      const res = await fetch(det.snapshotUrl)
+      if (res.ok) {
+        const buf = Buffer.from(await res.arrayBuffer())
+        const contentType = res.headers.get("content-type") || "image/jpeg"
+        const dataUrl = `data:${contentType};base64,${buf.toString("base64")}`
+        await saveDataUrlAttachment(userId, "violations", recordId, "photo", dataUrl, "ai-detection-evidence")
+      }
+    }
+  } catch {
+    // تجاهل فشل جلب اللقطة — المخالفة محفوظة أصلاً.
+  }
+
+  // حدّث الاكتشاف: الحالة "converted" + الربط برقم المخالفة الجديد.
+  await db
+    .update(aiDetection)
+    .set({ status: "converted", linkedViolationNo: documentNo, resolvedBy: actor })
+    .where(eq(aiDetection.id, detectionId))
+
+  revalidatePath("/ai-monitoring")
+  revalidatePath("/violations")
+  revalidatePath("/")
+  return { documentNo }
+}
+
 // تعديل يدوي كامل للمخالفة — مقتصر على مدير النظام (admin) فقط.
 // يسمح بتصحيح أي حقل ورفع نماذج ورقية ممسوحة إضافية للمخالفات اليدوية.
 export async function updateViolation(formData: FormData) {
@@ -910,6 +1013,7 @@ export async function updateViolation(formData: FormData) {
       violationType: str(formData.get("violationType")),
       category,
       entryMode: str(formData.get("entryMode"), "electronic"),
+      detectedBy: str(formData.get("detectedBy")),
       internalAction: str(formData.get("internalAction")),
       violationDate: dateOrNull(formData.get("violationDate")),
       violationTime: str(formData.get("violationTime")),
