@@ -118,15 +118,15 @@ export function PermitDialog({ action }: { action: (formData: FormData) => Promi
 
           {/* الحالة والصلاحية */}
           <div className="flex flex-col gap-2">
-            <Label htmlFor="status">حالة الاعتماد</Label>
+            <Label htmlFor="status">{t("permitDialog.approvalStatus")}</Label>
             <Select name="status" defaultValue={permitStatusOptions[0].value}>
               <SelectTrigger id="status">
-                <SelectValue placeholder="اختر..." />
+                <SelectValue placeholder={t("permitDialog.choose")} />
               </SelectTrigger>
               <SelectContent>
                 {permitStatusOptions.map((o) => (
                   <SelectItem key={o.value} value={o.value}>
-                    {o.label}
+                    {statusLabel(t, o.value)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -134,17 +134,17 @@ export function PermitDialog({ action }: { action: (formData: FormData) => Promi
           </div>
           <div className="hidden sm:block" />
           <div className="flex flex-col gap-2">
-            <Label htmlFor="validFrom">تاريخ الإصدار</Label>
+            <Label htmlFor="validFrom">{t("permitDialog.issueDate")}</Label>
             <Input id="validFrom" name="validFrom" type="date" dir="ltr" />
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="validTo">تاريخ الانتهاء</Label>
+            <Label htmlFor="validTo">{t("permitDialog.expiryDate")}</Label>
             <Input id="validTo" name="validTo" type="date" dir="ltr" />
           </div>
 
           <DialogFooter className="sm:col-span-2">
             <Button type="submit" disabled={isPending} className="w-full sm:w-auto">
-              {isPending ? "جارٍ الحفظ..." : "حفظ"}
+              {isPending ? t("permitDialog.saving") : t("permitDialog.save")}
             </Button>
           </DialogFooter>
         </form>

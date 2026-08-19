@@ -1,4 +1,7 @@
+"use client"
+
 import { cn } from "@/lib/utils"
+import { useI18n } from "@/lib/i18n/client"
 
 /**
  * يعرض قيمة حقل مستوردة من السجل الأصلي.
@@ -13,21 +16,22 @@ export function MissingOriginalField({
   value: string | null | undefined
   className?: string
 }) {
+  const { t } = useI18n()
   const has = value != null && String(value).trim() !== ""
   if (has) {
     return <span className={cn("text-muted-foreground", className)}>{value}</span>
   }
   return (
     <span
-      title="غير متوفر بالسجل الأصلي"
+      title={t("badges.notInSource")}
       className={cn(
         "inline-flex items-center gap-1 rounded-full border border-dashed border-border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground/70",
         className,
       )}
     >
       <span aria-hidden>—</span>
-      <span className="sr-only">غير متوفر بالسجل الأصلي</span>
-      <span className="not-sr-only text-[10px]">غير مسجل</span>
+      <span className="sr-only">{t("badges.notInSource")}</span>
+      <span className="not-sr-only text-[10px]">{t("badges.notRecorded")}</span>
     </span>
   )
 }
