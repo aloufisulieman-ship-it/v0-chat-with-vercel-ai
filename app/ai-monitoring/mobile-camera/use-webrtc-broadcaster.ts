@@ -44,6 +44,12 @@ export function useWebrtcBroadcaster(opts: {
   const [viewerCount, setViewerCount] = useState(0)
   // رسالة خطأ قناة الإشارات الكاملة (401/403…) لعرضها للمفتش بدل الفشل الصامت.
   const [error, setError] = useState<string | null>(null)
+  // تدفّق صوت التحدّث القادم من المدير (talk-back) ليُشغَّل على جهاز المفتش.
+  const [talkbackStream, setTalkbackStream] = useState<MediaStream | null>(null)
+  // هل يتحدّث المدير الآن (مسار صوت وارد نشط وغير مكتوم)؟ لعرض مؤشر "المدير يتحدّث".
+  const [managerTalking, setManagerTalking] = useState(false)
+  // تدفّق مجمّع ثابت نضيف إليه مسارات الصوت الواردة من المشاهدين ونزيلها عند انتهائها.
+  const talkbackStreamRef = useRef<MediaStream | null>(null)
 
   const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map())
   const lastIdRef = useRef(0)
@@ -77,6 +83,36 @@ export function useWebrtcBroadcaster(opts: {
     const peers = peersRef.current
 
     const updateCount = () => setViewerCount(peers.size)
+
+    // تدفّق مجمّع لصوت التحدّث الوارد من المشاهدين (المدير). نبقيه ثابتاً ونعرّض نسخة
+    // جديدة عند تغيّر مساراته حتى يعيد عنصر <audio> ربط المصدر.
+    const ensureTalkbackStream = () => {
+      if (!talkbackStreamRef.current) talkbackStreamRef.current = new MediaStream()
+      return talkbackStreamRef.current
+    }
+    const publishTalkback = () => {
+      const s = talkbackStreamRef.current
+      const tracks = s ? s.getAudioTracks() : []
+      setTalkbackStream(tracks.length > 0 ? new MediaStream(tracks) : null)
+      setManagerTalking(tracks.some((t) => t.readyState === "live" && !t.muted && t.enabled))
+    }
+    // ربط مسار صوت وارد من مشاهد بالتدفّق المجمّع، مع تتبّع بدء/انتهاء/كتم الحديث.
+    const attachRemoteAudio = (track: MediaStreamTrack) => {
+      const s = ensureTalkbackStream()
+      s.addTrack(track)
+      publishTalkback()
+      const refresh = () => publishTalkback()
+      track.addEventListener("mute", refresh)
+      track.addEventListener("unmute", refresh)
+      track.addEventListener("ended", () => {
+        try {
+          s.removeTrack(track)
+        } catch {
+          /* تجاهل */
+        }
+        publishTalkback()
+      })
+    }
 
     const closePeer = (viewerSessionId: string) => {
       const pc = peers.get(viewerSessionId)
@@ -114,6 +150,12 @@ export function useWebrtcBroadcaster(opts: {
       if (videoTrack) pc.addTrack(videoTrack, stream)
       const audioTrack = stream.getAudioTracks()[0]
       if (audioTrack) pc.addTrack(audioTrack, stream)
+
+      // استقبال صوت التحدّث (talk-back) القادم من المدير: أي مسار صوتي وارد يُوجَّه
+      // إلى التدفّق المجمّع ليُشغَّل على جهاز المفتش. (الفيديو صادر فقط فلا يصلنا هنا.)
+      pc.ontrack = (e) => {
+        if (e.track.kind === "audio") attachRemoteAudio(e.track)
+      }
 
       pc.onicecandidate = (e) => {
         if (e.candidate) {
@@ -193,8 +235,12 @@ export function useWebrtcBroadcaster(opts: {
       }
       peers.clear()
       setViewerCount(0)
+      talkbackStreamRef.current?.getTracks().forEach((t) => t.stop())
+      talkbackStreamRef.current = null
+      setTalkbackStream(null)
+      setManagerTalking(false)
     }
   }, [active, getStream])
 
-  return { viewerCount, error, replaceVideoTrack }
+  return { viewerCount, error, replaceVideoTrack, talkbackStream, managerTalking }
 }
