@@ -88,3 +88,23 @@ export function violationTypeLabel(t: TFunction, value: string): string {
   const translated = t(key)
   return translated === key ? value : translated
 }
+
+// مولّد مساعد عام: يترجم عبر مساحة محددة مع الرجوع إلى القيمة الأصلية.
+function makeLabeler(ns: string) {
+  return (t: TFunction, value: string): string => {
+    const key = `${ns}.${value}`
+    const translated = t(key)
+    return translated === key ? value : translated
+  }
+}
+
+// خيارات نموذج الحادثة (قيم ثابتة) وأنواع الحوادث المخزّنة بالعربية.
+export const incidentSeverityLabel = makeLabeler("incidentSeverity")
+export const incidentStatusOptLabel = makeLabeler("incidentStatusOpt")
+export const partyAffiliationLabel = makeLabeler("partyAffiliation")
+export const partyInjuryLabel = makeLabeler("partyInjury")
+export const partyHospitalizedLabel = makeLabeler("partyHospitalized")
+export const incidentTypeCatalogLabel = makeLabeler("incidentTypes")
+
+// حالة مسار الإحالة (HR / المالية): pending | in_review | closed.
+export const refStatusLabel = makeLabeler("refStatus")

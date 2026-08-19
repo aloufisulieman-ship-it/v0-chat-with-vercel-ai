@@ -5,14 +5,15 @@ import { Button } from "@/components/ui/button"
 import { Eye, Users, Ban, AlertTriangle } from "lucide-react"
 import { requireModule } from "@/lib/session"
 import { getHrViolations, getHrIncidents, updateHrViolation, updateHrIncident } from "@/app/actions/hr"
-import { statusLabels, severityLabels } from "@/lib/labels"
-import { categoryLabels } from "@/lib/violation-category"
+import { getServerT } from "@/lib/i18n/server"
+import { statusLabel, severityLabel, categoryLabel } from "@/lib/i18n/labels"
 import { formatParties } from "@/lib/incident-types"
 import { normalizeHrStatus, parseHrAttachments } from "@/lib/hr-status"
 import { HrActionCard } from "./hr-action-card"
 
 export default async function HrPage() {
   const user = await requireModule("hr")
+  const { t } = await getServerT()
   const [violations, incidents] = await Promise.all([getHrViolations(), getHrIncidents()])
 
   const pendingViolations = violations.filter((v) => normalizeHrStatus(v.hrStatus) !== "closed").length
@@ -20,22 +21,22 @@ export default async function HrPage() {
 
   return (
     <AppShell
-      title="الموارد البشرية"
-      subtitle="متابعة المخالفات والحوادث المحوّلة إلى الموارد البشرية واتخاذ الإجراء المناسب"
+      title={t("hr.title")}
+      subtitle={t("hr.subtitle")}
       user={user}
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <KpiCard label="مخالفات محوّلة" value={violations.length} icon={Ban} tone="blue" />
-        <KpiCard label="حوادث موظفين" value={incidents.length} icon={AlertTriangle} tone="accent" />
-        <KpiCard label="بنود قيد المعالجة" value={pendingViolations + pendingIncidents} icon={Users} tone="primary" />
+        <KpiCard label={t("hr.kpiViolations")} value={violations.length} icon={Ban} tone="blue" />
+        <KpiCard label={t("hr.kpiIncidents")} value={incidents.length} icon={AlertTriangle} tone="accent" />
+        <KpiCard label={t("hr.kpiPending")} value={pendingViolations + pendingIncidents} icon={Users} tone="primary" />
       </div>
 
       {/* القائمة الأولى: المخالفات المحوّلة للموارد البشرية */}
       <section className="mt-8">
-        <h2 className="mb-3 text-lg font-semibold text-foreground">المخالفات المحوّلة للموارد البشرية</h2>
+        <h2 className="mb-3 text-lg font-semibold text-foreground">{t("hr.violationsSection")}</h2>
         {violations.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-            لا توجد مخالفات محوّلة إلى الموارد البشرية.
+            {t("hr.noViolations")}
           </p>
         ) : (
           <div className="flex flex-col gap-4">
@@ -50,10 +51,10 @@ export default async function HrPage() {
                 closedBy={v.hrClosedBy ?? ""}
                 closedAt={v.hrClosedAt ? v.hrClosedAt.toISOString() : ""}
                 rows={[
-                  { label: "رقم المخالفة", value: <span dir="ltr" className="font-mono text-xs">{v.documentNo || "-"}</span> },
-                  { label: "اسم الموظف", value: v.employeeName },
-                  { label: "نوع المخالفة", value: v.violationType || "-" },
-                  { label: "التاريخ", value: <span dir="ltr" className="font-mono text-xs">{v.violationDate ?? "-"}</span> },
+                  { label: t("hr.violationNo"), value: <span dir="ltr" className="font-mono text-xs">{v.documentNo || "-"}</span> },
+                  { label: t("hr.employeeName"), value: v.employeeName },
+                  { label: t("hr.violationType"), value: v.violationType || "-" },
+                  { label: t("hr.date"), value: <span dir="ltr" className="font-mono text-xs">{v.violationDate ?? "-"}</span> },
                 ]}
                 initialAction={v.hrAction ?? ""}
                 initialDate={v.hrActionDate ?? ""}
@@ -62,28 +63,28 @@ export default async function HrPage() {
                   <RecordDetailsDialog
                     module="violations"
                     recordId={v.id}
-                    title={`مخالفة: ${v.employeeName}`}
-                    subtitle="نموذج مخالفة رسمي"
+                    title={`${t("hr.violationPrefix")} ${v.employeeName}`}
+                    subtitle={t("hr.violationReport")}
                     documentNo={v.documentNo ?? undefined}
                     trigger={
                       <Button type="button" variant="outline" size="sm">
                         <Eye className="size-4" />
-                        عرض التفاصيل
+                        {t("hr.viewDetails")}
                       </Button>
                     }
                     fields={[
-                      { label: "اسم الموظف", value: v.employeeName },
-                      { label: "الرقم الوظيفي", value: v.employeeNo || "-" },
-                      { label: "نوع المخالفة", value: v.violationType || "-" },
-                      { label: "التصنيف", value: categoryLabels[v.category ?? "internal"] ?? "-" },
-                      { label: "الإجراء الداخلي", value: v.internalAction || "-" },
-                      { label: "التاريخ", value: v.violationDate ?? "-" },
-                      { label: "المكان", value: v.place || "-" },
-                      { label: "وصف المخالفة", value: v.description || "-" },
-                      { label: "إجراء الموارد البشرية", value: v.hrAction || "-" },
-                      { label: "تاريخ إجراء HR", value: v.hrActionDate ?? "-" },
-                      { label: "ملاحظات HR", value: v.hrNotes || "-" },
-                      { label: "الحالة", value: statusLabels[v.status ?? ""] ?? "-" },
+                      { label: t("hr.employeeName"), value: v.employeeName },
+                      { label: t("hr.employeeNo"), value: v.employeeNo || "-" },
+                      { label: t("hr.violationType"), value: v.violationType || "-" },
+                      { label: t("hr.category"), value: categoryLabel(t, v.category ?? "internal") },
+                      { label: t("hr.internalAction"), value: v.internalAction || "-" },
+                      { label: t("hr.date"), value: v.violationDate ?? "-" },
+                      { label: t("hr.place"), value: v.place || "-" },
+                      { label: t("hr.violationDesc"), value: v.description || "-" },
+                      { label: t("hr.hrAction"), value: v.hrAction || "-" },
+                      { label: t("hr.hrActionDate"), value: v.hrActionDate ?? "-" },
+                      { label: t("hr.hrNotes"), value: v.hrNotes || "-" },
+                      { label: t("hr.status"), value: v.status ? statusLabel(t, v.status) : "-" },
                     ]}
                     initialAttachments={[]}
                   />
