@@ -35,6 +35,20 @@ export function detectionTypeLabel(t: TFunction, value: string): string {
   return translated === key ? value : translated
 }
 
+// حالة اكتشاف المراقبة الذكية (new | acknowledged | resolved | false_positive).
+// تُعرَّف في namespace status بمفاتيح camelCase، لذا نطبّع snake_case أولاً.
+export function detectionStatusLabel(t: TFunction, value: string): string {
+  const map: Record<string, string> = {
+    new: "status.new",
+    acknowledged: "status.acknowledged",
+    resolved: "status.resolved",
+    false_positive: "status.falsePositive",
+  }
+  const key = map[value] ?? `status.${value}`
+  const translated = t(key)
+  return translated === key ? value : translated
+}
+
 export function departmentLabel(t: TFunction, value: string): string {
   const key = `department.${value}`
   const translated = t(key)

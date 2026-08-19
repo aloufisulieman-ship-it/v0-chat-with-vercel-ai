@@ -17,12 +17,14 @@ import { IncidentTrendChart, IncidentTypeChart, SeverityChart } from "@/componen
 import { StatusBadge, SeverityBadge } from "@/components/status-badge"
 import { requireUser } from "@/lib/session"
 import { getDashboardData } from "@/app/actions/hse"
-import { incidentTypeLabels } from "@/lib/labels"
-import { categoryLabels } from "@/lib/violation-category"
+import { getServerT } from "@/lib/i18n/server"
+import { incidentTypeLabel, severityLabel } from "@/lib/i18n/labels"
+import { categoryLabel } from "@/lib/i18n/violation-category-label"
 import { effectiveViolationStatus, isViolationClosed } from "@/lib/violation-status"
 
 export default async function DashboardPage() {
   const user = await requireUser()
+  const { locale, t } = await getServerT()
   const { incidents, inspections, permits, risks, actions, observations, violations } = await getDashboardData()
 
   // مفتوحة = غير مغلقة وفق الحالة الفعلية (مسار الإحالة) لا الحالة المخزّنة.
@@ -42,9 +44,9 @@ export default async function DashboardPage() {
       ? Math.round(inspections.reduce((s, i) => s + (i.compliance ?? 0), 0) / inspections.length)
       : 0
 
-  // اتجاه الحوادث حسب الشهر (آخر 6 أشهر)
+  // اتجاه الحوادث حسب الشهر (آخر 6 أشهر) — أسماء الأشهر عبر Intl حسب اللغة.
   const now = new Date()
-  const monthNames = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"]
+  const monthFmt = new Intl.DateTimeFormat(locale === "en" ? "en-US" : "ar", { month: "long" })
   const trend: { month: string; incidents: number }[] = []
   for (let k = 5; k >= 0; k--) {
     const d = new Date(now.getFullYear(), now.getMonth() - k, 1)
@@ -52,14 +54,14 @@ export default async function DashboardPage() {
       const ref = i.incidentDate ? new Date(i.incidentDate) : new Date(i.createdAt)
       return ref.getFullYear() === d.getFullYear() && ref.getMonth() === d.getMonth()
     }).length
-    trend.push({ month: monthNames[d.getMonth()], incidents: count })
+    trend.push({ month: monthFmt.format(d), incidents: count })
   }
 
   // الحوادث حسب النوع
   const typeCounts = new Map<string, number>()
   incidents.forEach((i) => typeCounts.set(i.type ?? "near_miss", (typeCounts.get(i.type ?? "near_miss") ?? 0) + 1))
   const typeData = Array.from(typeCounts.entries()).map(([type, count]) => ({
-    type: incidentTypeLabels[type] ?? type,
+    type: incidentTypeLabel(t, type),
     count,
   }))
 
@@ -70,9 +72,8 @@ export default async function DashboardPage() {
     high: "var(--color-chart-3)",
     critical: "var(--color-destructive)",
   }
-  const sevNames: Record<string, string> = { low: "منخفض", medium: "متوسط", high: "عالٍ", critical: "حرج" }
   const severityData = ["low", "medium", "high", "critical"].map((s) => ({
-    name: sevNames[s],
+    name: severityLabel(t, s),
     value: incidents.filter((i) => i.severity === s).length,
     fill: sevFill[s],
   }))
