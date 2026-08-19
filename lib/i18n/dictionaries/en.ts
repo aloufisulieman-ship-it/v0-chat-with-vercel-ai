@@ -1695,4 +1695,16 @@ export const en: Dictionary = {
     mailAttachNote: "Note: The full PDF (including photos and signatures) was downloaded to your device — please attach it to this message.",
     mailSubject: "{title} report",
   },
+
+  dashboardCharts: {
+    noData: "Not enough data to display the chart yet",
+    trendTitle: "Incident Trend",
+    trendSubtitle: "By registration month",
+    incidentsSeries: "Incidents",
+    byTypeTitle: "Incidents by Type",
+    byTypeSubtitle: "General classification",
+    countSeries: "Count",
+    severityTitle: "Severity Distribution",
+    severitySubtitle: "By incident level",
+  },
   }
