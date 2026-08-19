@@ -12,6 +12,8 @@ export const user = pgTable("user", {
   department: text("department").notNull().default(""),
   // JSON array of module values the user can access, e.g. ["dashboard","violations"]
   permissions: text("permissions").notNull().default("[]"),
+  // تفضيل لغة الواجهة لكل مستخدم ("ar" | "en") — يبقى ثابتًا عبر كل الجلسات.
+  locale: text("locale").notNull().default("ar"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
@@ -465,3 +467,21 @@ export const document = pgTable("document", {
   reviewDate: date("reviewDate"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
+
+// ذاكرة ترجمة البيانات المُدخلة (أوصاف/ملاحظات) عبر الذكاء الاصطناعي.
+// نُخزّن الترجمة مرة واحدة لكل (نص مصدر + لغة هدف) لتجنّب تكرار الاستدعاءات
+// وتثبيت النتيجة. sourceHash = بصمة النص المصدر لتسريع البحث وتفادي مفاتيح ضخمة.
+export const translationCache = pgTable(
+  "translation_cache",
+  {
+    id: serial("id").primaryKey(),
+    sourceHash: text("source_hash").notNull(),
+    sourceText: text("source_text").notNull(),
+    targetLocale: text("target_locale").notNull(), // "ar" | "en"
+    translatedText: text("translated_text").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    lookupIdx: uniqueIndex("translation_cache_lookup_idx").on(t.sourceHash, t.targetLocale),
+  }),
+)

@@ -1,0 +1,283 @@
+// قاموس الترجمة العربية — المصدر المرجعي لكل نصوص الواجهة الثابتة.
+// منظّم بمساحات أسماء (namespaces) لكل وحدة/صفحة لتسهيل الصيانة والإضافة.
+// أي نص جديد يُضاف هنا أولاً ثم يُترجَم في en.ts بنفس المفتاح.
+
+export const ar = {
+  // عام ومشترك عبر كل الصفحات
+  common: {
+    appName: "نظام السلامة والصحة المهنية",
+    save: "حفظ",
+    cancel: "إلغاء",
+    delete: "حذف",
+    edit: "تعديل",
+    add: "إضافة",
+    search: "بحث",
+    filter: "تصفية",
+    all: "الكل",
+    loading: "جارٍ التحميل…",
+    noData: "لا توجد بيانات",
+    actions: "الإجراءات",
+    status: "الحالة",
+    date: "التاريخ",
+    time: "الوقت",
+    details: "التفاصيل",
+    view: "عرض",
+    close: "إغلاق",
+    confirm: "تأكيد",
+    submit: "إرسال",
+    back: "رجوع",
+    next: "التالي",
+    previous: "السابق",
+    yes: "نعم",
+    no: "لا",
+    logout: "تسجيل الخروج",
+    profile: "الملف الشخصي",
+    settings: "الإعدادات",
+    language: "اللغة",
+    required: "مطلوب",
+    optional: "اختياري",
+    total: "الإجمالي",
+    today: "اليوم",
+    week: "الأسبوع",
+    month: "الشهر",
+  },
+
+  // القائمة الجانبية والتنقّل
+  nav: {
+    dashboard: "لوحة التحكم",
+    violations: "المخالفات",
+    permits: "التصاريح",
+    training: "التدريب",
+    incidents: "الحوادث",
+    aiMonitoring: "المراقبة الذكية",
+    reports: "التقارير",
+    users: "إدارة المستخدمين",
+    inspections: "عمليات التفتيش",
+    contractors: "المقاولون",
+    employees: "سجل الموظفين",
+    patrol: "الجولة التفتيشية",
+    brandTitle: "نظام HSE",
+    brandSubtitle: "الصحة والسلامة والبيئة",
+  },
+
+  // لوحة التحكم الرئيسية
+  dashboard: {
+    title: "لوحة التحكم",
+    subtitle: "نظرة عامة على مؤشرات السلامة والصحة المهنية",
+    openViolations: "المخالفات المفتوحة",
+    activePermits: "التصاريح النشطة",
+    trainingCompliance: "الالتزام بالتدريب",
+    recentIncidents: "الحوادث الأخيرة",
+    quickActions: "إجراءات سريعة",
+    recentActivity: "النشاط الأخير",
+  },
+
+  // المخالفات
+  violations: {
+    title: "المخالفات",
+    subtitle: "تسجيل ومتابعة مخالفات السلامة",
+    newViolation: "مخالفة جديدة",
+    violationNo: "رقم المخالفة",
+    category: "التصنيف",
+    severity: "الخطورة",
+    location: "الموقع",
+    reportedBy: "بلّغ عنها",
+    assignedTo: "مُسندة إلى",
+    dueDate: "تاريخ الاستحقاق",
+    description: "الوصف",
+    correctiveAction: "الإجراء التصحيحي",
+    evidence: "الإثبات",
+    detectedBy: "رُصدت بواسطة",
+    noViolations: "لا توجد مخالفات",
+  },
+
+  // التصاريح
+  permits: {
+    title: "تصاريح العمل",
+    subtitle: "إدارة تصاريح العمل الآمن",
+    newPermit: "تصريح جديد",
+    permitNo: "رقم التصريح",
+    permitType: "نوع التصريح",
+    requestedBy: "طلب بواسطة",
+    validFrom: "صالح من",
+    validTo: "صالح حتى",
+    approvedBy: "اعتمده",
+    workLocation: "موقع العمل",
+    noPermits: "لا توجد تصاريح",
+  },
+
+  // التدريب
+  training: {
+    title: "التدريب",
+    subtitle: "إدارة الدورات والالتزام التدريبي",
+    newCourse: "دورة جديدة",
+    courseName: "اسم الدورة",
+    trainer: "المدرّب",
+    attendees: "الحضور",
+    completionRate: "نسبة الإنجاز",
+    expiryDate: "تاريخ الانتهاء",
+    certificate: "الشهادة",
+    noCourses: "لا توجد دورات",
+  },
+
+  // الحوادث
+  incidents: {
+    title: "الحوادث",
+    subtitle: "تسجيل وتحليل الحوادث",
+    newIncident: "حادثة جديدة",
+    incidentNo: "رقم الحادثة",
+    incidentType: "نوع الحادثة",
+    injuryType: "نوع الإصابة",
+    rootCause: "السبب الجذري",
+    reportedAt: "وقت الإبلاغ",
+    investigation: "التحقيق",
+    noIncidents: "لا توجد حوادث",
+  },
+
+  // المراقبة الذكية
+  aiMonitoring: {
+    title: "المراقبة الذكية",
+    subtitle: "رصد المخالفات آنيًا عبر كاميرات الذكاء الاصطناعي",
+    liveDetections: "البث المباشر للاكتشافات",
+    connectedCameras: "الكاميرات المتصلة",
+    liveZones: "مناطق الرصد الحية",
+    mobileCamera: "كاميرا الهاتف",
+    detectionType: "المخالفة",
+    confidence: "الثقة",
+    inspector: "المفتش",
+    snapshot: "لقطة",
+    evidenceSnapshot: "لقطة الإثبات",
+    talkToInspector: "التحدّث مع المفتش",
+    talking: "تتحدّث الآن",
+    managerWatching: "المدير يشاهد مباشرة",
+    managerTalking: "المدير يتحدّث إليك",
+    noDetections: "لا توجد اكتشافات",
+    loadingSnapshot: "جارٍ تحميل اللقطة…",
+    snapshotFailed: "تعذّر تحميل لقطة الإثبات.",
+  },
+
+  // الحالات (statuses) — قيم مشتركة عبر الوحدات
+  status: {
+    new: "جديدة",
+    open: "مفتوحة",
+    inProgress: "قيد المعالجة",
+    resolved: "مغلقة",
+    closed: "مغلقة",
+    acknowledged: "تم الاطّلاع",
+    falsePositive: "إنذار خاطئ",
+    pending: "قيد الانتظار",
+    approved: "معتمد",
+    rejected: "مرفوض",
+    expired: "منتهٍ",
+    active: "نشط",
+    completed: "مكتمل",
+    converted: "محوّلة إلى مخالفة",
+  },
+
+  // الخطورة
+  severity: {
+    low: "منخفضة",
+    medium: "متوسطة",
+    high: "عالية",
+    critical: "حرجة",
+  },
+
+  // أنواع مخالفات المراقبة الذكية
+  detectionTypes: {
+    no_ppe: "عدم ارتداء معدات الوقاية",
+    traffic_congestion: "ازدحام مروري",
+    unsafe_stacking: "تكديس غير آمن",
+    overspeed: "سرعة زائدة",
+    restricted_area: "دخول منطقة محظورة",
+    pedestrian_near_forklift: "اقتراب مشاة من رافعة",
+  },
+
+  // حالات عامة إضافية مخزّنة في قاعدة البيانات (تكمّل namespace status أعلاه).
+  dbStatus: {
+    open: "مفتوح",
+    in_progress: "قيد المعالجة",
+    investigating: "قيد التحقيق",
+    closed: "مغلق",
+    overdue: "متأخر",
+    scheduled: "مجدول",
+    pending: "بانتظار الموافقة",
+    approved: "معتمد",
+    rejected: "مرفوض",
+    active: "ساري",
+    expired: "منتهٍ",
+  },
+
+  // أنواع الحوادث
+  incidentType: {
+    near_miss: "حادث وشيك",
+    injury: "إصابة",
+    property: "أضرار ممتلكات",
+    environmental: "بيئي",
+    fire: "حريق",
+    chemical: "كيميائي",
+  },
+
+  // أنواع التصاريح
+  permitType: {
+    construction: "تصريح عمل إنشائي",
+    forklift: "تصريح قيادة رافعة شوكية",
+    tuktuk: "تصريح قيادة توك توك",
+    visitor: "بطاقة زائر",
+    trainee: "بطاقة متدرب",
+  },
+
+  // الأقسام
+  department: {
+    hr: "الموارد البشرية",
+    workshop: "الورشة",
+    inspector: "مفتش السلامة",
+    gm: "المدير العام",
+    operations: "العمليات",
+  },
+
+  // وحدات النظام (للصلاحيات والقائمة)
+  modules: {
+    dashboard: "لوحة التحكم",
+    incidents: "الحوادث",
+    inspections: "التفتيش",
+    risks: "تقييم المخاطر",
+    permits: "تصاريح العمل",
+    training: "التدريب",
+    violations: "المخالفات",
+    ai_monitoring: "المراقبة الذكية (AI)",
+    hr: "الموارد البشرية",
+    finance: "المالية",
+    actions: "الإجراءات التصحيحية",
+    audits: "التدقيق",
+    documents: "الوثائق",
+    reports: "التقارير",
+    settings: "الإعدادات",
+    users: "إدارة المستخدمين",
+  },
+
+  // رسائل وتنبيهات
+  toast: {
+    saved: "تم الحفظ بنجاح",
+    deleted: "تم الحذف",
+    updated: "تم التحديث",
+    error: "حدث خطأ",
+    statusUpdated: "تم تحديث الحالة",
+    languageChanged: "تم تغيير اللغة",
+  },
+
+  // المصادقة
+  auth: {
+    login: "تسجيل الدخول",
+    email: "البريد الإلكتروني",
+    password: "كلمة المرور",
+    signIn: "دخول",
+    signOut: "خروج",
+  },
+}
+
+// نوع القاموس: نفس بنية `ar` لكن بقيم نصية (string) حتى تُطابقه الترجمات الأخرى.
+// DeepStringify يحوّل كل القيم الحرفية إلى string مع الحفاظ على شكل المفاتيح.
+type DeepStringify<T> = {
+  [K in keyof T]: T[K] extends object ? DeepStringify<T[K]> : string
+}
+export type Dictionary = DeepStringify<typeof ar>

@@ -28,28 +28,30 @@ import {
 import { cn } from "@/lib/utils"
 import { authClient } from "@/lib/auth-client"
 import { hasModuleAccess, type ModuleKey } from "@/lib/permissions"
+import { useI18n } from "@/lib/i18n/client"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
-// module: gates the item by the user's module access. Admins always see everything.
-const nav: { href: string; label: string; icon: typeof LayoutDashboard; module: ModuleKey }[] = [
-  { href: "/", label: "لوحة التحكم", icon: LayoutDashboard, module: "dashboard" },
-  { href: "/incidents", label: "الحوادث", icon: AlertTriangle, module: "incidents" },
-  { href: "/inspections", label: "التفتيش", icon: ClipboardCheck, module: "inspections" },
-  { href: "/risks", label: "تقييم المخاطر", icon: ShieldAlert, module: "risks" },
-  { href: "/permits", label: "تصاريح العمل", icon: FileSignature, module: "permits" },
-  { href: "/training", label: "التدريب", icon: GraduationCap, module: "training" },
-  { href: "/employees", label: "سجل الموظفين", icon: Users, module: "training" },
-  { href: "/violations", label: "المخالفات", icon: Ban, module: "violations" },
-  { href: "/patrol", label: "الجولة التفتيشية", icon: Footprints, module: "violations" },
-  { href: "/ai-monitoring", label: "المراقبة الذكية (AI)", icon: Cctv, module: "ai_monitoring" },
-  { href: "/hr", label: "الموارد البشرية", icon: UserCog, module: "hr" },
-  { href: "/finance", label: "المالية", icon: Banknote, module: "finance" },
-  { href: "/actions", label: "الإجراءات التصحيحية", icon: CheckSquare, module: "actions" },
-  { href: "/audits", label: "التدقيق", icon: ClipboardList, module: "audits" },
-  { href: "/documents", label: "الوثائق", icon: FolderKanban, module: "documents" },
-  { href: "/reports", label: "التقارير", icon: BarChart3, module: "reports" },
-  { href: "/settings", label: "الإعدادات", icon: Settings, module: "settings" },
+// labelKey: مفتاح ترجمة في namespace modules (mostly) أو nav — يُترجَم وقت العرض.
+// module: يحكم ظهور العنصر حسب صلاحية المستخدم. الأدمن يرى كل شيء.
+const nav: { href: string; labelKey: string; icon: typeof LayoutDashboard; module: ModuleKey }[] = [
+  { href: "/", labelKey: "modules.dashboard", icon: LayoutDashboard, module: "dashboard" },
+  { href: "/incidents", labelKey: "modules.incidents", icon: AlertTriangle, module: "incidents" },
+  { href: "/inspections", labelKey: "modules.inspections", icon: ClipboardCheck, module: "inspections" },
+  { href: "/risks", labelKey: "modules.risks", icon: ShieldAlert, module: "risks" },
+  { href: "/permits", labelKey: "modules.permits", icon: FileSignature, module: "permits" },
+  { href: "/training", labelKey: "modules.training", icon: GraduationCap, module: "training" },
+  { href: "/employees", labelKey: "nav.employees", icon: Users, module: "training" },
+  { href: "/violations", labelKey: "modules.violations", icon: Ban, module: "violations" },
+  { href: "/patrol", labelKey: "nav.patrol", icon: Footprints, module: "violations" },
+  { href: "/ai-monitoring", labelKey: "modules.ai_monitoring", icon: Cctv, module: "ai_monitoring" },
+  { href: "/hr", labelKey: "modules.hr", icon: UserCog, module: "hr" },
+  { href: "/finance", labelKey: "modules.finance", icon: Banknote, module: "finance" },
+  { href: "/actions", labelKey: "modules.actions", icon: CheckSquare, module: "actions" },
+  { href: "/audits", labelKey: "modules.audits", icon: ClipboardList, module: "audits" },
+  { href: "/documents", labelKey: "modules.documents", icon: FolderKanban, module: "documents" },
+  { href: "/reports", labelKey: "modules.reports", icon: BarChart3, module: "reports" },
+  { href: "/settings", labelKey: "modules.settings", icon: Settings, module: "settings" },
 ]
 
 function initials(name: string) {
@@ -69,6 +71,7 @@ export function AppSidebar({
 }) {
   const pathname = usePathname()
   const router = useRouter()
+  const { t } = useI18n()
 
   // Dashboard and settings are always available so no user gets locked out (settings holds password change).
   const alwaysOn: ModuleKey[] = ["dashboard", "settings"]
@@ -79,7 +82,9 @@ export function AppSidebar({
     return alwaysOn.includes(item.module) || hasModuleAccess(user?.role, user?.permissions, item.module)
   })
   const items =
-    user?.role === "admin" ? [...visible, { href: "/users", label: "إدارة المستخدمين", icon: Users }] : visible
+    user?.role === "admin"
+      ? [...visible, { href: "/users", labelKey: "nav.users", icon: Users }]
+      : visible
 
   // شارة الإشعار: عدد بنود الموارد البشرية غير المعالجة (تُجلب فقط لمن يملك الوصول).
   const hrVisible = visible.some((item) => item.href === "/hr")
@@ -119,7 +124,9 @@ export function AppSidebar({
       )}
       <aside
         className={cn(
-          "fixed inset-y-0 right-0 z-50 flex w-72 flex-col bg-sidebar text-sidebar-foreground transition-transform lg:static lg:translate-x-0",
+          // في الشاشات الكبيرة: عنصر ثابت ضمن التدفق (يظهر تلقائيًا في جهة البداية حسب dir).
+          // في الجوال: درج علوي منزلق مثبّت في جهة النهاية (end) ويُخفى بالانزلاق خارجها.
+          "fixed inset-y-0 end-0 z-50 flex w-72 flex-col bg-sidebar text-sidebar-foreground transition-transform lg:static lg:translate-x-0",
           open ? "translate-x-0" : "translate-x-full lg:translate-x-0",
         )}
       >
@@ -129,14 +136,14 @@ export function AppSidebar({
               <ShieldCheck className="size-6" />
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-bold leading-tight">نظام HSE</span>
-              <span className="text-xs text-sidebar-foreground/60">الصحة والسلامة والبيئة</span>
+              <span className="text-sm font-bold leading-tight">{t("nav.brandTitle")}</span>
+              <span className="text-xs text-sidebar-foreground/60">{t("nav.brandSubtitle")}</span>
             </div>
           </div>
           <button
             onClick={onClose}
             className="rounded-md p-1 text-sidebar-foreground/70 hover:bg-sidebar-accent lg:hidden"
-            aria-label="إغلاق القائمة"
+            aria-label={t("common.close")}
           >
             <X className="size-5" />
           </button>
@@ -161,7 +168,7 @@ export function AppSidebar({
                     )}
                   >
                     <Icon className="size-5 shrink-0" />
-                    <span className="flex-1">{item.label}</span>
+                    <span className="flex-1">{t(item.labelKey)}</span>
                     {badgeCount > 0 && (
                       <span
                         className={cn(
@@ -170,7 +177,7 @@ export function AppSidebar({
                             ? "bg-sidebar-primary-foreground text-sidebar-primary"
                             : "bg-destructive text-destructive-foreground",
                         )}
-                        aria-label={`${badgeCount} بنود جديدة`}
+                        aria-label={`${badgeCount}`}
                       >
                         {badgeCount}
                       </span>
@@ -199,7 +206,7 @@ export function AppSidebar({
             className="mt-3 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
           >
             <LogOut className="size-5 shrink-0" />
-            تسجيل الخروج
+            {t("common.logout")}
           </button>
         </div>
       </aside>

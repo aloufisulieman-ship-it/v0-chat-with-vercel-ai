@@ -14,6 +14,7 @@ export type AppUser = {
   status: string
   department: string
   permissions: string
+  locale: string
 }
 
 const userColumns = {
@@ -24,6 +25,7 @@ const userColumns = {
   status: userTable.status,
   department: userTable.department,
   permissions: userTable.permissions,
+  locale: userTable.locale,
 }
 
 // Returns the authenticated user with role/status, or redirects to sign-in.
