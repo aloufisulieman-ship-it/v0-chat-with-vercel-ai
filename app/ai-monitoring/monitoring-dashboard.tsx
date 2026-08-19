@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import useSWR from "swr"
+import useSWR, { mutate } from "swr"
 import {
   HardHat,
   TrafficCone,
@@ -39,6 +39,11 @@ import {
 import { updateDetectionStatus, deleteDetection } from "@/app/actions/ai-monitoring"
 import { ConnectedCameras } from "./connected-cameras"
 import { AcceptDetectionDialog, LinkedViolationLink } from "./accept-detection-dialog"
+import { toast } from "@/hooks/use-toast"
+
+// مفتاح SWR لجدول الاكتشافات — نستخدمه لإعادة الجلب فور تغيير حالة أي صف
+// حتى يتحدّث الجدول مباشرةً بدل الانتظار لدورة التحديث التلقائي (10 ثوانٍ).
+const DETECTIONS_KEY = "/api/ai-monitoring/detections"
 
 export type DetectionDto = {
   id: number
@@ -49,7 +54,8 @@ export type DetectionDto = {
   detectionType: string
   severity: string
   confidenceScore: number
-  snapshotUrl: string
+  // توفّر لقطة إثبات لهذا الاكتشاف (اللقطة نفسها تُجلب عند فتح النافذة).
+  hasSnapshot: boolean
   detectedAt: string
   status: string
   acknowledgedBy: string
@@ -113,6 +119,80 @@ function Badge({ text, className }: { text: string; className: string }) {
   )
 }
 
+// نافذة عرض لقطة الإثبات — تجلب صورة base64 عند الطلب (فتح النافذة) بدل تحميلها
+// مع كل دورة تحديث للجدول، مع حالات تحميل/خطأ واضحة.
+function SnapshotDialog({
+  detectionDbId,
+  typeLabel,
+}: {
+  detectionDbId: number
+  typeLabel: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [src, setSrc] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [failed, setFailed] = useState(false)
+
+  async function load() {
+    setLoading(true)
+    setFailed(false)
+    try {
+      const res = await fetch(`/api/ai-monitoring/detections/${detectionDbId}/snapshot`)
+      if (!res.ok) throw new Error("failed")
+      const json = (await res.json()) as { snapshotUrl?: string }
+      if (json.snapshotUrl) setSrc(json.snapshotUrl)
+      else setFailed(true)
+    } catch {
+      setFailed(true)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o)
+        // نجلب اللقطة أول مرة تُفتح فيها النافذة فقط.
+        if (o && src === null && !loading) void load()
+      }}
+    >
+      <DialogTrigger asChild>
+        <button
+          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-muted"
+          aria-label="عرض لقطة الإثبات"
+        >
+          <Camera className="size-3.5" />
+          لقطة
+        </button>
+      </DialogTrigger>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>لقطة الإثبات — {typeLabel}</DialogTitle>
+        </DialogHeader>
+        {loading ? (
+          <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
+            جارٍ تحميل اللقطة…
+          </div>
+        ) : failed || !src ? (
+          <div className="flex h-48 items-center justify-center rounded-lg border border-border bg-muted text-sm text-muted-foreground">
+            تعذّر تحميل لقطة الإثبات.
+          </div>
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={src || "/placeholder.svg"}
+            alt={`لقطة إثبات ${typeLabel}`}
+            className="max-h-[70vh] w-full rounded-lg border border-border bg-muted object-contain"
+            onError={() => setFailed(true)}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export function MonitoringDashboard({
   initial,
   isAdmin,
@@ -121,7 +201,7 @@ export function MonitoringDashboard({
   isAdmin: boolean
 }) {
   const { data } = useSWR<{ detections: DetectionDto[] }>(
-    "/api/ai-monitoring/detections",
+    DETECTIONS_KEY,
     fetcher,
     { refreshInterval: 10000, fallbackData: { detections: initial } },
   )
@@ -198,6 +278,14 @@ export function MonitoringDashboard({
     setPending(id)
     try {
       await updateDetectionStatus(id, status)
+      // إعادة جلب الجدول فوراً حتى تظهر الحالة الجديدة دون انتظار التحديث الدوري.
+      await mutate(DETECTIONS_KEY)
+      toast({
+        title: "تم تحديث الحالة",
+        description: status === "false_positive" ? "تم وضع الاكتشاف كإنذار خاطئ." : "تم وضع الاكتشاف كـ «تم الاطّلاع».",
+      })
+    } catch (e) {
+      toast({ title: "تعذّر تحديث الحالة", description: (e as Error).message, variant: "destructive" })
     } finally {
       setPending(null)
     }
@@ -207,6 +295,11 @@ export function MonitoringDashboard({
     setPending(id)
     try {
       await deleteDetection(id)
+      // إعادة جلب الجدول فوراً حتى يختفي الصف المحذوف مباشرةً.
+      await mutate(DETECTIONS_KEY)
+      toast({ title: "تم الحذف", description: "تم حذف الاكتشاف نهائياً." })
+    } catch (e) {
+      toast({ title: "تعذّر الحذف", description: (e as Error).message, variant: "destructive" })
     } finally {
       setPending(null)
     }
@@ -251,7 +344,7 @@ export function MonitoringDashboard({
       <div>
         <div className="mb-3 flex items-center gap-2">
           <Radio className="size-4 text-primary" />
-          <h2 className="text-lg font-semibold text-foreground">مناطق ال��صد الحية</h2>
+          <h2 className="text-lg font-semibold text-foreground">مناطق الرصد الحية</h2>
         </div>
         {zones.length === 0 ? (
           <Card className="p-8 text-center text-sm text-muted-foreground">
@@ -433,31 +526,11 @@ export function MonitoringDashboard({
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        {d.snapshotUrl ? (
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <button
-                                className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-muted"
-                                aria-label="عرض لقطة الإثبات"
-                              >
-                                <Camera className="size-3.5" />
-                                لقطة
-                              </button>
-                            </DialogTrigger>
-                            <DialogContent className="max-w-lg">
-                              <DialogHeader>
-                                <DialogTitle>
-                                  ��قطة الإثبات — {detectionTypeLabels[d.detectionType]}
-                                </DialogTitle>
-                              </DialogHeader>
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={d.snapshotUrl || "/placeholder.svg"}
-                                alt={`لقطة إثبات ${detectionTypeLabels[d.detectionType]}`}
-                                className="w-full rounded-lg border border-border"
-                              />
-                            </DialogContent>
-                          </Dialog>
+                        {d.hasSnapshot ? (
+                          <SnapshotDialog
+                            detectionDbId={d.id}
+                            typeLabel={detectionTypeLabels[d.detectionType] ?? d.detectionType}
+                          />
                         ) : (
                           <span className="text-xs text-muted-foreground">-</span>
                         )}

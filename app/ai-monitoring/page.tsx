@@ -21,7 +21,8 @@ export default async function AiMonitoringPage() {
     detectionType: r.detectionType,
     severity: r.severity,
     confidenceScore: r.confidenceScore,
-    snapshotUrl: r.snapshotUrl,
+    // اللقطة تُجلب عند الطلب؛ نمرّر فقط علامة التوفّر لعرض زر «لقطة».
+    hasSnapshot: r.hasSnapshot,
     detectedAt: (r.detectedAt as unknown as Date)?.toISOString?.() ?? String(r.detectedAt),
     status: r.status,
     acknowledgedBy: r.acknowledgedBy ?? "",

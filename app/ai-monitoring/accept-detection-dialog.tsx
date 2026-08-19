@@ -29,7 +29,8 @@ type DetectionLike = {
   cameraLocation: string
   inspectorName: string
   cameraId: string
-  snapshotUrl: string
+  // توفّر لقطة إثبات (اللقطة نفسها تُجلب عند الطلب من مسار .../snapshot).
+  hasSnapshot: boolean
   notes: string
 }
 
@@ -39,6 +40,22 @@ export function AcceptDetectionDialog({ detection: d }: { detection: DetectionLi
   const [open, setOpen] = useState(false)
   const [category, setCategory] = useState<"internal" | "external" | null>(null)
   const [pending, setPending] = useState<null | "resolve" | "convert">(null)
+  // لقطة الإثبات تُجلب عند فتح النافذة (لا تأتي مع بيانات الجدول الخفيفة).
+  const [snapshot, setSnapshot] = useState<string | null>(null)
+  const [snapFailed, setSnapFailed] = useState(false)
+
+  async function loadSnapshot() {
+    if (!d.hasSnapshot || snapshot !== null) return
+    try {
+      const res = await fetch(`/api/ai-monitoring/detections/${d.id}/snapshot`)
+      if (!res.ok) throw new Error("failed")
+      const json = (await res.json()) as { snapshotUrl?: string }
+      if (json.snapshotUrl) setSnapshot(json.snapshotUrl)
+      else setSnapFailed(true)
+    } catch {
+      setSnapFailed(true)
+    }
+  }
 
   const typeLabel = detectionTypeLabels[d.detectionType] ?? d.detectionType
   const inspector = d.inspectorName || d.cameraId || "-"
@@ -90,6 +107,7 @@ export function AcceptDetectionDialog({ detection: d }: { detection: DetectionLi
       open={open}
       onOpenChange={(o) => {
         setOpen(o)
+        if (o) void loadSnapshot()
         if (!o) reset()
       }}
     >
@@ -173,16 +191,23 @@ export function AcceptDetectionDialog({ detection: d }: { detection: DetectionLi
             </ReviewRow>
           </div>
 
-          {/* لقطة الإثبات — تُرفق تلقائياً بالمخالفة */}
-          {d.snapshotUrl ? (
+          {/* لقطة الإثبات — تُرفق تلقائياً بالمخالفة (تُجلب عند فتح النافذة) */}
+          {d.hasSnapshot ? (
             <div className="flex flex-col gap-1.5">
               <span className="text-xs font-medium text-muted-foreground">لقطة الإثبات (تُرفق تلقائياً)</span>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={d.snapshotUrl || "/placeholder.svg"}
-                alt={`لقطة إثبات ${typeLabel}`}
-                className="max-h-48 w-full rounded-lg border border-border object-contain"
-              />
+              {snapshot ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={snapshot || "/placeholder.svg"}
+                  alt={`لقطة إثبات ${typeLabel}`}
+                  className="max-h-48 w-full rounded-lg border border-border bg-muted object-contain"
+                  onError={() => setSnapFailed(true)}
+                />
+              ) : (
+                <div className="flex h-32 items-center justify-center rounded-lg border border-border bg-muted text-xs text-muted-foreground">
+                  {snapFailed ? "تعذّر تحميل اللقطة." : "جارٍ تحميل اللقطة…"}
+                </div>
+              )}
             </div>
           ) : null}
         </div>

@@ -33,17 +33,47 @@ async function isManager(userId: string) {
 
 export type AiDetection = typeof aiDetection.$inferSelect
 
-// قائمة الاكتشافات مرتبة بالأحدث.
-export async function getDetections(): Promise<AiDetection[]> {
+// شكل صف الاكتشاف كما يُرسَل للوحة: بلا حقل base64 الثقيل، مع علامة توفّر لقطة.
+// (اللقطة نفسها تُجلب عند الطلب من مسار .../snapshot لتخفيف حمولة التحديث الدوري.)
+export type AiDetectionListItem = Omit<AiDetection, "snapshotUrl"> & {
+  snapshotUrl: string
+  hasSnapshot: boolean
+}
+
+// تحويل صف قاعدة البيانات إلى عنصر قائمة خفيف: نُفرّغ base64 الضخم ونضع علامة
+// hasSnapshot فقط. هذا يقلّص حمولة التحديث كل 10 ثوانٍ من عدة ميغابايت إلى كيلوبايتات.
+function toListItem(row: AiDetection): AiDetectionListItem {
+  const { snapshotUrl, ...rest } = row
+  return { ...rest, snapshotUrl: "", hasSnapshot: Boolean(snapshotUrl && snapshotUrl.length > 0) }
+}
+
+// قائمة الاكتشافات مرتبة بالأحدث (بدون base64 الثقيل — انظر toListItem).
+export async function getDetections(): Promise<AiDetectionListItem[]> {
   const userId = await requireHseReviewerId()
-  if (await isManager(userId)) {
-    return db.select().from(aiDetection).orderBy(desc(aiDetection.detectedAt))
-  }
-  return db
-    .select()
+  const rows = (await isManager(userId))
+    ? await db.select().from(aiDetection).orderBy(desc(aiDetection.detectedAt))
+    : await db
+        .select()
+        .from(aiDetection)
+        .where(eq(aiDetection.userId, userId))
+        .orderBy(desc(aiDetection.detectedAt))
+  return rows.map(toListItem)
+}
+
+// لقطة إثبات اكتشاف واحد عند الطلب (base64 كامل). تحترم نطاق الرؤية نفسه:
+// المدير يرى كل اللقطات، وغيره يرى لقطات اكتشافات أجهزته فقط.
+export async function getDetectionSnapshot(id: number): Promise<string> {
+  const userId = await requireHseReviewerId()
+  const manager = await isManager(userId)
+  const where = manager
+    ? eq(aiDetection.id, id)
+    : and(eq(aiDetection.id, id), eq(aiDetection.userId, userId))
+  const rows = await db
+    .select({ snapshotUrl: aiDetection.snapshotUrl })
     .from(aiDetection)
-    .where(eq(aiDetection.userId, userId))
-    .orderBy(desc(aiDetection.detectedAt))
+    .where(where)
+    .limit(1)
+  return rows[0]?.snapshotUrl ?? ""
 }
 
 export type ActiveCameraStream = typeof activeCameraStream.$inferSelect
