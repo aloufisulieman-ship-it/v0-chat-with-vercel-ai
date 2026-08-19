@@ -697,7 +697,7 @@ export function MobileCamera() {
         </p>
       </Card>
 
-      {/* نموذج بدء الجلسة: اسم المفتش والموقع إلزاميان قبل تفعيل البث/التسجيل */}
+      {/* نموذج بدء الجلسة: اسم المفتش وال��وقع إلزاميان قبل تفعيل البث/التسجيل */}
       <Card className="flex flex-col gap-3 p-4">
         <div className="flex items-center justify-between gap-2">
           <span className="text-sm font-semibold text-foreground">{t("aiMonitoring.cam.sessionData")}</span>
@@ -742,7 +742,7 @@ export function MobileCamera() {
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <CheckCircle2 className="size-4" />
-            بدء الجلسة
+            {t("aiMonitoring.cam.startSession")}
           </button>
         ) : (
           <button
@@ -750,12 +750,12 @@ export function MobileCamera() {
             disabled={cameraOn}
             className="inline-flex items-center justify-center gap-2 rounded-lg border border-input bg-background px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
           >
-            تعديل بيانات الجلسة
+            {t("aiMonitoring.cam.editSession")}
           </button>
         )}
         {sessionStarted && cameraOn && (
           <p className="text-xs text-muted-foreground">
-            لا يمكن تعديل بيانات الجلسة أثناء البث أو التسجيل — أوقفهما أولاً.
+            {t("aiMonitoring.cam.cannotEditWhileLive")}
           </p>
         )}
       </Card>
@@ -771,7 +771,7 @@ export function MobileCamera() {
         {!cameraOn && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center text-white/70">
             <Camera className="size-10" />
-            <span className="text-sm">اضغط «بدء البث» أو «بدء التسجيل» لتشغيل الكاميرا الخلفية</span>
+            <span className="text-sm">{t("aiMonitoring.cam.tapToStart")}</span>
           </div>
         )}
         {streaming && (
@@ -787,19 +787,19 @@ export function MobileCamera() {
                 connected ? "animate-pulse bg-destructive" : "bg-white/70",
               )}
             />
-            {connected ? "بث مباشر" : "إعادة الاتصال…"}
+            {connected ? t("aiMonitoring.cam.broadcastingLive") : t("aiMonitoring.cam.reconnecting")}
           </div>
         )}
         {recording && (
           <div className="absolute left-3 bottom-3 flex items-center gap-1.5 rounded-full bg-red-600/90 px-2.5 py-1 text-xs font-semibold text-white">
             <span className="size-2 animate-pulse rounded-full bg-white" />
-            تسجيل {formatDuration(recordSeconds)}
+            {t("aiMonitoring.cam.recordingBadge").replace("{dur}", formatDuration(recordSeconds))}
           </div>
         )}
         {cameraOn && viewerCount > 0 && !managerTalking && (
           <div className="absolute right-3 bottom-3 flex items-center gap-1.5 rounded-full bg-primary/90 px-2.5 py-1 text-xs font-semibold text-primary-foreground">
             <Eye className="size-3.5" />
-            المدير يشاهد مباشرة
+            {t("aiMonitoring.cam.managerWatching")}
           </div>
         )}
         {/* مؤشر تحدّث المدير عبر الصوت (talk-back) — نابض ليجذب انتباه المفتش للاستماع */}
@@ -807,7 +807,7 @@ export function MobileCamera() {
           <div className="absolute right-3 bottom-3 flex items-center gap-1.5 rounded-full bg-destructive px-2.5 py-1 text-xs font-semibold text-white">
             <span className="size-2 animate-pulse rounded-full bg-white" aria-hidden="true" />
             <Volume2 className="size-3.5" />
-            المدير يتحدّث إليك
+            {t("aiMonitoring.cam.managerTalking")}
           </div>
         )}
         {/* عنصر صوت مخفي لتشغيل صوت المدير الوارد على مكبّر صوت الجهاز */}
@@ -815,7 +815,7 @@ export function MobileCamera() {
         {analyzing && (
           <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white">
             <Loader2 className="size-3.5 animate-spin" />
-            جارٍ التحليل
+            {t("aiMonitoring.cam.analyzingBadge")}
           </div>
         )}
         <canvas ref={canvasRef} className="hidden" />
@@ -827,14 +827,18 @@ export function MobileCamera() {
           <button
             onClick={switchCamera}
             disabled={switching || videoDeviceCount < 2}
-            title={videoDeviceCount < 2 ? "لا توجد كاميرا أخرى للتبديل إليها" : "التبديل بين الأمامية والخلفية"}
+            title={videoDeviceCount < 2 ? t("aiMonitoring.cam.noOtherCamera") : t("aiMonitoring.cam.switchCamera")}
             className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-input bg-background px-4 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
           >
             {switching ? <Loader2 className="size-4 animate-spin" /> : <SwitchCamera className="size-4" />}
             {switching
-              ? "جارٍ التبديل…"
-              : `تبديل الكاميرا${
-                  currentFacing === "user" ? " · الأمامية" : currentFacing === "environment" ? " · الخلفية" : ""
+              ? t("aiMonitoring.cam.switching")
+              : `${t("aiMonitoring.cam.switchCameraBtn")}${
+                  currentFacing === "user"
+                    ? ` · ${t("aiMonitoring.cam.facingFront")}`
+                    : currentFacing === "environment"
+                      ? ` · ${t("aiMonitoring.cam.facingBack")}`
+                      : ""
                 }`}
           </button>
           <button
@@ -848,7 +852,7 @@ export function MobileCamera() {
             )}
           >
             {micEnabled ? <Mic className="size-4" /> : <MicOff className="size-4" />}
-            {micEnabled ? "الصوت مفعّل — يُبثّ للمدير" : "الصوت مكتوم"}
+            {micEnabled ? t("aiMonitoring.cam.micOnBroadcast") : t("aiMonitoring.cam.micMuted")}
           </button>
         </div>
       )}
@@ -870,7 +874,9 @@ export function MobileCamera() {
       {cameraOn && broadcastError && (
         <Card className="flex items-start gap-3 border-destructive/30 bg-destructive/10 p-4">
           <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
-          <p className="text-sm text-destructive">تعذّر بثّ الفيديو الحي المباشر للمدير: {broadcastError}</p>
+          <p className="text-sm text-destructive">
+            {t("aiMonitoring.cam.liveBroadcastError").replace("{err}", broadcastError ?? "")}
+          </p>
         </Card>
       )}
 
@@ -878,7 +884,7 @@ export function MobileCamera() {
       {savingRecording && (
         <Card className="flex items-center gap-3 border-primary/30 bg-primary/10 p-4">
           <UploadCloud className="size-5 shrink-0 animate-pulse text-primary" />
-          <p className="text-sm font-medium text-primary">جارٍ رفع التسجيل إلى الخادم… لا تغلق الصفحة.</p>
+          <p className="text-sm font-medium text-primary">{t("aiMonitoring.cam.uploadingRecording")}</p>
         </Card>
       )}
       {recordMsg && !savingRecording && (
@@ -897,7 +903,7 @@ export function MobileCamera() {
       {/* أزرار التحكم: البث والتسجيل مستقلان — مقفلة حتى بدء الجلسة */}
       {!sessionStarted && (
         <p className="text-sm text-muted-foreground">
-          ابدأ الجلسة أعلاه (اسم المفتش + الموقع) لتفعيل زر البث والتسجيل.
+          {t("aiMonitoring.cam.enableToStart")}
         </p>
       )}
       <div className="flex flex-col gap-3 sm:flex-row">
@@ -908,7 +914,7 @@ export function MobileCamera() {
             className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Play className="size-4" />
-            بدء البث
+            {t("aiMonitoring.cam.startBroadcast")}
           </button>
         ) : (
           <button
@@ -916,7 +922,7 @@ export function MobileCamera() {
             className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-destructive px-4 py-3 text-sm font-semibold text-destructive-foreground transition-colors hover:bg-destructive/90"
           >
             <Square className="size-4" />
-            إيقاف البث
+            {t("aiMonitoring.cam.stopBroadcast")}
           </button>
         )}
 
@@ -927,7 +933,7 @@ export function MobileCamera() {
             className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-red-600 bg-red-600/10 px-4 py-3 text-sm font-semibold text-red-700 transition-colors hover:bg-red-600/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400"
           >
             <Video className="size-4" />
-            بدء التسجيل
+            {t("aiMonitoring.cam.startRecordingBtn")}
           </button>
         ) : (
           <button
@@ -935,7 +941,7 @@ export function MobileCamera() {
             className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-red-700"
           >
             <CircleStop className="size-4" />
-            إيقاف التسجيل · {formatDuration(recordSeconds)}
+            {t("aiMonitoring.cam.stopRecordingBtn").replace("{dur}", formatDuration(recordSeconds))}
           </button>
         )}
       </div>
@@ -944,7 +950,7 @@ export function MobileCamera() {
       {/* حالة الاتصال والعدادات */}
       <div className="grid grid-cols-3 gap-3">
         <Card className="flex flex-col gap-1 p-4">
-          <span className="text-xs text-muted-foreground">حالة الاتصال</span>
+          <span className="text-xs text-muted-foreground">{t("aiMonitoring.cam.connState")}</span>
           <span
             className={cn(
               "flex items-center gap-1.5 text-sm font-semibold",
@@ -955,28 +961,28 @@ export function MobileCamera() {
               connected ? (
                 <>
                   <Wifi className="size-4" />
-                  متصل
+                  {t("aiMonitoring.cam.connected")}
                 </>
               ) : (
                 <>
                   <WifiOff className="size-4" />
-                  منقطع
+                  {t("aiMonitoring.cam.disconnected")}
                 </>
               )
             ) : (
               <>
                 <WifiOff className="size-4" />
-                متوقف
+                {t("aiMonitoring.cam.stopped")}
               </>
             )}
           </span>
         </Card>
         <Card className="flex flex-col gap-1 p-4">
-          <span className="text-xs text-muted-foreground">الإطارات المرفوعة</span>
-          <span className="text-2xl font-bold text-foreground">{sentCount}</span>
+          <span className="text-xs text-muted-foreground">{t("aiMonitoring.cam.framesUploaded")}</span>
+          <span className="text-2xl font-bold text-foreground">{formatNumber(sentCount)}</span>
         </Card>
         <Card className="flex flex-col gap-1 p-4">
-          <span className="text-xs text-muted-foreground">مدة التسجيل</span>
+          <span className="text-xs text-muted-foreground">{t("aiMonitoring.cam.recDuration")}</span>
           <span className="text-2xl font-bold text-foreground" dir="ltr">
             {formatDuration(recordSeconds)}
           </span>
@@ -986,20 +992,20 @@ export function MobileCamera() {
       {/* آخر نتيجة تحليل */}
       <Card className="flex flex-col gap-3 p-4">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold text-foreground">آخر نتيجة تحليل</span>
+          <span className="text-sm font-semibold text-foreground">{t("aiMonitoring.cam.lastAnalysis")}</span>
           {lastResult && !lastResult.error && lastResult.count === 0 && (
             <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
               <CheckCircle2 className="size-3.5" />
-              لا مخالفات
+              {t("aiMonitoring.cam.noViolationsBadge")}
             </span>
           )}
         </div>
         {!lastResult ? (
-          <p className="text-sm text-muted-foreground">لم يتم إرسال أي إطار للتحليل بعد.</p>
+          <p className="text-sm text-muted-foreground">{t("aiMonitoring.cam.noFrameSent")}</p>
         ) : lastResult.error ? (
           <p className="text-sm text-destructive">{lastResult.error}</p>
         ) : lastResult.count === 0 ? (
-          <p className="text-sm text-muted-foreground">لم تُرصد أي مخالفة في آخر إطار.</p>
+          <p className="text-sm text-muted-foreground">{t("aiMonitoring.cam.noViolationLastFrame")}</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {lastResult.detections.map((d, i) => (
@@ -1009,7 +1015,7 @@ export function MobileCamera() {
               >
                 <div className="min-w-0">
                   <div className="font-medium text-foreground">
-                    {detectionTypeLabels[d.type] ?? d.type}
+                    {detectionTypeLabel(t, d.type)}
                   </div>
                   {d.description && (
                     <div className="text-xs text-muted-foreground">{d.description}</div>
@@ -1022,7 +1028,7 @@ export function MobileCamera() {
                       severityStyles[d.severity] ?? "",
                     )}
                   >
-                    {severityLabels[d.severity] ?? d.severity}
+                    {severityLabel(t, d.severity)}
                   </span>
                   <span className="font-mono text-xs text-muted-foreground" dir="ltr">
                     {d.confidence}%

@@ -1267,7 +1267,6 @@ export const en: Dictionary = {
       analyzingBadge: "Analyzing",
       switchCameraBtn: "Switch camera",
       liveBroadcastError: "Could not broadcast the live video to the manager: {err}",
-      recordSavedOk: "Recording saved successfully.",
       noViolationsBadge: "No violations",
       enableToStart: "Start the session above (inspector name + location) to enable the broadcast and record buttons.",
       startBroadcast: "Start broadcast",
@@ -1276,7 +1275,6 @@ export const en: Dictionary = {
       stopRecordingBtn: "Stop recording · {dur}",
       connected: "Connected",
       disconnected: "Disconnected",
-      stopped: "Stopped",
       unauthTitle: "AI Monitoring",
       unauthHeading: "Review pages are restricted to the HSE officer",
       unauthBody:
