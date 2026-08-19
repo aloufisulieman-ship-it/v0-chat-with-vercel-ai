@@ -52,6 +52,8 @@ export type DetectionDto = {
   inspectorName: string
   cameraLocation: string
   detectionType: string
+  // كل أنواع المخالفات المرصودة في نفس اللقطة (النوع الأساسي أولاً). تُعرض كقائمة.
+  detectionTypes: string[]
   severity: string
   confidenceScore: number
   // توفّر لقطة إثبات لهذا الاكتشاف (اللقطة نفسها تُجلب عند فتح النافذة).
@@ -65,6 +67,12 @@ export type DetectionDto = {
 }
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
+
+// كل أنواع المخالفات المرصودة في لقطة الصف الواحد، مع تعويض السجلات/الحمولات
+// القديمة التي لا تحمل مصفوفة detectionTypes بالنوع الأساسي المفرد.
+function typesOf(d: DetectionDto): string[] {
+  return d.detectionTypes && d.detectionTypes.length > 0 ? d.detectionTypes : [d.detectionType]
+}
 
 const typeIcons: Record<DetectionType, LucideIcon> = {
   no_ppe: HardHat,
@@ -215,12 +223,14 @@ export function MonitoringDashboard({
   const [fDate, setFDate] = useState("")
   const [pending, setPending] = useState<number | null>(null)
 
-  // عدّادات اليوم لكل نوع من الأنواع الستة.
+  // عدّادات اليوم لكل نوع من الأنواع الستة — نحتسب كل نوع مرصود داخل اللقطة الواحدة
+  // (البند قد يضمّ أكثر من مخالفة) حتى تعكس الأرقام الواقع.
   const todayCounts = useMemo(() => {
     const counts: Record<string, number> = {}
     for (const t of detectionTypeOptions) counts[t.value] = 0
     for (const d of all) {
-      if (isToday(d.detectedAt)) counts[d.detectionType] = (counts[d.detectionType] ?? 0) + 1
+      if (!isToday(d.detectedAt)) continue
+      for (const t of typesOf(d)) counts[t] = (counts[t] ?? 0) + 1
     }
     return counts
   }, [all])
@@ -262,7 +272,7 @@ export function MonitoringDashboard({
 
   const filtered = useMemo(() => {
     return all.filter((d) => {
-      if (fType !== "all" && d.detectionType !== fType) return false
+      if (fType !== "all" && !typesOf(d).includes(fType)) return false
       if (fSeverity !== "all" && d.severity !== fSeverity) return false
       if (fStatus !== "all" && d.status !== fStatus) return false
       if (fCamera !== "all" && (d.inspectorName || d.cameraId) !== fCamera) return false
@@ -505,11 +515,26 @@ export function MonitoringDashboard({
                         <div className="text-xs text-muted-foreground">{d.cameraLocation || "-"}</div>
                       </td>
                       <td className="px-4 py-3">
-                        <span className="font-medium text-foreground">
-                          {detectionTypeLabels[d.detectionType] ?? d.detectionType}
-                        </span>
+                        {/* كل أنواع المخالفات المرصودة في نفس اللقطة كقائمة داخل البند الواحد */}
+                        {typesOf(d).length > 1 ? (
+                          <div className="flex flex-col gap-1">
+                            {typesOf(d).map((t) => (
+                              <span
+                                key={t}
+                                className="inline-flex w-fit items-center gap-1.5 rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-foreground"
+                              >
+                                <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />
+                                {detectionTypeLabels[t] ?? t}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="font-medium text-foreground">
+                            {detectionTypeLabels[d.detectionType] ?? d.detectionType}
+                          </span>
+                        )}
                         {d.notes && (
-                          <div className="text-xs text-muted-foreground line-clamp-1 max-w-[16rem]">
+                          <div className="mt-1 text-xs text-muted-foreground line-clamp-1 max-w-[16rem]">
                             {d.notes}
                           </div>
                         )}

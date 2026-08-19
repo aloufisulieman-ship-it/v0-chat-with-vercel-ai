@@ -19,6 +19,8 @@ export default async function AiMonitoringPage() {
     inspectorName: r.inspectorName ?? "",
     cameraLocation: r.cameraLocation,
     detectionType: r.detectionType,
+    // كل أنواع المخالفات المرصودة في نفس اللقطة (تُعرض كقائمة داخل البند الواحد).
+    detectionTypes: r.detectionTypes,
     severity: r.severity,
     confidenceScore: r.confidenceScore,
     // اللقطة تُجلب عند الطلب؛ نمرّر فقط علامة التوفّر لعرض زر «لقطة».

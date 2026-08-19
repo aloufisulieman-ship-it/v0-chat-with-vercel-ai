@@ -6,7 +6,7 @@ import { and, desc, eq, gte, isNull, inArray, or } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { requireUser, requireHseReviewerId } from "@/lib/session"
 import type { DetectionType, DetectionStatus } from "@/lib/ai-monitoring"
-import { severityByType } from "@/lib/ai-monitoring"
+import { severityByType, detectionTypeLabels } from "@/lib/ai-monitoring"
 import { sessionCameraId } from "@/lib/camera-session"
 
 const VALID_TYPES: DetectionType[] = [
@@ -33,18 +33,37 @@ async function isManager(userId: string) {
 
 export type AiDetection = typeof aiDetection.$inferSelect
 
-// شكل صف الاكتشاف كما يُرسَل للوحة: بلا حقل base64 الثقيل، مع علامة توفّر لقطة.
+// شكل صف الاكتشاف كما يُرسَل للوحة: بلا حقل base64 الثقيل، مع علامة توفّر لقطة،
+// وقائمة أنواع المخالفات المرصودة في نفس اللقطة (مُحلّلة من JSON إلى مصفوفة).
 // (اللقطة نفسها تُجلب عند الطلب من مسار .../snapshot لتخفيف حمولة التحديث الدوري.)
-export type AiDetectionListItem = Omit<AiDetection, "snapshotUrl"> & {
+export type AiDetectionListItem = Omit<AiDetection, "snapshotUrl" | "detectionTypes"> & {
   snapshotUrl: string
   hasSnapshot: boolean
+  detectionTypes: string[]
+}
+
+// تحليل عمود detection_types (سلسلة JSON) إلى مصفوفة أنواع، مع تعويض السجلات
+// القديمة التي لا تملك القيمة بالنوع الأساسي المفرد.
+function parseDetectionTypes(raw: string, primary: string): string[] {
+  try {
+    const arr = raw ? (JSON.parse(raw) as unknown) : []
+    if (Array.isArray(arr) && arr.length > 0) return arr.map((t) => String(t))
+  } catch {
+    /* تجاهل JSON التالف ونعوّض بالنوع الأساسي */
+  }
+  return primary ? [primary] : []
 }
 
 // تحويل صف قاعدة البيانات إلى عنصر قائمة خفيف: نُفرّغ base64 الضخم ونضع علامة
 // hasSnapshot فقط. هذا يقلّص حمولة التحديث كل 10 ثوانٍ من عدة ميغابايت إلى كيلوبايتات.
 function toListItem(row: AiDetection): AiDetectionListItem {
-  const { snapshotUrl, ...rest } = row
-  return { ...rest, snapshotUrl: "", hasSnapshot: Boolean(snapshotUrl && snapshotUrl.length > 0) }
+  const { snapshotUrl, detectionTypes, ...rest } = row
+  return {
+    ...rest,
+    snapshotUrl: "",
+    hasSnapshot: Boolean(snapshotUrl && snapshotUrl.length > 0),
+    detectionTypes: parseDetectionTypes(detectionTypes, rest.detectionType),
+  }
 }
 
 // قائمة الاكتشافات مرتبة بالأحدث (بدون base64 الثقيل — انظر toListItem).
@@ -215,32 +234,74 @@ async function nextDetectionId(): Promise<string> {
   return `${prefix}${String(maxSeq + 1).padStart(3, "0")}`
 }
 
-// حفظ اكتشاف جديد قادم من تحليل الكاميرا. يُستدعى من مسار /api/ai-monitoring/analyze.
-export async function saveDetection(input: {
+// ترتيب الخطورة لاختيار المخالفة الأساسية عند اجتماع عدة مخالفات في لقطة واحدة.
+const SEVERITY_RANK: Record<string, number> = { low: 0, medium: 1, high: 2, critical: 3 }
+
+// مخالفة واحدة مرصودة داخل إطار (قبل التطبيع).
+type FrameViolation = {
+  type: string
+  severity?: string
+  confidence: number
+  description?: string
+}
+
+// حفظ كل مخالفات الإطار الواحد في سجل واحد فقط. يُستدعى مرة واحدة لكل لقطة من
+// مسار /api/ai-monitoring/analyze: إن رُصدت عدة مخالفات في نفس الإطار (مثل
+// عامل بلا خوذة وبلا سترة عاكسة) تُدمج جميعها في بند واحد بنفس اللقطة بدل تكرار
+// صفوف بنفس الصورة. يُرجع السجل المُنشأ أو null إن لم تُرصد أي مخالفة.
+export async function saveFrameDetection(input: {
   inspectorName: string
   cameraLocation: string
-  detectionType: string
-  severity?: string
-  confidenceScore: number
   snapshotUrl?: string
-  notes?: string
-}): Promise<AiDetection> {
-  // يُستدعى من مسار التحليل نيابةً عن الموظف المصوّر (أي مستخدم مسجّل دخول).
+  detections: FrameViolation[]
+}): Promise<AiDetection | null> {
+  if (!input.detections || input.detections.length === 0) return null
+
+  // يُستدعى نيابةً عن الموظف المصوّر (أي مستخدم مسجّل دخول).
   const userId = (await requireUser()).id
-  // نفس معرّف جلسة الكاميرا المستخدم في البث المباشر (مشتقّ من اسم المفتش)
-  // لربط الاكتشافات بجلسة/كاميرا المفتش الصحيحة.
+  // نفس معرّف جلسة الكاميرا المستخدم في البث المباشر (مشتقّ من اسم المفتش).
   const cameraId = sessionCameraId(userId, input.inspectorName || "")
 
-  const detectionType = (VALID_TYPES as string[]).includes(input.detectionType)
-    ? (input.detectionType as DetectionType)
-    : "no_ppe"
-  const severity =
-    input.severity && (VALID_SEVERITY as readonly string[]).includes(input.severity)
-      ? input.severity
-      : severityByType[detectionType]
-  const confidence = Math.max(0, Math.min(100, Math.round(input.confidenceScore || 0)))
-  const detectionId = await nextDetectionId()
+  // تطبيع كل مخالفة: نوع صالح + خطورة صالحة + ثقة ضمن 0-100.
+  const normalized = input.detections.map((d) => {
+    const type = (VALID_TYPES as string[]).includes(d.type)
+      ? (d.type as DetectionType)
+      : "no_ppe"
+    const severity =
+      d.severity && (VALID_SEVERITY as readonly string[]).includes(d.severity)
+        ? d.severity
+        : severityByType[type]
+    const confidence = Math.max(0, Math.min(100, Math.round(d.confidence || 0)))
+    return { type, severity, confidence, description: (d.description || "").trim() }
+  })
 
+  // إزالة التكرار حسب النوع داخل نفس الإطار (نُبقي الأعلى ثقة لكل نوع).
+  const byType = new Map<string, (typeof normalized)[number]>()
+  for (const d of normalized) {
+    const existing = byType.get(d.type)
+    if (!existing || d.confidence > existing.confidence) byType.set(d.type, d)
+  }
+  const unique = [...byType.values()]
+
+  // المخالفة الأساسية = الأشد خطورة، ثم الأعلى ثقة (تُستخدم لـ detectionType/severity).
+  const primary = unique.reduce((best, d) => {
+    const dr = SEVERITY_RANK[d.severity] ?? 0
+    const br = SEVERITY_RANK[best.severity] ?? 0
+    if (dr > br || (dr === br && d.confidence > best.confidence)) return d
+    return best
+  })
+
+  const types = unique.map((d) => d.type)
+  // ملاحظات مجمّعة: «التسمية: الوصف» لكل نوع، مفصولة بنقطة.
+  const notes = unique
+    .map((d) => {
+      const label = detectionTypeLabels[d.type] ?? d.type
+      return d.description ? `${label}: ${d.description}` : label
+    })
+    .join(" • ")
+    .slice(0, 1000)
+
+  const detectionId = await nextDetectionId()
   const [row] = await db
     .insert(aiDetection)
     .values({
@@ -249,20 +310,21 @@ export async function saveDetection(input: {
       cameraId,
       inspectorName: input.inspectorName?.slice(0, 160) || "كاميرا الهاتف",
       cameraLocation: input.cameraLocation?.slice(0, 200) || "",
-      detectionType,
-      severity,
-      confidenceScore: confidence,
+      detectionType: primary.type,
+      detectionTypes: JSON.stringify(types),
+      severity: primary.severity,
+      confidenceScore: primary.confidence,
       snapshotUrl: input.snapshotUrl || "",
-      notes: input.notes?.slice(0, 1000) || "",
+      notes,
       status: "new",
     })
     .returning()
 
   // إشعار المسؤولين والمفتشين عند الاكتشافات عالية الخطورة/الحرجة (سلوك مدموج من
   // فرع ai-smart-monitoring). لا يوقف فشلُ الإشعار حفظَ الاكتشاف.
-  if (severity === "high" || severity === "critical") {
+  if (primary.severity === "high" || primary.severity === "critical") {
     try {
-      await createDetectionNotifications(row, severity)
+      await createDetectionNotifications(row, primary.severity)
     } catch {
       /* تجاهل أخطاء الإشعار حتى لا يفشل حفظ الاكتشاف */
     }

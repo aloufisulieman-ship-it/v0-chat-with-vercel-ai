@@ -355,6 +355,10 @@ export const aiDetection = pgTable("ai_detections", {
   inspectorName: text("inspector_name").notNull().default(""), // اسم المفتش/الموظف صاحب الجلسة
   cameraLocation: text("camera_location").notNull().default(""),
   detectionType: text("detection_type").notNull().default("no_ppe"),
+  // كل أنواع المخالفات المرصودة في نفس اللقطة/الإطار كسلسلة JSON (مثال:
+  // ["no_ppe","unsafe_stacking"]). detectionType أعلاه يبقى النوع الأساسي (الأشد
+  // خطورة) للتوافق مع الشارات والفلاتر والإحصاءات الحالية.
+  detectionTypes: text("detection_types").notNull().default(""),
   severity: text("severity").notNull().default("low"),
   confidenceScore: integer("confidence_score").notNull().default(0), // 0-100
   snapshotUrl: text("snapshot_url").notNull().default(""),
