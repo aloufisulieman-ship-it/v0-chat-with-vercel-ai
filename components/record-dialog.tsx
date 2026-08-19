@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "@/hooks/use-toast"
+import { useI18n } from "@/lib/i18n/client"
 
 export interface FieldDef {
   name: string
@@ -36,7 +37,7 @@ export interface FieldDef {
 export function RecordDialog({
   title,
   description,
-  triggerLabel = "إضافة جديد",
+  triggerLabel,
   fields,
   action,
 }: {
@@ -46,6 +47,7 @@ export function RecordDialog({
   fields: FieldDef[]
   action: (formData: FormData) => Promise<void>
 }) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
 
@@ -55,12 +57,12 @@ export function RecordDialog({
     startTransition(async () => {
       try {
         await action(formData)
-        toast({ title: "تم الحفظ بنجاح", description: "تم حفظ السجل في قاعدة البيانات." })
+        toast({ title: t("recordDialog.savedTitle"), description: t("recordDialog.savedDesc") })
         setOpen(false)
       } catch (err) {
         toast({
-          title: "تعذّر الحفظ",
-          description: err instanceof Error ? err.message : "حدث خطأ غير متوقع.",
+          title: t("recordDialog.saveFailedTitle"),
+          description: err instanceof Error ? err.message : t("recordDialog.saveFailedDesc"),
           variant: "destructive",
         })
       }
@@ -72,7 +74,7 @@ export function RecordDialog({
       <DialogTrigger asChild>
         <Button className="gap-2 self-start sm:self-auto">
           <Plus className="size-4" />
-          {triggerLabel}
+          {triggerLabel ?? t("recordDialog.addNew")}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-lg">
@@ -92,7 +94,7 @@ export function RecordDialog({
               ) : f.type === "select" ? (
                 <Select name={f.name} defaultValue={f.defaultValue ? String(f.defaultValue) : f.options?.[0]?.value}>
                   <SelectTrigger id={f.name}>
-                    <SelectValue placeholder="اختر..." />
+                    <SelectValue placeholder={t("recordDialog.choose")} />
                   </SelectTrigger>
                   <SelectContent>
                     {f.options?.map((o) => (
@@ -119,7 +121,7 @@ export function RecordDialog({
           ))}
           <DialogFooter className="sm:col-span-2">
             <Button type="submit" disabled={isPending} className="w-full sm:w-auto">
-              {isPending ? "جارٍ الحفظ..." : "حفظ"}
+              {isPending ? t("recordDialog.saving") : t("recordDialog.save")}
             </Button>
           </DialogFooter>
         </form>
