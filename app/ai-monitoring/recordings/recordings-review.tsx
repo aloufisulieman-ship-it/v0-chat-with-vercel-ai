@@ -34,6 +34,7 @@ import {
   type VideoScreenshotDto,
   type RecordingsPage,
 } from "@/app/actions/recordings"
+import { AudioRecorder } from "./audio-recorder"
 
 function fmtDuration(sec: number) {
   const m = Math.floor(sec / 60)
@@ -411,6 +412,9 @@ function ReviewDialog({
                   التقاط لقطة من اللحظة الحالية
                 </Button>
               </div>
+
+              {/* نسخة صوتية مرتبطة بهذا التسجيل (اسم الكاميرا/الموقع ومعرّف التسجيل كبيانات وصفية) */}
+              <AudioRecorder cameraName={recording.cameraName} recordingId={recording.id} />
 
               <div>
                 <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
