@@ -11,23 +11,15 @@ import { EmployeeRegistry } from "./employee-registry"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { requireModule } from "@/lib/session"
 import { getTrainings, getAllTrainingAttendees, getEmployees, getToolboxSessions, deleteTraining } from "@/app/actions/hse"
-import { statusLabels } from "@/lib/labels"
+import { getServerT } from "@/lib/i18n/server"
+import { statusLabel } from "@/lib/i18n/labels"
+import type { TFunction } from "@/lib/i18n/translate"
 
 type Training = Awaited<ReturnType<typeof getTrainings>>[number]
 type Attendee = Awaited<ReturnType<typeof getAllTrainingAttendees>>[number][number]
 
-const ATTENDEE_HEADERS = [
-  "الرقم",
-  "الاسم",
-  "الوظيفة",
-  "اسم الشركة",
-  "رقم البطاقة/الكود",
-  "فهم التدريب",
-  "التوقيع",
-] as const
-
-function understoodLabel(v: string | null) {
-  return v === "no" ? "لا" : "نعم"
+function understoodLabel(t: TFunction, v: string | null) {
+  return v === "no" ? t("trainingMod.understoodNo") : t("trainingMod.understoodYes")
 }
 
 // Escapes user text before embedding it in the PDF HTML string.
@@ -38,10 +30,19 @@ function esc(v: string | number | null | undefined) {
     .replace(/>/g, "&gt;")
 }
 
-// Builds the attendance table HTML for the PDF export (Arabic RTL, MHS-IMS-FR-HSE-2).
-function buildAttendanceHtml(rows: Attendee[]) {
+// Builds the attendance table HTML for the PDF export (MHS-IMS-FR-HSE-2).
+function buildAttendanceHtml(t: TFunction, rows: Attendee[]) {
   if (rows.length === 0) return ""
-  const head = ATTENDEE_HEADERS.map(
+  const headers = [
+    t("trainingMod.attHeaderNo"),
+    t("trainingMod.attHeaderName"),
+    t("trainingMod.attHeaderDesignation"),
+    t("trainingMod.attHeaderCompany"),
+    t("trainingMod.attHeaderCard"),
+    t("trainingMod.attHeaderUnderstood"),
+    t("trainingMod.attHeaderSignature"),
+  ]
+  const head = headers.map(
     (h) =>
       `<th style="border:1px solid black;background:#f0f0f0;padding:6px;font-size:11pt;font-weight:bold;">${h}</th>`,
   ).join("")
@@ -56,38 +57,47 @@ function buildAttendanceHtml(rows: Attendee[]) {
         <td style="border:1px solid black;padding:5px;font-size:11pt;">${esc(r.designation)}</td>
         <td style="border:1px solid black;padding:5px;font-size:11pt;">${esc(r.company)}</td>
         <td style="border:1px solid black;padding:5px;font-size:11pt;">${esc(r.cardCode)}</td>
-        <td style="border:1px solid black;padding:5px;text-align:center;font-size:11pt;">${understoodLabel(r.understood)}</td>
+        <td style="border:1px solid black;padding:5px;text-align:center;font-size:11pt;">${understoodLabel(t, r.understood)}</td>
         <td style="border:1px solid black;padding:5px;text-align:center;">${sig}</td>
       </tr>`
     })
     .join("")
-  return `<h2 style="font-size:14pt;color:#0f766e;margin:0 0 8px;">سجل الحضور (${rows.length})</h2>
-    <table style="width:100%;border-collapse:collapse;border:2px solid black;" dir="rtl">
+  return `<h2 style="font-size:14pt;color:#0f766e;margin:0 0 8px;">${t("trainingMod.attendanceLog")} (${rows.length})</h2>
+    <table style="width:100%;border-collapse:collapse;border:2px solid black;">
       <thead><tr>${head}</tr></thead>
       <tbody>${body}</tbody>
     </table>`
 }
 
 // On-screen attendance table shown inside the details dialog.
-function AttendanceTable({ rows }: { rows: Attendee[] }) {
+function AttendanceTable({ t, rows }: { t: TFunction; rows: Attendee[] }) {
   if (rows.length === 0) {
     return (
       <div className="rounded-lg border border-border p-4 text-center text-sm text-muted-foreground">
-        لا يوجد متدربون مسجّلون في هذه الدورة.
+        {t("trainingMod.noAttendeesRegistered")}
       </div>
     )
   }
+  const headers = [
+    t("trainingMod.attHeaderNo"),
+    t("trainingMod.attHeaderName"),
+    t("trainingMod.attHeaderDesignation"),
+    t("trainingMod.attHeaderCompany"),
+    t("trainingMod.attHeaderCard"),
+    t("trainingMod.attHeaderUnderstood"),
+    t("trainingMod.attHeaderSignature"),
+  ]
   return (
     <div>
       <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
-        <Users className="size-4 text-muted-foreground" /> سجل الحضور ({rows.length})
+        <Users className="size-4 text-muted-foreground" /> {t("trainingMod.attendanceLog")} ({rows.length})
       </h3>
       <div className="overflow-x-auto rounded-lg border border-border">
-        <table className="w-full border-collapse text-sm" dir="rtl">
+        <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="bg-muted">
-              {ATTENDEE_HEADERS.map((h) => (
-                <th key={h} className="border border-border px-3 py-2 text-right font-semibold text-foreground">
+              {headers.map((h) => (
+                <th key={h} className="border border-border px-3 py-2 text-start font-semibold text-foreground">
                   {h}
                 </th>
               ))}
@@ -101,11 +111,11 @@ function AttendanceTable({ rows }: { rows: Attendee[] }) {
                 <td className="border border-border px-3 py-2">{r.designation || "-"}</td>
                 <td className="border border-border px-3 py-2">{r.company || "-"}</td>
                 <td className="border border-border px-3 py-2" dir="ltr">{r.cardCode || "-"}</td>
-                <td className="border border-border px-3 py-2 text-center">{understoodLabel(r.understood)}</td>
+                <td className="border border-border px-3 py-2 text-center">{understoodLabel(t, r.understood)}</td>
                 <td className="border border-border px-3 py-2 text-center">
                   {(r.signature ?? "").startsWith("data:image") ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={r.signature || "/placeholder.svg"} alt="توقيع المتدرب" className="mx-auto h-10 max-w-[120px] object-contain" />
+                    <img src={r.signature || "/placeholder.svg"} alt={t("trainingMod.traineeSignatureAlt")} className="mx-auto h-10 max-w-[120px] object-contain" />
                   ) : (
                     <span className="text-muted-foreground">-</span>
                   )}
@@ -127,21 +137,22 @@ export default async function TrainingPage() {
     getEmployees(),
     getToolboxSessions(),
   ])
+  const { t, dir } = await getServerT()
 
   const totalAttendees = trainings.reduce((a, b) => a + (b.attendees ?? 0), 0)
-  const completed = trainings.filter((t) => t.status === "closed").length
-  const scheduled = trainings.filter((t) => t.status === "scheduled").length
+  const completed = trainings.filter((tr) => tr.status === "closed").length
+  const scheduled = trainings.filter((tr) => tr.status === "scheduled").length
 
   const columns: Column<Training>[] = [
-    { key: "title", header: "الدورة", render: (r) => <span className="font-medium text-foreground">{r.title}</span> },
-    { key: "trainer", header: "المدرب", render: (r) => <span className="text-muted-foreground">{r.trainer || "-"}</span> },
-    { key: "attendees", header: "الحضور", className: "text-center" },
-    { key: "status", header: "الحالة", render: (r) => <StatusBadge status={r.status ?? "scheduled"} /> },
-    { key: "trainingDate", header: "التاريخ", render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.trainingDate ?? "-"}</span> },
+    { key: "title", header: t("trainingMod.colCourse"), render: (r) => <span className="font-medium text-foreground">{r.title}</span> },
+    { key: "trainer", header: t("trainingMod.colTrainer"), render: (r) => <span className="text-muted-foreground">{r.trainer || "-"}</span> },
+    { key: "attendees", header: t("trainingMod.colAttendance"), className: "text-center" },
+    { key: "status", header: t("trainingMod.colStatus"), render: (r) => <StatusBadge status={r.status ?? "scheduled"} /> },
+    { key: "trainingDate", header: t("trainingMod.colDate"), render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.trainingDate ?? "-"}</span> },
     {
       key: "actions",
       header: "",
-      className: "text-left",
+      className: "text-end",
       render: (r) => {
         const attendees = attendeesByTraining[r.id] ?? []
         return (
@@ -150,17 +161,17 @@ export default async function TrainingPage() {
               module="training"
               recordId={r.id}
               title={r.title}
-              subtitle="سجل تدريب — نموذج MHS-IMS-FR-HSE-2"
+              subtitle={t("trainingMod.detailsSubtitle")}
               fields={[
-                { label: "اسم الدورة", value: r.title },
-                { label: "من قام بالتدريب", value: r.trainer || "-" },
-                { label: "عدد الحضور", value: String(r.attendees ?? 0) },
-                { label: "الحالة", value: statusLabels[r.status ?? ""] ?? "-" },
-                { label: "تاريخ الدورة", value: r.trainingDate ?? "-" },
+                { label: t("trainingMod.dCourseName"), value: r.title },
+                { label: t("trainingMod.dConductedBy"), value: r.trainer || "-" },
+                { label: t("trainingMod.dAttendeeCount"), value: String(r.attendees ?? 0) },
+                { label: t("trainingMod.dStatus"), value: r.status ? statusLabel(t, r.status) : "-" },
+                { label: t("trainingMod.dCourseDate"), value: r.trainingDate ?? "-" },
               ]}
               initialAttachments={[]}
-              extraSection={<AttendanceTable rows={attendees} />}
-              extraReportHtml={buildAttendanceHtml(attendees)}
+              extraSection={<AttendanceTable t={t} rows={attendees} />}
+              extraReportHtml={buildAttendanceHtml(t, attendees)}
               suppressReportAttachments
             />
             <DeleteButton id={r.id} action={deleteTraining} />
@@ -172,28 +183,28 @@ export default async function TrainingPage() {
 
   return (
     <AppShell
-      title="التدريب والتأهيل"
-      subtitle="إدارة الدو��ات التدريبية وسجلات التأهيل للموظفين"
+      title={t("pageHeaders.trainingTitle")}
+      subtitle={t("pageHeaders.trainingSubtitle")}
       user={user}
       action={<TrainingFormDialog />}
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="إجمالي الدورات" value={trainings.length} icon={BookOpen} tone="blue" />
-        <KpiCard label="إجمالي المتدربين" value={totalAttendees} icon={Users} tone="primary" />
-        <KpiCard label="دورات مكتملة" value={completed} icon={Award} tone="accent" />
-        <KpiCard label="دورات مجدولة" value={scheduled} icon={GraduationCap} tone="blue" />
+        <KpiCard label={t("trainingMod.kpiTotalCourses")} value={trainings.length} icon={BookOpen} tone="blue" />
+        <KpiCard label={t("trainingMod.kpiTotalTrainees")} value={totalAttendees} icon={Users} tone="primary" />
+        <KpiCard label={t("trainingMod.kpiCompleted")} value={completed} icon={Award} tone="accent" />
+        <KpiCard label={t("trainingMod.kpiScheduled")} value={scheduled} icon={GraduationCap} tone="blue" />
       </div>
 
-      <Tabs defaultValue="training" dir="rtl" className="mt-6 gap-4">
+      <Tabs defaultValue="training" dir={dir} className="mt-6 gap-4">
         <TabsList>
-          <TabsTrigger value="training">برنامج التدريب</TabsTrigger>
-          <TabsTrigger value="toolbox">الحديث التوعوي اليومي</TabsTrigger>
-          <TabsTrigger value="employees">سجل الموظفين</TabsTrigger>
+          <TabsTrigger value="training">{t("trainingMod.tabProgram")}</TabsTrigger>
+          <TabsTrigger value="toolbox">{t("trainingMod.tabToolbox")}</TabsTrigger>
+          <TabsTrigger value="employees">{t("trainingMod.tabEmployees")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="training">
-          <h2 className="mb-3 text-lg font-semibold text-foreground">برنامج التدريب</h2>
-          <DataTable columns={columns} rows={trainings} emptyMessage="لا توجد دورات. أضف دورة جديدة للبدء." />
+          <h2 className="mb-3 text-lg font-semibold text-foreground">{t("trainingMod.programHeading")}</h2>
+          <DataTable columns={columns} rows={trainings} emptyMessage={t("trainingMod.pageEmptyMessage")} />
         </TabsContent>
 
         <TabsContent value="toolbox">
