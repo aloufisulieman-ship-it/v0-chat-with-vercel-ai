@@ -201,7 +201,7 @@ export const ar = {
     colStatus: "الحالة",
     defaultSubtitle: "تصريح عمل",
     fPermitNo: "رقم التصريح",
-    fPermitTitle: "عنوان التصريح",
+    fPermitTitle: "عنوان التصري��",
     fType: "النوع",
     fLocation: "الموقع",
     fAuthorized: "الجهة/الشخص المصرّح له",
@@ -280,6 +280,14 @@ export const ar = {
     filePrepFailed: "تعذّر تجهيز الملف",
     imageCompressFailed: "تعذّر ضغط الصورة",
     currency: "ريال سعودي",
+    editTrigger: "تعديل يدوي",
+    editTitle: "تعديل يدوي للمخالفة",
+    attachManualExtra: "إرفاق نموذج ورقي ممسوح إضافي (PDF أو صورة أو مستند)",
+    employeeNameRequired: "اسم الموظف مطلوب",
+    editSavedTitle: "تم حفظ التعديلات",
+    editSavedDesc: "تم تحديث المخالفة بنجاح.",
+    saveEdits: "حفظ التعديلات",
+    detectedByShort: "اسم المفتش/الموظف",
   },
 
   // نموذج إصدار تصريح
@@ -356,7 +364,7 @@ export const ar = {
     rootCause: "السبب الجذري",
     reportedAt: "وقت الإبلاغ",
     investigation: "التحقيق",
-    noIncidents: "لا توجد حوادث",
+    noIncidents: "لا توج�� حوادث",
   },
 
   // المراقبة الذكية

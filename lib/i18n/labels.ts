@@ -67,3 +67,24 @@ export function categoryLabel(t: TFunction, value: string): string {
   const translated = t(key)
   return translated === key ? value : translated
 }
+
+// خيار التصنيف الموسّع في النموذج (internal | external).
+export function categoryOptionLabel(t: TFunction, value: string): string {
+  const key = `categoryOption.${value}`
+  const translated = t(key)
+  return translated === key ? value : translated
+}
+
+// الإجراء الداخلي — القيمة مخزّنة بالعربية، نترجمها للعرض فقط.
+export function internalActionLabel(t: TFunction, value: string): string {
+  const key = `internalAction.${value}`
+  const translated = t(key)
+  return translated === key ? value : translated
+}
+
+// نوع المخالفة — القيمة مخزّنة بالعربية، نترجمها للعرض فقط.
+export function violationTypeLabel(t: TFunction, value: string): string {
+  const key = `violationTypes.${value}`
+  const translated = t(key)
+  return translated === key ? value : translated
+}

@@ -20,6 +20,8 @@ import {
   OTHER_ACTION,
   type ViolationCategory,
 } from "@/lib/violation-category"
+import { useI18n } from "@/lib/i18n/client"
+import { statusLabel, categoryOptionLabel, internalActionLabel, violationTypeLabel } from "@/lib/i18n/labels"
 
 const VIOLATION_TYPES = [
   "عدم ارتداء خوذة السلامة",
@@ -56,6 +58,7 @@ const VIOLATION_TYPES = [
 ]
 
 function SignaturePad({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  const { t } = useI18n()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [drawing, setDrawing] = useState(false)
 
@@ -120,7 +123,7 @@ function SignaturePad({ label, value, onChange }: { label: string; value: string
       <div className="flex items-center justify-between">
         <Label className="text-sm font-medium">{label}</Label>
         <button type="button" onClick={clear} className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1">
-          <X className="size-3" /> مسح
+          <X className="size-3" /> {t("violationForm.clear")}
         </button>
       </div>
       <div className="relative rounded-lg border-2 border-dashed border-border bg-white overflow-hidden">
@@ -140,7 +143,7 @@ function SignaturePad({ label, value, onChange }: { label: string; value: string
         {!value && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <span className="text-xs text-muted-foreground flex items-center gap-1">
-              <PenLine className="size-3" /> وقّع هنا
+              <PenLine className="size-3" /> {t("violationForm.signHere")}
             </span>
           </div>
         )}
@@ -163,6 +166,7 @@ export function ViolationFormDialog({
   // فتح النموذج تلقائياً عند التحميل (عند القدوم من صفحة التسجيلات).
   autoOpen?: boolean
 }) {
+  const { t, dir } = useI18n()
   const [open, setOpen] = useState(autoOpen)
   const [step, setStep] = useState(1)
   const [isPending, startTransition] = useTransition()
@@ -180,7 +184,7 @@ export function ViolationFormDialog({
   // نحوّلها لاحقاً إلى data URL عبر useEffect حتى تُضمّن ضمن حمولة الحفظ.
   const isDataUrl = (v?: string) => !!v && v.startsWith("data:")
   const [images, setImages] = useState<string[]>(isDataUrl(initialEvidence) ? [initialEvidence as string] : [])
-  // النماذج الورقية الممسوحة للمخالفة اليدوية: { name, dataUrl }
+  // النماذج الو��قية الممسوحة للمخالفة اليدوية: { name, dataUrl }
   const [manualDocs, setManualDocs] = useState<{ name: string; dataUrl: string }[]>([])
   const [editorSignature, setEditorSignature] = useState("")
   const [violatorSignature, setViolatorSignature] = useState("")
@@ -227,7 +231,7 @@ export function ViolationFormDialog({
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = () => resolve(reader.result as string)
-      reader.onerror = () => reject(new Error("تعذّر قراءة الملف"))
+      reader.onerror = () => reject(new Error(t("violationForm.fileReadFailed")))
       reader.readAsDataURL(file)
     })
   }
@@ -249,7 +253,7 @@ export function ViolationFormDialog({
       )
       setManualDocs((prev) => [...prev, ...docs])
     } catch {
-      toast({ title: "تعذّر تجهيز الملف", variant: "destructive" })
+      toast({ title: t("violationForm.filePrepFailed"), variant: "destructive" })
     }
   }
 
@@ -262,7 +266,7 @@ export function ViolationFormDialog({
       const compressed = await Promise.all(files.map((file) => compressImage(file, 1200, 0.7)))
       setImages((prev) => [...prev, ...compressed])
     } catch {
-      toast({ title: "تعذّر ضغط الصورة", variant: "destructive" })
+      toast({ title: t("violationForm.imageCompressFailed"), variant: "destructive" })
     }
   }
 
@@ -285,25 +289,25 @@ export function ViolationFormDialog({
         fd.append("images", JSON.stringify(images))
         fd.append("manualDocs", JSON.stringify(manualDocs.map((d) => d.dataUrl)))
         await createViolationFull(fd)
-        toast({ title: "تم الحفظ بنجاح", description: "تم تسجيل المخالفة في قاعدة البيانات." })
+        toast({ title: t("violationForm.savedTitle"), description: t("violationForm.savedDesc") })
         setOpen(false)
         resetForm()
       } catch (err) {
-        toast({ title: "تعذّر الحفظ", description: err instanceof Error ? err.message : "حدث خطأ.", variant: "destructive" })
+        toast({ title: t("violationForm.saveFailedTitle"), description: err instanceof Error ? err.message : t("violationForm.saveFailedDesc"), variant: "destructive" })
       }
     })
   }
 
-  const steps = ["بيانات المخالفة", "صور الأدلة", "التواقيع"]
+  const steps = [t("violationForm.stepData"), t("violationForm.stepEvidence"), t("violationForm.stepSignatures")]
 
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetForm() }}>
       <DialogTrigger asChild>
-        <Button className="gap-2"><FileWarning className="size-4" /> تسجيل مخالفة جديدة</Button>
+        <Button className="gap-2"><FileWarning className="size-4" /> {t("violationForm.trigger")}</Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[92svh] overflow-y-auto sm:max-w-2xl" dir="rtl">
+      <DialogContent className="max-h-[92svh] overflow-y-auto sm:max-w-2xl" dir={dir}>
         <DialogHeader>
-          <DialogTitle>تسجيل مخالفة جديدة</DialogTitle>
+          <DialogTitle>{t("violationForm.dialogTitle")}</DialogTitle>
         </DialogHeader>
 
         <div className="flex items-center gap-2 mb-4">
@@ -322,28 +326,28 @@ export function ViolationFormDialog({
         {step === 1 && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2 sm:col-span-2 rounded-lg border border-border bg-muted/30 p-3">
-              <Label>مصدر المخالفة</Label>
+              <Label>{t("violationForm.source")}</Label>
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setForm(f => ({ ...f, entryMode: "electronic" }))}
                   className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${form.entryMode === "electronic" ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:bg-muted"}`}
                 >
-                  إلكترونية (عبر النظام)
+                  {t("violationForm.sourceElectronic")}
                 </button>
                 <button
                   type="button"
                   onClick={() => setForm(f => ({ ...f, entryMode: "manual" }))}
                   className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${form.entryMode === "manual" ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:bg-muted"}`}
                 >
-                  يدوية (نموذج ورقي)
+                  {t("violationForm.sourceManual")}
                 </button>
               </div>
               {form.entryMode === "manual" && (
                 <div className="flex flex-col gap-2 pt-1">
                   <label className="flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-border p-4 cursor-pointer hover:bg-muted/50 transition-colors">
                     <Upload className="size-6 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">أرفق النموذج الورقي المم��وح (PDF أو صورة أو مستند)</span>
+                    <span className="text-xs text-muted-foreground">{t("violationForm.attachManual")}</span>
                     <input type="file" accept="image/*,application/pdf,.doc,.docx" multiple className="hidden" onChange={handleDocUpload} />
                   </label>
                   {manualDocs.length > 0 && (
@@ -351,7 +355,7 @@ export function ViolationFormDialog({
                       {manualDocs.map((d, i) => (
                         <li key={i} className="flex items-center justify-between gap-2 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs">
                           <span className="flex items-center gap-1.5 truncate"><FileText className="size-3.5 shrink-0 text-muted-foreground" /> <span className="truncate">{d.name}</span></span>
-                          <button type="button" onClick={() => setManualDocs(docs => docs.filter((_, j) => j !== i))} className="shrink-0 text-destructive hover:opacity-70" aria-label="حذف الملف">
+                          <button type="button" onClick={() => setManualDocs(docs => docs.filter((_, j) => j !== i))} className="shrink-0 text-destructive hover:opacity-70" aria-label={t("violationForm.deleteFile")}>
                             <X className="size-3.5" />
                           </button>
                         </li>
@@ -362,7 +366,7 @@ export function ViolationFormDialog({
               )}
             </div>
             <div className="flex flex-col gap-1 sm:col-span-2">
-              <Label htmlFor="violation-employee">اختيار من سجل الموظفين</Label>
+              <Label htmlFor="violation-employee">{t("violationForm.pickFromRegistry")}</Label>
               <select
                 id="violation-employee"
                 value={form.employeeRefId}
@@ -372,132 +376,132 @@ export function ViolationFormDialog({
                 }}
                 className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground"
               >
-                <option value="">إدخال يدوي / سجل تاريخي</option>
+                <option value="">{t("violationForm.manualEntry")}</option>
                 {employees.filter((item) => item.active).map((employee) => <option key={employee.id} value={employee.id}>{employee.name} — {employee.employeeId}</option>)}
               </select>
             </div>
             <div className="flex flex-col gap-1">
-              <Label>اسم الموظف <span className="text-destructive">*</span></Label>
-              <Input value={form.employeeName} onChange={e => setForm(f => ({ ...f, employeeName: e.target.value }))} placeholder="الاسم الكامل" />
+              <Label>{t("violationForm.employeeName")} <span className="text-destructive">*</span></Label>
+              <Input value={form.employeeName} onChange={e => setForm(f => ({ ...f, employeeName: e.target.value }))} placeholder={t("violationForm.fullName")} />
             </div>
             <div className="flex flex-col gap-1">
-              <Label>الرقم الوظيفي</Label>
-              <Input value={form.employeeNo} onChange={e => setForm(f => ({ ...f, employeeNo: e.target.value }))} placeholder="مث��ل: 1024" dir="ltr" />
+              <Label>{t("violationForm.employeeNo")}</Label>
+              <Input value={form.employeeNo} onChange={e => setForm(f => ({ ...f, employeeNo: e.target.value }))} placeholder={t("violationForm.employeeNoPlaceholder")} dir="ltr" />
             </div>
             <div className="flex flex-col gap-1">
-              <Label>الجنسية</Label>
-              <Input value={form.nationality} onChange={e => setForm(f => ({ ...f, nationality: e.target.value }))} placeholder="مثال: سعودي، هندي..." />
+              <Label>{t("violationForm.nationality")}</Label>
+              <Input value={form.nationality} onChange={e => setForm(f => ({ ...f, nationality: e.target.value }))} placeholder={t("violationForm.nationalityPlaceholder")} />
             </div>
             <div className="flex flex-col gap-1">
-              <Label>اسم الشركة</Label>
+              <Label>{t("violationForm.companyName")}</Label>
               <Input value={form.companyName} onChange={e => setForm(f => ({ ...f, companyName: e.target.value }))} />
             </div>
             <div className="flex flex-col gap-1">
-              <Label>التاريخ</Label>
+              <Label>{t("violationForm.date")}</Label>
               <Input type="date" value={form.violationDate} onChange={e => setForm(f => ({ ...f, violationDate: e.target.value }))} dir="ltr" />
             </div>
             <div className="flex flex-col gap-1">
-              <Label>الوقت</Label>
-              <Input value={form.violationTime} onChange={e => setForm(f => ({ ...f, violationTime: e.target.value }))} placeholder="مثال: 10:30 صباحاً" />
+              <Label>{t("violationForm.time")}</Label>
+              <Input value={form.violationTime} onChange={e => setForm(f => ({ ...f, violationTime: e.target.value }))} placeholder={t("violationForm.timePlaceholder")} />
             </div>
                     <div className="flex flex-col gap-1">
-                      <Label>المكان <span className="text-destructive">*</span></Label>
-                      <Input value={form.place} onChange={e => setForm(f => ({ ...f, place: e.target.value }))} placeholder="موقع المخالفة" />
+                      <Label>{t("violationForm.place")} <span className="text-destructive">*</span></Label>
+                      <Input value={form.place} onChange={e => setForm(f => ({ ...f, place: e.target.value }))} placeholder={t("violationForm.placePlaceholder")} />
                     </div>
                     <div className="flex flex-col gap-1">
-                      <Label>رُصدت بواسطة</Label>
+                      <Label>{t("violationForm.detectedBy")}</Label>
                       <Input
                         value={form.detectedBy}
                         onChange={e => setForm(f => ({ ...f, detectedBy: e.target.value }))}
-                        placeholder="اسم المفتش/الموظف الذي رصد المخالفة"
+                        placeholder={t("violationForm.detectedByPlaceholder")}
                       />
                     </div>
             <div className="flex flex-col gap-1">
-              <Label>الحال��</Label>
+              <Label>{t("violationForm.status")}</Label>
               <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {violationStatusOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                  {violationStatusOptions.map(o => <SelectItem key={o.value} value={o.value}>{statusLabel(t, o.value)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div className="flex flex-col gap-1 sm:col-span-2">
-              <Label>التصنيف <span className="text-destructive">*</span></Label>
+              <Label>{t("violationForm.category")} <span className="text-destructive">*</span></Label>
               <Select
                 value={form.category}
                 onValueChange={v => setForm(f => ({ ...f, category: v, internalAction: "", actionDetail: "" }))}
               >
-                <SelectTrigger><SelectValue placeholder="اختر التصنيف: داخلية أو خارجية..." /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={t("violationForm.categoryPlaceholder")} /></SelectTrigger>
                 <SelectContent>
-                  {categoryOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                  {categoryOptions.map(o => <SelectItem key={o.value} value={o.value}>{categoryOptionLabel(t, o.value)}</SelectItem>)}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">يحدد التصنيف جهة الإحالة تلقائياً: الداخلية للموارد البشرية، والخارجية للمالية.</p>
+              <p className="text-xs text-muted-foreground">{t("violationForm.categoryHint")}</p>
             </div>
             <div className="flex flex-col gap-1 sm:col-span-2">
-              <Label>نوع المخالفة <span className="text-destructive">*</span></Label>
+              <Label>{t("violationForm.violationType")} <span className="text-destructive">*</span></Label>
               <Select
                 value={form.violationType}
                 onValueChange={v => setForm(f => ({ ...f, violationType: v, internalAction: "", actionDetail: "" }))}
               >
-                <SelectTrigger><SelectValue placeholder="اختر نوع المخالفة..." /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={t("violationForm.violationTypePlaceholder")} /></SelectTrigger>
                 <SelectContent className="max-h-72">
-                  {VIOLATION_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                  {VIOLATION_TYPES.map(vt => <SelectItem key={vt} value={vt}>{violationTypeLabel(t, vt)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             {form.violationType && form.category && (
               <>
                 <div className="flex flex-col gap-1 sm:col-span-2">
-                  <Label>الإجراء الداخلي</Label>
+                  <Label>{t("violationForm.internalAction")}</Label>
                   <Select
                     value={form.internalAction}
                     onValueChange={v => setForm(f => ({ ...f, internalAction: v, actionDetail: "" }))}
                   >
-                    <SelectTrigger><SelectValue placeholder="اختر الإجراء..." /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder={t("violationForm.internalActionPlaceholder")} /></SelectTrigger>
                     <SelectContent>
                       {internalActionOptions[form.category as ViolationCategory].map(o => (
-                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                        <SelectItem key={o.value} value={o.value}>{internalActionLabel(t, o.value)}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 {form.internalAction === FINE_ACTION && (
                   <div className="flex flex-col gap-1">
-                    <Label>قيمة الغرامة (ريال سعودي) <span className="text-destructive">*</span></Label>
+                    <Label>{t("violationForm.fineValue")} <span className="text-destructive">*</span></Label>
                     <Input
                       type="number"
                       min={0}
                       inputMode="decimal"
                       value={form.actionDetail}
                       onChange={e => setForm(f => ({ ...f, actionDetail: e.target.value }))}
-                      placeholder="مثال: 500"
+                      placeholder={t("violationForm.fineValuePlaceholder")}
                     />
                   </div>
                 )}
                 {form.internalAction === OTHER_ACTION && (
                   <div className="flex flex-col gap-1 sm:col-span-2">
-                    <Label>حدّد الإجراء <span className="text-destructive">*</span></Label>
+                    <Label>{t("violationForm.specifyAction")} <span className="text-destructive">*</span></Label>
                     <Textarea
                       rows={2}
                       value={form.actionDetail}
                       onChange={e => setForm(f => ({ ...f, actionDetail: e.target.value }))}
-                      placeholder="اكتب الإجراء المتخذ..."
+                      placeholder={t("violationForm.specifyActionPlaceholder")}
                     />
                   </div>
                 )}
               </>
             )}
             <div className="flex flex-col gap-1 sm:col-span-2">
-              <Label>وصف المخالفة <span className="text-destructive">*</span></Label>
-              <Textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} placeholder="اوصف المخالفة بالتفصيل..." />
+              <Label>{t("violationForm.description")} <span className="text-destructive">*</span></Label>
+              <Textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} placeholder={t("violationForm.descriptionPlaceholder")} />
             </div>
             <div className="flex flex-col gap-1 sm:col-span-2">
-              <Label>الشهود</Label>
+              <Label>{t("violationForm.witnesses")}</Label>
               <Textarea value={form.witnesses} onChange={e => setForm(f => ({ ...f, witnesses: e.target.value }))} rows={2} />
             </div>
             <div className="flex flex-col gap-1 sm:col-span-2">
-              <Label>الإجراء التأديبي المقترح</Label>
+              <Label>{t("violationForm.proposedAction")}</Label>
               <Textarea value={form.proposedAction} onChange={e => setForm(f => ({ ...f, proposedAction: e.target.value }))} rows={2} />
             </div>
           </div>
@@ -506,10 +510,10 @@ export function ViolationFormDialog({
         {step === 2 && (
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
-              <Label>إضافة صور أدلة (اختياري)</Label>
+              <Label>{t("violationForm.addEvidence")}</Label>
               <label className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border p-6 cursor-pointer hover:bg-muted/50 transition-colors">
                 <Camera className="size-8 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">اضغط لالتقاط صورة أو رفع ملف</span>
+                <span className="text-sm text-muted-foreground">{t("violationForm.captureHint")}</span>
                 <input type="file" accept="image/*" multiple className="hidden" onChange={handleImageCapture} />
               </label>
             </div>
@@ -526,33 +530,33 @@ export function ViolationFormDialog({
                 ))}
               </div>
             ) : (
-              <p className="text-center text-sm text-muted-foreground py-4">لا توجد صور حتى الآن</p>
+              <p className="text-center text-sm text-muted-foreground py-4">{t("violationForm.noImagesYet")}</p>
             )}
           </div>
         )}
 
         {step === 3 && (
           <div className="flex flex-col gap-6">
-            <SignaturePad label="توقيع المحرر" value={editorSignature} onChange={setEditorSignature} />
-            <SignaturePad label="توقيع المخالف" value={violatorSignature} onChange={setViolatorSignature} />
-            <SignaturePad label="توقيع المدير" value={managerSignature} onChange={setManagerSignature} />
+            <SignaturePad label={t("violationForm.sigEditor")} value={editorSignature} onChange={setEditorSignature} />
+            <SignaturePad label={t("violationForm.sigViolator")} value={violatorSignature} onChange={setViolatorSignature} />
+            <SignaturePad label={t("violationForm.sigManager")} value={managerSignature} onChange={setManagerSignature} />
           </div>
         )}
 
         <div className="flex justify-between mt-4 pt-4 border-t">
           <Button type="button" variant="outline" onClick={() => step > 1 ? setStep(s => s - 1) : setOpen(false)} className="gap-1">
-            <ChevronRight className="size-4" />
-            {step === 1 ? "إلغاء" : "السابق"}
+            {dir === "rtl" ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
+            {step === 1 ? t("violationForm.cancel") : t("violationForm.previous")}
           </Button>
           {step < 3 ? (
             <Button type="button" onClick={() => setStep(s => s + 1)}
               disabled={step === 1 && (!form.employeeName || !form.category || !form.violationType || !form.place.trim() || !form.description.trim() || (form.entryMode === "manual" && manualDocs.length === 0))}
               className="gap-1">
-              التالي <ChevronLeft className="size-4" />
+              {t("violationForm.next")} {dir === "rtl" ? <ChevronLeft className="size-4" /> : <ChevronRight className="size-4" />}
             </Button>
           ) : (
             <Button type="button" onClick={handleSave} disabled={isPending} className="gap-1">
-              {isPending ? "جارٍ الحفظ..." : "حفظ المخالفة"}
+              {isPending ? t("violationForm.saving") : t("violationForm.saveViolation")}
             </Button>
           )}
         </div>

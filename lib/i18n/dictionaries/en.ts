@@ -273,6 +273,14 @@ export const en: Dictionary = {
     filePrepFailed: "Failed to prepare the file",
     imageCompressFailed: "Failed to compress the image",
     currency: "SAR",
+    editTrigger: "Manual edit",
+    editTitle: "Manual edit of violation",
+    attachManualExtra: "Attach an additional scanned paper form (PDF, image, or document)",
+    employeeNameRequired: "Employee name is required",
+    editSavedTitle: "Changes saved",
+    editSavedDesc: "The violation was updated successfully.",
+    saveEdits: "Save changes",
+    detectedByShort: "Inspector / employee name",
   },
 
   permitDialog: {
@@ -503,6 +511,53 @@ export const en: Dictionary = {
   violationCategory: {
     internal: "Internal",
     external: "External",
+  },
+
+  categoryOption: {
+    internal: "Internal (Employee)",
+    external: "External (Contractor / Visitor)",
+  },
+
+  internalAction: {
+    "تحويل إلى الموارد البشرية": "Refer to HR",
+    "غرامة مالية": "Financial fine",
+    "أخرى": "Other",
+    "إشعار الشركة": "Notify the company",
+    "إيقاف العمل": "Stop work",
+  },
+
+  violationTypes: {
+    "عدم ارتداء خوذة السلامة": "Not wearing a safety helmet",
+    "عدم ارتداء حذاء السلامة": "Not wearing safety shoes",
+    "عدم ارتداء سترة عاكسة": "Not wearing a reflective vest",
+    "عدم ارتداء قفازات واقية": "Not wearing protective gloves",
+    "عدم ارتداء نظارات واقية": "Not wearing protective goggles",
+    "عدم ارتداء كمامة أو جهاز تنفس": "Not wearing a mask or respirator",
+    "عدم ارتداء حزام الأمان للعمل على الارتفاع": "Not wearing a safety harness for work at height",
+    "العمل بدون تصريح عمل": "Working without a work permit",
+    "تجاوز منطقة العمل المحددة": "Exceeding the designated work area",
+    "مخالفة إجراءات العزل والقفل (LOTO)": "Violating lockout/tagout (LOTO) procedures",
+    "استخدام معدات تالفة أو غير مطابقة": "Using damaged or non-compliant equipment",
+    "تشغيل معدات بدون تدريب أو ترخيص": "Operating equipment without training or license",
+    "الإهمال في تأمين منطقة العمل": "Negligence in securing the work area",
+    "عدم الإبلاغ عن حادثة أو إصابة": "Failure to report an incident or injury",
+    "إهمال نظافة موقع العمل": "Neglecting worksite cleanliness",
+    "عدم التخلص الصحيح من النفايات": "Improper waste disposal",
+    "سد مخارج الطوارئ أو ممرات الإخلاء": "Blocking emergency exits or evacuation routes",
+    "تخزين مواد بطريقة غير آمنة": "Storing materials unsafely",
+    "التشتت أو استخدام الهاتف أثناء العمل": "Distraction or phone use during work",
+    "الإهمال المتعمد في اتباع تعليمات السلامة": "Deliberate negligence in following safety instructions",
+    "التدخين في مناطق محظورة": "Smoking in prohibited areas",
+    "السير في مسارات المركبات": "Walking in vehicle lanes",
+    "التصرف بصورة عدوانية أو غير لائقة": "Aggressive or inappropriate behavior",
+    "قيادة مركبة بسرعة زائدة داخل الموقع": "Speeding a vehicle inside the site",
+    "عدم ارتداء حزام الأمان في المركبة": "Not wearing a seatbelt in the vehicle",
+    "استخدام الجوال أثناء القيادة": "Using a mobile phone while driving",
+    "إهمال صيانة المركبة أو المعدة": "Neglecting vehicle or equipment maintenance",
+    "التعامل مع مواد خطرة بدون مؤهل": "Handling hazardous materials without qualification",
+    "عدم الالتزام بتعليمات بطاقة MSDS": "Not following MSDS instructions",
+    "تسريب مواد كيميائية دون إبلاغ": "Chemical spill without reporting",
+    "مخالفة أخرى": "Other violation",
   },
 
   department: {
