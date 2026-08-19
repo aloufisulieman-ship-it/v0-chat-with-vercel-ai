@@ -5,6 +5,7 @@ import { Mic, Square, Save, UploadCloud, CheckCircle2, Loader2, Trash2, AlertTri
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { upload } from "@vercel/blob/client"
+import { useI18n } from "@/lib/i18n/client"
 
 // اختيار أفضل صيغة تسجيل صوتي مدعومة في المتصفح (WebM/Opus أولاً ثم بدائل).
 function pickAudioMime(): { mimeType: string; ext: string } {
@@ -60,6 +61,7 @@ export function AudioRecorder({
   recordingId?: number | null
   violationId?: number | null
 }) {
+  const { t, locale, formatNumber } = useI18n()
   const streamRef = useRef<MediaStream | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
@@ -96,7 +98,7 @@ export function AudioRecorder({
     setProgress(0)
 
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-      setError("متصفحك لا يدعم تسجيل الصوت. جرّب متصفحاً حديثاً.")
+      setError(t("aiMonitoring.cam.audUnsupported"))
       return
     }
 
@@ -106,11 +108,11 @@ export function AudioRecorder({
     } catch (err) {
       const name = err instanceof Error ? err.name : ""
       if (name === "NotAllowedError" || name === "SecurityError") {
-        setError("تم رفض إذن الميكروفون. فعّله من إعدادات المتصفح ثم حاول مجدداً.")
+        setError(t("aiMonitoring.cam.audDenied"))
       } else if (name === "NotFoundError") {
-        setError("لم يتم العثور على ميكروفون في هذا الجهاز.")
+        setError(t("aiMonitoring.cam.audNotFound"))
       } else {
-        setError("تعذّر الوصول إلى الميكروفون. حاول مرة أخرى.")
+        setError(t("aiMonitoring.cam.audGeneric"))
       }
       return
     }
@@ -132,7 +134,7 @@ export function AudioRecorder({
       if (e.data && e.data.size > 0) chunksRef.current.push(e.data)
     }
     recorder.onerror = () => {
-      setError("حدث خطأ أثناء التسجيل. حاول مرة أخرى.")
+      setError(t("aiMonitoring.cam.audRecordError"))
     }
 
     recorder.start(1000) // جمع القطع كل ثانية لضمان عدم فقدان الصوت عند الإيقاف.
@@ -165,7 +167,7 @@ export function AudioRecorder({
       chunksRef.current = []
 
       if (blob.size === 0) {
-        setError("لم يُسجّل أي صوت. تحقق من الميكروفون وحاول مجدداً.")
+        setError(t("aiMonitoring.cam.audNoAudio"))
         setPhase("idle")
         return
       }
@@ -186,7 +188,7 @@ export function AudioRecorder({
     try {
       recorder.stop()
     } catch {
-      setError("تعذّر إيقاف التسجيل. حاول مرة أخرى.")
+      setError(t("aiMonitoring.cam.audStopFailed"))
     }
   }, [cameraName, recordingId, violationId])
 
@@ -229,9 +231,9 @@ export function AudioRecorder({
       // تمييز انقطاع الاتصال عن أخطاء الخادم لرسالة أوضح.
       const offline = typeof navigator !== "undefined" && navigator.onLine === false
       if (offline) {
-        setError("انقطع الاتصال بالإنترنت. تحقق من الشبكة ثم أعد الرفع.")
+        setError(t("aiMonitoring.cam.audOffline"))
       } else {
-        setError(err instanceof Error ? err.message : "تعذّر رفع النسخة الصوتية. حاول مجدداً.")
+        setError(err instanceof Error ? err.message : t("aiMonitoring.cam.audUploadFailed"))
       }
       setPhase("saved")
     }

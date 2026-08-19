@@ -124,7 +124,11 @@ export function LiveView({
   // إظهار خطأ المايكروفون كإشعار عربي واضح عند تغيّره.
   useEffect(() => {
     if (talkError) {
-      toast({ title: t("aiMonitoring.cam.micToastFailed"), description: talkError, variant: "destructive" })
+      toast({
+        title: t("aiMonitoring.cam.micToastFailed"),
+        description: t(`aiMonitoring.cam.${talkError}`),
+        variant: "destructive",
+      })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [talkError])
@@ -429,18 +433,18 @@ export function LiveView({
             )}
             aria-hidden="true"
           />
-          {webrtcLive ? "بث حي مباشر" : isLive ? "لقطات حية" : "غير متصل"}
+          {webrtcLive ? t("aiMonitoring.cam.streamLive") : isLive ? t("aiMonitoring.cam.streamSnapshots") : t("aiMonitoring.cam.offline")}
         </span>
         </div>
       </div>
 
-      {/* شريط خط�� البث المباشر: يعرض رسالة 401/403 الكامل�� بدل رمز غامض */}
+      {/* شريط خطأ البث المباشر: يعرض رسالة 401/403 الكاملة بدل رمز غامض */}
       {webrtcError && (
         <div
           role="alert"
           className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm text-destructive"
         >
-          تعذّر الاتصال بالبث الحي المباشر: {webrtcError}
+          {t("aiMonitoring.cam.liveError").replace("{err}", webrtcError)}
         </div>
       )}
 
@@ -465,14 +469,14 @@ export function LiveView({
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 src={frameSrc || "/placeholder.svg"}
-                alt={`آخر إطار من بث المفتش ${title}`}
+                alt={t("aiMonitoring.cam.lastFrameInspector").replace("{title}", title)}
                 className="size-full object-contain"
               />
             ) : (
               <div className="flex size-full flex-col items-center justify-center gap-2 text-white/40">
                 <Cctv className="size-12" />
                 <span className="text-sm">
-                  {isLive ? "جارٍ الاتصال بالبث الحي المباشر…" : "بانتظار أول إطار من الكاميرا…"}
+                  {isLive ? t("aiMonitoring.cam.connectingLive") : t("aiMonitoring.cam.waitingFirstFrame")}
                 </span>
               </div>
             ))}
@@ -488,15 +492,15 @@ export function LiveView({
                 aria-pressed={audioOn}
               >
                 {audioOn ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
-                {audioOn ? "الصوت مفعّل" : "تفعيل الصوت"}
+                {audioOn ? t("aiMonitoring.cam.audioOn") : t("aiMonitoring.cam.enableAudio")}
               </button>
             ) : (
               <div
                 className="absolute left-3 top-14 z-10 inline-flex items-center gap-1.5 rounded-full bg-black/40 px-3 py-1.5 text-xs font-medium text-white/60 backdrop-blur"
-                aria-label="لا يوجد صوت وارد من مصدر البث"
+                aria-label={t("aiMonitoring.cam.noAudioSourceAria")}
               >
                 <VolumeX className="size-4" />
-                لا يوجد صوت من المصدر
+                {t("aiMonitoring.cam.noAudioSource")}
               </div>
             ))}
 
@@ -519,12 +523,12 @@ export function LiveView({
                 <>
                   <span className="size-2 animate-pulse rounded-full bg-white" aria-hidden="true" />
                   <Mic className="size-4" />
-                  تتحدّث الآن
+                  {t("aiMonitoring.cam.talkingNow")}
                 </>
               ) : (
                 <>
                   <MicOff className="size-4" />
-                  التحدّث مع المفتش
+                  {t("aiMonitoring.cam.talkToInspector")}
                 </>
               )}
             </button>
@@ -551,7 +555,7 @@ export function LiveView({
             {camera && (
               <div className="flex items-center gap-1.5 rounded-lg bg-black/40 px-2.5 py-1 text-xs text-white/90">
                 <Clock className="size-3.5" />
-                <span dir="ltr">{relativeTime(camera.lastSeenAt, now)}</span>
+                <span dir="ltr">{relativeTime(camera.lastSeenAt, now, t, formatNumber)}</span>
               </div>
             )}
           </div>
@@ -563,13 +567,13 @@ export function LiveView({
                 <div className="flex min-w-0 flex-col gap-1">
                   <span className="flex items-center gap-1.5 text-sm font-semibold text-white">
                     <AlertTriangle className="size-4 text-amber-400" />
-                    {detectionTypeLabels[detection.detectionType] ?? detection.detectionType}
+                    {detectionTypeLabel(t, detection.detectionType)}
                   </span>
                   {detection.notes && (
                     <span className="truncate text-xs text-white/70">{detection.notes}</span>
                   )}
                   <span className="text-[11px] text-white/60" dir="ltr">
-                    {relativeTime(detection.detectedAt, now)} · {detection.confidenceScore}%
+                    {relativeTime(detection.detectedAt, now, t, formatNumber)} · {detection.confidenceScore}%
                   </span>
                 </div>
                 <span
@@ -578,13 +582,13 @@ export function LiveView({
                     severityStyles[detection.severity] ?? "",
                   )}
                 >
-                  {severityLabels[detection.severity] ?? detection.severity}
+                  {severityLabel(t, detection.severity)}
                 </span>
               </div>
             ) : (
               <div className="flex items-center gap-1.5 text-sm font-medium text-white/80">
                 <ShieldCheck className="size-4 text-emerald-400" />
-                لا توجد مخالفات مرصودة حتى الآن
+                {t("aiMonitoring.cam.noViolationsYet")}
               </div>
             )}
           </div>
@@ -600,7 +604,7 @@ export function LiveView({
             className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {capturing ? <Loader2 className="size-4 animate-spin" /> : <Camera className="size-4" />}
-            {capturing ? "جارٍ التقاط اللقطة…" : "التقاط لقطة وإنشاء مخالفة"}
+            {capturing ? t("aiMonitoring.cam.capturing") : t("aiMonitoring.cam.captureCreateViolation")}
           </button>
           {/* تسجيل مقطع من البث الحي — متاح أثناء البث الحي المباشر فقط */}
           {recording ? (
@@ -609,7 +613,7 @@ export function LiveView({
               className="inline-flex items-center justify-center gap-2 rounded-lg bg-destructive px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-destructive/90"
             >
               <CircleStop className="size-4" />
-              إيقاف التسجيل
+              {t("aiMonitoring.cam.stopRecording")}
               <span className="font-mono text-xs opacity-90" dir="ltr">
                 {String(Math.floor(recSeconds / 60)).padStart(2, "0")}:
                 {String(recSeconds % 60).padStart(2, "0")}
@@ -620,10 +624,10 @@ export function LiveView({
               onClick={startRecording}
               disabled={!webrtcLive || savingClip}
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-              title={webrtcLive ? undefined : "التسجيل متاح أثناء البث الحي المباشر فقط"}
+              title={webrtcLive ? undefined : t("aiMonitoring.cam.recordOnlyLive")}
             >
               {savingClip ? <Loader2 className="size-4 animate-spin" /> : <Video className="size-4" />}
-              {savingClip ? "جارٍ حفظ المقطع…" : "تسجيل مقطع"}
+              {savingClip ? t("aiMonitoring.cam.savingClip") : t("aiMonitoring.cam.recordClip")}
             </button>
           )}
         </div>
@@ -634,7 +638,7 @@ export function LiveView({
         )}
         {recording && (
           <p className="text-xs text-muted-foreground">
-            يجري تسجيل مقطع من البث الحي (بالصوت). أوقف التسجيل ليُحفظ في التسجيلات وتُنشئ منه مخالفة.
+            {t("aiMonitoring.cam.recordingClipHint")}
           </p>
         )}
       </div>
@@ -643,18 +647,18 @@ export function LiveView({
       {/* تفاصيل الكاميرا */}
       <Card className="grid grid-cols-2 gap-x-4 gap-y-3 p-4 sm:grid-cols-4">
         <div className="flex flex-col gap-0.5">
-          <span className="text-xs text-muted-foreground">اسم المفتش/الموظف</span>
+          <span className="text-xs text-muted-foreground">{t("aiMonitoring.cam.inspectorName")}</span>
           <span className="truncate font-medium text-foreground">{title}</span>
         </div>
         <div className="flex flex-col gap-0.5">
-          <span className="text-xs text-muted-foreground">الموقع</span>
+          <span className="text-xs text-muted-foreground">{t("aiMonitoring.cam.location")}</span>
           <span className="flex items-center gap-1 truncate font-medium text-foreground">
             <MapPin className="size-3.5 shrink-0 text-muted-foreground" />
-            {camera?.cameraLocation || "غير محدد"}
+            {camera?.cameraLocation || t("aiMonitoring.cam.notSpecified")}
           </span>
         </div>
         <div className="flex flex-col gap-0.5">
-          <span className="text-xs text-muted-foreground">الحالة</span>
+          <span className="text-xs text-muted-foreground">{t("aiMonitoring.cam.status")}</span>
           <span
             className={cn(
               "flex items-center gap-1.5 font-medium",
@@ -668,13 +672,13 @@ export function LiveView({
               )}
               aria-hidden="true"
             />
-            {isLive ? "يبث الآن" : "متوقف"}
+            {isLive ? t("aiMonitoring.cam.broadcasting") : t("aiMonitoring.cam.stopped")}
           </span>
         </div>
         <div className="flex flex-col gap-0.5">
-          <span className="text-xs text-muted-foreground">نوع البث</span>
+          <span className="text-xs text-muted-foreground">{t("aiMonitoring.cam.streamType")}</span>
           <span className="font-medium text-foreground">
-            {webrtcLive ? "فيديو حي مباشر (WebRTC)" : "لقطات شبه فورية (~0.4 ث)"}
+            {webrtcLive ? t("aiMonitoring.cam.streamTypeWebrtc") : t("aiMonitoring.cam.streamTypeSnapshots")}
           </span>
         </div>
       </Card>
