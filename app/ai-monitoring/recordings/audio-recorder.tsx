@@ -244,7 +244,7 @@ export function AudioRecorder({
       <div className="flex items-center justify-between gap-2">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
           <Mic className="size-4 text-primary" />
-          نسخة صوتية
+          {t("aiMonitoring.cam.audTitle")}
         </h3>
         {/* مؤشر الحالة بنفس نمط مؤشر البث الحي: نقطة نابضة عند التسجيل. */}
         <span className="flex items-center gap-1.5 text-xs font-medium">
@@ -256,15 +256,19 @@ export function AudioRecorder({
             aria-hidden="true"
           />
           <span className={recording ? "text-destructive" : "text-muted-foreground"}>
-            {recording ? `يسجّل • ${formatClock(seconds)}` : "غير نشط"}
+            {recording
+              ? t("aiMonitoring.cam.audRecordingClock").replace("{time}", formatClock(seconds))
+              : t("aiMonitoring.cam.audInactive")}
           </span>
         </span>
       </div>
 
       <p className="text-xs text-muted-foreground text-pretty">
-        سجّل ملاحظة صوتية مرتبطة بـ{" "}
+        {t("aiMonitoring.cam.audDescLead")}
         <span className="font-medium text-foreground">{cameraName}</span>
-        {clip?.meta.recordingId != null && ` (تسجيل #${clip.meta.recordingId})`} لتوثيق الحادثة أو المخالفة.
+        {clip?.meta.recordingId != null &&
+          t("aiMonitoring.cam.audDescRecording").replace("{id}", String(clip.meta.recordingId))}
+        {t("aiMonitoring.cam.audDescTail")}
       </p>
 
       {/* أزرار التحكم حسب المرحلة */}
@@ -272,14 +276,14 @@ export function AudioRecorder({
         {!recording && phase !== "uploading" && (
           <Button onClick={startRecording} className="gap-2">
             <Mic className="size-4" />
-            {clip ? "تسجيل نسخة جديدة" : "تشغيل الميكروفون"}
+            {clip ? t("aiMonitoring.cam.audRecordNew") : t("aiMonitoring.cam.audStartMic")}
           </Button>
         )}
 
         {recording && (
           <Button onClick={saveClip} variant="destructive" className="gap-2">
             <Square className="size-4" />
-            إيقاف وحفظ النسخة
+            {t("aiMonitoring.cam.audStopSave")}
           </Button>
         )}
 
@@ -288,12 +292,12 @@ export function AudioRecorder({
             {phase !== "uploaded" && (
               <Button onClick={uploadClip} className="gap-2">
                 <UploadCloud className="size-4" />
-                رفع النسخة
+                {t("aiMonitoring.cam.audUpload")}
               </Button>
             )}
             <Button onClick={discardClip} variant="outline" className="gap-2">
               <Trash2 className="size-4" />
-              حذف
+              {t("aiMonitoring.cam.audDelete")}
             </Button>
           </>
         )}
@@ -301,7 +305,7 @@ export function AudioRecorder({
         {phase === "uploading" && (
           <Button disabled className="gap-2">
             <Loader2 className="size-4 animate-spin" />
-            جارٍ الرفع…
+            {t("aiMonitoring.cam.audUploading")}
           </Button>
         )}
       </div>
@@ -311,25 +315,31 @@ export function AudioRecorder({
         <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/40 p-3">
           <div className="flex items-center gap-2 text-xs font-medium text-foreground">
             <Save className="size-3.5 text-primary" />
-            نسخة محفوظة محلياً • {formatClock(clip.meta.durationSeconds)}
+            {t("aiMonitoring.cam.audSavedLocally").replace("{time}", formatClock(clip.meta.durationSeconds))}
           </div>
           {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
           <audio src={clip.url} controls className="w-full" />
           <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
             <span>
-              التاريخ:{" "}
-              {new Date(clip.meta.recordedAt).toLocaleString("ar", {
-                day: "2-digit",
-                month: "2-digit",
-                year: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-                timeZone: "Asia/Riyadh",
-              })}
+              {t("aiMonitoring.cam.audMetaDate").replace(
+                "{date}",
+                new Date(clip.meta.recordedAt).toLocaleString(locale === "ar" ? "ar-SA" : "en-GB", {
+                  day: "2-digit",
+                  month: "2-digit",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  timeZone: "Asia/Riyadh",
+                }),
+              )}
             </span>
-            <span>الموقع/الكاميرا: {clip.meta.cameraName}</span>
-            {clip.meta.recordingId != null && <span>التسجيل: #{clip.meta.recordingId}</span>}
-            {clip.meta.violationId != null && <span>المخالفة: #{clip.meta.violationId}</span>}
+            <span>{t("aiMonitoring.cam.audMetaCamera").replace("{name}", clip.meta.cameraName)}</span>
+            {clip.meta.recordingId != null && (
+              <span>{t("aiMonitoring.cam.audMetaRecording").replace("{id}", String(clip.meta.recordingId))}</span>
+            )}
+            {clip.meta.violationId != null && (
+              <span>{t("aiMonitoring.cam.audMetaViolation").replace("{id}", String(clip.meta.violationId))}</span>
+            )}
           </div>
         </div>
       )}
@@ -343,7 +353,9 @@ export function AudioRecorder({
               style={{ width: `${progress}%` }}
             />
           </div>
-          <span className="text-[11px] text-muted-foreground">جارٍ رفع النسخة الصوتية… {progress}%</span>
+          <span className="text-[11px] text-muted-foreground">
+            {t("aiMonitoring.cam.audUploadProgress").replace("{n}", formatNumber(progress))}
+          </span>
         </div>
       )}
 
@@ -351,7 +363,7 @@ export function AudioRecorder({
       {phase === "uploaded" && uploadedUrl && (
         <div className="flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-2 text-xs font-medium text-primary">
           <CheckCircle2 className="size-4 shrink-0" />
-          تم رفع النسخة الصوتية بنجاح.
+          {t("aiMonitoring.cam.audUploadSuccess")}
         </div>
       )}
 

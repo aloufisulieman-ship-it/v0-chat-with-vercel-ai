@@ -22,10 +22,12 @@ import {
 } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
-import { detectionTypeLabels, severityLabels, severityStyles } from "@/lib/ai-monitoring"
+import { severityStyles } from "@/lib/ai-monitoring"
 import { upload } from "@vercel/blob/client"
 import { createRecording } from "@/app/actions/recordings"
 import { useWebrtcBroadcaster } from "./use-webrtc-broadcaster"
+import { useI18n } from "@/lib/i18n/client"
+import { detectionTypeLabel, severityLabel } from "@/lib/i18n/labels"
 
 // البث الحي الفعلي يذهب الآن عبر WebRTC (ندّ لِند) مباشرةً، فلم تعد لقطات Blob
 // تحمل الفيديو الحي. دورها اقتصر على: (1) صورة مصغّرة للجدار/اللوحة عندما لا يكون
@@ -75,6 +77,7 @@ function formatDuration(totalSeconds: number): string {
 }
 
 export function MobileCamera() {
+  const { t, formatNumber } = useI18n()
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -158,14 +161,14 @@ export function MobileCamera() {
   const bothFilled = inspectorName.trim().length > 0 && location.trim().length > 0
   const startSession = useCallback(() => {
     if (!bothFilled) {
-      setSessionError("يرجى تعبئة اسم المفتش/الموظف والموقع قبل بدء الجلسة.")
+      setSessionError(t("aiMonitoring.cam.sessionMissing"))
       return
     }
     setSessionError(null)
     setSessionStarted(true)
   }, [bothFilled])
 
-  // تحديث الحالة المعروضة لاتجاه الكاميرا (أمامي/خلفي) مع مرجع متزامن للاستخدام داخل
+  // تحديث الحالة المعر��ضة لاتجاه الكاميرا (أمامي/خلفي) مع مرجع متزامن للاستخدام داخل
   // ردود النداء دون تبعيات.
   const applyFacing = useCallback((facing: string) => {
     currentFacingRef.current = facing
@@ -188,7 +191,7 @@ export function MobileCamera() {
   const ensureStream = useCallback(async (): Promise<MediaStream> => {
     if (streamRef.current) return streamRef.current
     if (!navigator.mediaDevices?.getUserMedia) {
-      throw new Error("متصفحك لا يدعم الوصول إلى الكاميرا.")
+      throw new Error(t("aiMonitoring.cam.camUnsupported"))
     }
     // قيود 720p @ 24fps: توازن بين الوضوح والتأخير المنخفض على شبكات الجوّال،
     // ويتيح للناشر ضبط معدل البت التكيّفي لاحقاً. القيم "ideal" تسمح للمتصفح
@@ -302,7 +305,7 @@ export function MobileCamera() {
       applyFacing((st.facingMode as string) ?? "")
       void refreshVideoDevices()
     } catch {
-      setError("تعذّر تبديل الكاميرا. حاول مرة أخرى.")
+      setError(t("aiMonitoring.cam.switchCamFailed"))
     } finally {
       setSwitching(false)
     }
@@ -345,7 +348,7 @@ export function MobileCamera() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           image,
-          inspectorName: inspectorName || "كاميرا الهاتف",
+          inspectorName: inspectorName || t("aiMonitoring.cam.defaultCamName"),
           cameraLocation: location,
         }),
       })
@@ -355,14 +358,14 @@ export function MobileCamera() {
         setUploadError(null)
       } else {
         const data = await res.json().catch(() => null)
-        setUploadError(data?.error || `فشل رفع الإطار (رمز ${res.status})`)
+        setUploadError(data?.error || t("aiMonitoring.cam.frameUploadFailed").replace("{code}", String(res.status)))
       }
     } catch {
-      setUploadError("تعذّر الاتصال بالخادم أثناء رفع الإطار")
+      setUploadError(t("aiMonitoring.cam.frameUploadConn"))
     } finally {
       uploadingRef.current = false
     }
-  }, [captureJpeg, inspectorName, location])
+  }, [captureJpeg, inspectorName, location, t])
 
   // الحلقة البطيئة: إرسال الإطار للتحليل بالذكاء الاصطناعي (Claude Sonnet 4.6).
   const analyzeFrame = useCallback(async () => {
@@ -377,23 +380,23 @@ export function MobileCamera() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           image,
-          inspectorName: inspectorName || "كاميرا الهاتف",
+          inspectorName: inspectorName || t("aiMonitoring.cam.defaultCamName"),
           cameraLocation: location,
         }),
       })
       const data = await res.json()
       if (!res.ok) {
-        setLastResult({ at: Date.now(), count: 0, detections: [], error: data?.error || "خطأ في التحليل" })
+        setLastResult({ at: Date.now(), count: 0, detections: [], error: data?.error || t("aiMonitoring.cam.analysisError") })
       } else {
         setLastResult({ at: Date.now(), count: data.count ?? 0, detections: data.detections ?? [] })
       }
     } catch {
-      setLastResult({ at: Date.now(), count: 0, detections: [], error: "تعذّر الاتصال بالخادم" })
+      setLastResult({ at: Date.now(), count: 0, detections: [], error: t("aiMonitoring.cam.analysisConn") })
     } finally {
       analyzingRef.current = false
       setAnalyzing(false)
     }
-  }, [captureJpeg, inspectorName, location])
+  }, [captureJpeg, inspectorName, location, t])
 
   // بدء البث الحي (رفع الإطارات + التحليل).
   const startStreaming = useCallback(async () => {
@@ -408,11 +411,11 @@ export function MobileCamera() {
       analyzeIntervalRef.current = setInterval(analyzeFrame, ANALYZE_INTERVAL_MS)
     } catch (err) {
       const name = err instanceof Error ? err.name : ""
-      if (name === "NotAllowedError") setError("تم رفض إذن الكاميرا. فعّله من إعدادات المتصفح.")
-      else if (name === "NotFoundError") setError("لم يتم العثور على كاميرا في هذا الجهاز.")
-      else setError(err instanceof Error ? err.message : "تعذّر تشغيل الكاميرا.")
+      if (name === "NotAllowedError") setError(t("aiMonitoring.cam.camDenied"))
+      else if (name === "NotFoundError") setError(t("aiMonitoring.cam.camNotFound"))
+      else setError(err instanceof Error ? err.message : t("aiMonitoring.cam.camStartFailed"))
     }
-  }, [ensureStream, uploadFrame, analyzeFrame])
+  }, [ensureStream, uploadFrame, analyzeFrame, t])
 
   const stopStreaming = useCallback(() => {
     if (uploadIntervalRef.current) {
@@ -451,7 +454,7 @@ export function MobileCamera() {
   // رفع الفيديو المُسجّل (والمعاينة) إلى Blob مباشرةً من المتصفح ثم إنشاء سجل في القاعدة.
   const uploadRecording = useCallback(
     async (blob: Blob, durationSeconds: number, posterDataUrl: string | null) => {
-      const camId = inspectorName || "كاميرا الهاتف"
+      const camId = inspectorName || t("aiMonitoring.cam.defaultCamName")
       const ext = recordMimeRef.current.ext || "webm"
       const stamp = Date.now()
       const path = `recordings/${encodeURIComponent(camId)}/${stamp}.${ext}`
@@ -493,15 +496,15 @@ export function MobileCamera() {
           durationSeconds,
           fileSizeBytes: blob.size,
         })
-        setRecordMsg(`تم حفظ التسجيل (${formatDuration(durationSeconds)}) بنجاح.`)
+        setRecordMsg(t("aiMonitoring.cam.recordSaved").replace("{dur}", formatDuration(durationSeconds)))
       } catch (err) {
         console.log("[v0] recording upload failed:", err instanceof Error ? err.message : err)
-        setRecordError(err instanceof Error ? err.message : "تعذّر رفع التسجيل. حاول مجدداً.")
+        setRecordError(err instanceof Error ? err.message : t("aiMonitoring.cam.recordUploadFailed"))
       } finally {
         setSavingRecording(false)
       }
     },
-    [inspectorName],
+    [inspectorName, t],
   )
 
   // بدء تسجيل الفيديو من نفس بث الكاميرا (يعمل مع البث أو بمفرده).
@@ -510,7 +513,7 @@ export function MobileCamera() {
     setRecordError(null)
     setRecordMsg(null)
     if (typeof MediaRecorder === "undefined") {
-      setRecordError("متصفحك لا يدعم تسجيل الفيديو (MediaRecorder).")
+      setRecordError(t("aiMonitoring.cam.videoUnsupported"))
       return
     }
     try {
@@ -519,7 +522,7 @@ export function MobileCamera() {
       recordMimeRef.current = mime
 
       // نُسجّل من قناة canvas تُحاكي عنصر الفيديو الحالي (بدل التسجيل المباشر من مسار
-      // الكاميرا)، حت�� يستمر التسجيل بسلاسة عبر تبديل الكاميرا دون تجميد الفيديو.
+      // الكامي��ا)، حت�� يستمر التسجيل بسلاسة عبر تبديل الكاميرا دون تجميد الفيديو.
       // نضيف مسار الصوت نفسه (كائن المسار ذاته) فيتبع حالة كتم/تفعيل الميكروفون.
       const recCanvas = recCanvasRef.current ?? document.createElement("canvas")
       recCanvasRef.current = recCanvas
@@ -585,7 +588,7 @@ export function MobileCamera() {
         // التقط المعاينة من الفيديو الحي قبل تحرير الكاميرا.
         const poster = capturePosterDataUrl()
         if (blob.size > 0) void uploadRecording(blob, durationSeconds, poster)
-        else setRecordError("التسجيل فارغ — لم تُلتقط أي بيانات فيديو.")
+        else setRecordError(t("aiMonitoring.cam.recordEmpty"))
         // حرّر الكاميرا إن لم يكن البث الحي شغّالاً.
         releaseStreamIfIdle(uploadIntervalRef.current !== null, false)
       }
@@ -599,11 +602,11 @@ export function MobileCamera() {
       }, 500)
     } catch (err) {
       const name = err instanceof Error ? err.name : ""
-      if (name === "NotAllowedError") setError("تم رفض إذن الكاميرا. فعّله من إعدادات المتصفح.")
-      else if (name === "NotFoundError") setError("لم يتم العثور على كاميرا في هذا الجهاز.")
-      else setError(err instanceof Error ? err.message : "تعذّر بدء التسجيل.")
+      if (name === "NotAllowedError") setError(t("aiMonitoring.cam.camDenied"))
+      else if (name === "NotFoundError") setError(t("aiMonitoring.cam.camNotFound"))
+      else setError(err instanceof Error ? err.message : t("aiMonitoring.cam.recordStartFailed2"))
     }
-  }, [ensureStream, uploadRecording, releaseStreamIfIdle, capturePosterDataUrl])
+  }, [ensureStream, uploadRecording, releaseStreamIfIdle, capturePosterDataUrl, t])
 
   const stopRecording = useCallback(() => {
     if (recordTimerRef.current) {
@@ -690,42 +693,42 @@ export function MobileCamera() {
       <Card className="flex items-start gap-3 border-accent/30 bg-accent/10 p-4">
         <BatteryCharging className="mt-0.5 size-5 shrink-0 text-amber-700 dark:text-amber-400" />
         <p className="text-sm text-amber-800 dark:text-amber-300">
-          أبقِ الشاشة مفتوحة والهاتف بالشحن أثناء البث أو التسجيل لضمان استمرار العمل.
+          {t("aiMonitoring.cam.chargeHint")}
         </p>
       </Card>
 
       {/* نموذج بدء الجلسة: اسم المفتش والموقع إلزاميان قبل تفعيل البث/التسجيل */}
       <Card className="flex flex-col gap-3 p-4">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-sm font-semibold text-foreground">بيانات الجلسة</span>
+          <span className="text-sm font-semibold text-foreground">{t("aiMonitoring.cam.sessionData")}</span>
           {sessionStarted && (
             <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
               <CheckCircle2 className="size-3.5" />
-              الجلسة جاهزة
+              {t("aiMonitoring.cam.sessionReady")}
             </span>
           )}
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-foreground">
-              اسم المفتش/الموظف <span className="text-destructive">*</span>
+              {t("aiMonitoring.cam.inspectorLabel")} <span className="text-destructive">*</span>
             </span>
             <input
               value={inspectorName}
               onChange={(e) => setInspectorName(e.target.value)}
-              placeholder="مثال: خالد العتيبي"
+              placeholder={t("aiMonitoring.cam.inspectorPlaceholder")}
               disabled={sessionStarted}
               className="rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-60"
             />
           </label>
           <label className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-foreground">
-              الموقع <span className="text-destructive">*</span>
+              {t("aiMonitoring.cam.locationLabel")} <span className="text-destructive">*</span>
             </span>
             <input
               value={location}
               onChange={(e) => setLocation(e.target.value)}
-              placeholder="مثال: بوابة رقم 3 أو منطقة التحميل"
+              placeholder={t("aiMonitoring.cam.locationPlaceholder")}
               disabled={sessionStarted}
               className="rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-60"
             />
