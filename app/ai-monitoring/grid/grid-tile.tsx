@@ -5,6 +5,7 @@ import { Cctv, MapPin, Radio, UserRound, Wifi, WifiOff } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useWebrtcViewer } from "../live/[cameraId]/use-webrtc-viewer"
 import type { CameraStreamDto } from "../connected-cameras"
+import { useI18n } from "@/lib/i18n/client"
 
 // كسر كاش إطار Blob بحيث تُحدَّث الصورة مع كل جلب.
 function frameSrc(url: string, version: string) {
@@ -18,12 +19,6 @@ function qualityTier(kbps: number, rttMs: number): "good" | "medium" | "weak" {
   if (kbps >= 350 && (rttMs === 0 || rttMs < 200)) return "good"
   if (kbps >= 120) return "medium"
   return "weak"
-}
-
-const TIER_LABEL: Record<"good" | "medium" | "weak", string> = {
-  good: "ممتاز",
-  medium: "متوسط",
-  weak: "ضعيف",
 }
 
 const TIER_CLASS: Record<"good" | "medium" | "weak", string> = {
