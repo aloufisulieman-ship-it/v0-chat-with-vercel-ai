@@ -3,7 +3,7 @@
 
 import "server-only"
 import { cookies } from "next/headers"
-import { LOCALE_COOKIE, normalizeLocale, type Locale } from "./config"
+import { LOCALE_COOKIE, normalizeLocale, localeDirection, type Locale } from "./config"
 import { createT, type TFunction } from "./translate"
 
 // اللغة الحالية من الكوكي (Next.js 16: cookies() غير متزامنة).
@@ -21,7 +21,7 @@ export async function resolveLocale(dbLocale?: string | null): Promise<Locale> {
 }
 
 // كائن الترجمة الجاهز للخادم: { locale, t, dir }.
-export async function getServerT(): Promise<{ locale: Locale; t: TFunction }> {
+export async function getServerT(): Promise<{ locale: Locale; t: TFunction; dir: "rtl" | "ltr" }> {
   const locale = await getServerLocale()
-  return { locale, t: createT(locale) }
+  return { locale, t: createT(locale), dir: localeDirection[locale] }
 }

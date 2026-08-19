@@ -10,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/use-toast"
 import { createTrainingFull } from "@/app/actions/hse"
 import { inspectionStatusOptions } from "@/lib/labels"
+import { useI18n } from "@/lib/i18n/client"
+import { statusLabel } from "@/lib/i18n/labels"
 
 // لوحة توقيع رقمية تدعم الماوس واللمس (بصمة الإصبع على الشاشة) وتحفظ كصورة base64.
 function SignaturePad({
@@ -23,6 +25,7 @@ function SignaturePad({
   label?: string
   compact?: boolean
 }) {
+  const { t } = useI18n()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [drawing, setDrawing] = useState(false)
 
@@ -75,7 +78,7 @@ function SignaturePad({
         <div className="flex items-center justify-between">
           <Label className="text-sm font-medium">{label}</Label>
           <button type="button" onClick={clear} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive">
-            <X className="size-3" /> مسح
+            <X className="size-3" /> {t("trainingMod.clearSignature")}
           </button>
         </div>
       )}
@@ -96,7 +99,7 @@ function SignaturePad({
         {!value && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <PenLine className="size-3" /> وقّع هنا
+              <PenLine className="size-3" /> {t("trainingMod.signHere")}
             </span>
           </div>
         )}
@@ -105,7 +108,7 @@ function SignaturePad({
             type="button"
             onClick={clear}
             className="absolute left-1 top-1 rounded-full bg-destructive p-0.5 text-destructive-foreground"
-            aria-label="مسح التوقيع"
+            aria-label={t("trainingMod.clearSignatureAria")}
           >
             <X className="size-3" />
           </button>
@@ -134,6 +137,7 @@ const emptyAttendee: Attendee = {
 }
 
 export function TrainingFormDialog() {
+  const { t, dir } = useI18n()
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
 
@@ -161,7 +165,7 @@ export function TrainingFormDialog() {
 
   function handleSave() {
     if (!form.title.trim()) {
-      toast({ title: "اسم الدورة مطلوب", variant: "destructive" })
+      toast({ title: t("trainingMod.toastTitleRequired"), variant: "destructive" })
       return
     }
     startTransition(async () => {
@@ -171,11 +175,11 @@ export function TrainingFormDialog() {
         fd.append("trainerSignature", trainerSignature)
         fd.append("attendeesList", JSON.stringify(attendees.filter((a) => a.name.trim() !== "")))
         await createTrainingFull(fd)
-        toast({ title: "تم الحفظ بنجاح", description: "تم تسجيل الدورة وسجل الحضور في قاعدة البيانات." })
+        toast({ title: t("trainingMod.toastSaved"), description: t("trainingMod.toastSavedDesc") })
         setOpen(false)
         resetForm()
       } catch (err) {
-        toast({ title: "تعذّر الحفظ", description: err instanceof Error ? err.message : "حدث خطأ.", variant: "destructive" })
+        toast({ title: t("trainingMod.toastSaveFailed"), description: err instanceof Error ? err.message : t("trainingMod.toastError"), variant: "destructive" })
       }
     })
   }
@@ -183,51 +187,51 @@ export function TrainingFormDialog() {
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetForm() }}>
       <DialogTrigger asChild>
-        <Button className="gap-2"><GraduationCap className="size-4" /> دورة جديدة</Button>
+        <Button className="gap-2"><GraduationCap className="size-4" /> {t("trainingMod.newCourse")}</Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[92svh] overflow-y-auto sm:max-w-4xl" dir="rtl">
+      <DialogContent className="max-h-[92svh] overflow-y-auto sm:max-w-4xl" dir={dir}>
         <DialogHeader>
-          <DialogTitle>دورة تدريبية جديدة — نموذج سجل الحضور</DialogTitle>
+          <DialogTitle>{t("trainingMod.formDialogTitle")}</DialogTitle>
         </DialogHeader>
 
         {/* بيانات الدورة */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-1 sm:col-span-2">
-            <Label>الموضوع / اسم الدورة <span className="text-destructive">*</span></Label>
-            <Input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="مثال: السلامة من الحرائق" />
+            <Label>{t("trainingMod.fTopic")} <span className="text-destructive">*</span></Label>
+            <Input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder={t("trainingMod.phTopic")} />
           </div>
           <div className="flex flex-col gap-1">
-            <Label>تاريخ الدورة</Label>
+            <Label>{t("trainingMod.fCourseDate")}</Label>
             <Input type="date" value={form.trainingDate} onChange={(e) => setForm((f) => ({ ...f, trainingDate: e.target.value }))} dir="ltr" />
           </div>
           <div className="flex flex-col gap-1">
-            <Label>من قام بالتدريب (Conducted by)</Label>
-            <Input value={form.conductedBy} onChange={(e) => setForm((f) => ({ ...f, conductedBy: e.target.value }))} placeholder="اسم المدرب" />
+            <Label>{t("trainingMod.fConductedBy")}</Label>
+            <Input value={form.conductedBy} onChange={(e) => setForm((f) => ({ ...f, conductedBy: e.target.value }))} placeholder={t("trainingMod.phTrainerName")} />
           </div>
           <div className="flex flex-col gap-1">
-            <Label>اللغة (Language)</Label>
+            <Label>{t("trainingMod.fLanguage")}</Label>
             <Select value={form.language} onValueChange={(v) => setForm((f) => ({ ...f, language: v }))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="العربية">العربية</SelectItem>
-                <SelectItem value="الإنجليزية">الإنجليزية</SelectItem>
-                <SelectItem value="الأردية">الأردية</SelectItem>
-                <SelectItem value="الهندية">الهندية</SelectItem>
-                <SelectItem value="أخرى">أخرى</SelectItem>
+                <SelectItem value="العربية">{t("trainingMod.langArabic")}</SelectItem>
+                <SelectItem value="الإنجليزية">{t("trainingMod.langEnglish")}</SelectItem>
+                <SelectItem value="الأردية">{t("trainingMod.langUrdu")}</SelectItem>
+                <SelectItem value="الهندية">{t("trainingMod.langHindi")}</SelectItem>
+                <SelectItem value="أخرى">{t("trainingMod.langOther")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="flex flex-col gap-1">
-            <Label>الحالة</Label>
+            <Label>{t("trainingMod.fStatus")}</Label>
             <Select value={form.status} onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {inspectionStatusOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                {inspectionStatusOptions.map((o) => <SelectItem key={o.value} value={o.value}>{statusLabel(t, o.value)}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
           <div className="sm:col-span-2">
-            <SignaturePad label="توقيع المدرب" value={trainerSignature} onChange={setTrainerSignature} />
+            <SignaturePad label={t("trainingMod.trainerSignature")} value={trainerSignature} onChange={setTrainerSignature} />
           </div>
         </div>
 
@@ -235,56 +239,56 @@ export function TrainingFormDialog() {
         <div className="mt-2 flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              <Users className="size-4 text-muted-foreground" /> سجل الحضور
+              <Users className="size-4 text-muted-foreground" /> {t("trainingMod.attendanceLog")}
             </span>
             <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => setAttendees((a) => [...a, { ...emptyAttendee }])}>
-              <Plus className="size-4" /> إضافة متدرب
+              <Plus className="size-4" /> {t("trainingMod.addTrainee")}
             </Button>
           </div>
 
           {attendees.map((a, i) => (
             <div key={i} className="rounded-lg border border-border p-3">
               <div className="mb-2 flex items-center justify-between">
-                <span className="text-sm font-semibold text-foreground">المتدرب {i + 1}</span>
+                <span className="text-sm font-semibold text-foreground">{t("trainingMod.traineeLabel")} {i + 1}</span>
                 <button
                   type="button"
                   onClick={() => setAttendees((arr) => (arr.length > 1 ? arr.filter((_, j) => j !== i) : arr))}
                   className="text-destructive hover:opacity-80 disabled:opacity-30"
                   disabled={attendees.length === 1}
-                  aria-label="حذف المتدرب"
+                  aria-label={t("trainingMod.deleteTrainee")}
                 >
                   <Trash2 className="size-4" />
                 </button>
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="flex flex-col gap-1">
-                  <Label>الاسم (Name)</Label>
-                  <Input value={a.name} onChange={(e) => updateAttendee(i, "name", e.target.value)} placeholder="الاسم الكامل" />
+                  <Label>{t("trainingMod.fName")}</Label>
+                  <Input value={a.name} onChange={(e) => updateAttendee(i, "name", e.target.value)} placeholder={t("trainingMod.phFullName")} />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <Label>الوظيفة (Designation)</Label>
-                  <Input value={a.designation} onChange={(e) => updateAttendee(i, "designation", e.target.value)} placeholder="مثال: فني" />
+                  <Label>{t("trainingMod.fDesignation")}</Label>
+                  <Input value={a.designation} onChange={(e) => updateAttendee(i, "designation", e.target.value)} placeholder={t("trainingMod.phDesignation")} />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <Label>اسم الشركة (Company)</Label>
-                  <Input value={a.company} onChange={(e) => updateAttendee(i, "company", e.target.value)} placeholder="MHS" />
+                  <Label>{t("trainingMod.fCompany")}</Label>
+                  <Input value={a.company} onChange={(e) => updateAttendee(i, "company", e.target.value)} placeholder={t("trainingMod.phCompany")} />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <Label>رقم البطاقة / الكود</Label>
-                  <Input value={a.cardCode} onChange={(e) => updateAttendee(i, "cardCode", e.target.value)} placeholder="Card/Code Number" />
+                  <Label>{t("trainingMod.fCardCode")}</Label>
+                  <Input value={a.cardCode} onChange={(e) => updateAttendee(i, "cardCode", e.target.value)} placeholder={t("trainingMod.phCardCode")} />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <Label>فهم التدريب (Understood)</Label>
+                  <Label>{t("trainingMod.fUnderstood")}</Label>
                   <Select value={a.understood} onValueChange={(v) => updateAttendee(i, "understood", v)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="yes">نعم / Yes</SelectItem>
-                      <SelectItem value="no">لا / No</SelectItem>
+                      <SelectItem value="yes">{t("trainingMod.optYes")}</SelectItem>
+                      <SelectItem value="no">{t("trainingMod.optNo")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="flex flex-col gap-1">
-                  <Label className="text-sm font-medium">التوقيع (Signature)</Label>
+                  <Label className="text-sm font-medium">{t("trainingMod.fSignature")}</Label>
                   <SignaturePad value={a.signature} onChange={(v) => updateAttendee(i, "signature", v)} compact />
                 </div>
               </div>
@@ -293,8 +297,8 @@ export function TrainingFormDialog() {
         </div>
 
         <div className="mt-2 flex justify-end gap-2 border-t border-border pt-4">
-          <Button variant="outline" onClick={() => { setOpen(false); resetForm() }} disabled={isPending}>إلغاء</Button>
-          <Button onClick={handleSave} disabled={isPending}>{isPending ? "جارٍ الحفظ..." : "حفظ سجل التدريب"}</Button>
+          <Button variant="outline" onClick={() => { setOpen(false); resetForm() }} disabled={isPending}>{t("trainingMod.cancel")}</Button>
+          <Button onClick={handleSave} disabled={isPending}>{isPending ? t("trainingMod.saving") : t("trainingMod.saveTraining")}</Button>
         </div>
       </DialogContent>
     </Dialog>
