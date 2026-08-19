@@ -8,6 +8,7 @@ import { ChangePasswordForm } from "@/components/change-password-form"
 import { requireUser } from "@/lib/session"
 import { getCompany } from "@/app/actions/hse"
 import { getUsers } from "@/app/actions/users"
+import { getServerT } from "@/lib/i18n/server"
 
 const roleLabels: Record<string, string> = {
   admin: "مدير النظام",
@@ -26,9 +27,10 @@ export default async function SettingsPage() {
   const company = await getCompany()
   const isAdmin = user.role === "admin"
   const team = isAdmin ? await getUsers() : []
+  const { t } = await getServerT()
 
   return (
-    <AppShell title="الإعدادات" subtitle="إدارة معلومات المنشأة والفريق والصلاحيات" user={user}>
+    <AppShell title={t("pageHeaders.settingsTitle")} subtitle={t("pageHeaders.settingsSubtitle")} user={user}>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card className="p-6">
           <div className="mb-4 flex items-center gap-2">

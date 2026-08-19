@@ -18,8 +18,7 @@ import { StatusBadge, SeverityBadge } from "@/components/status-badge"
 import { requireUser } from "@/lib/session"
 import { getDashboardData } from "@/app/actions/hse"
 import { getServerT } from "@/lib/i18n/server"
-import { incidentTypeLabel, severityLabel } from "@/lib/i18n/labels"
-import { categoryLabel } from "@/lib/i18n/violation-category-label"
+import { incidentTypeLabel, severityLabel, categoryLabel } from "@/lib/i18n/labels"
 import { effectiveViolationStatus, isViolationClosed } from "@/lib/violation-status"
 
 export default async function DashboardPage() {
@@ -84,23 +83,23 @@ export default async function DashboardPage() {
     .slice(0, 5)
 
   return (
-    <AppShell title="لوحة التحكم" subtitle="نظرة عامة على أداء الصحة والسلامة والبيئة" user={user}>
+    <AppShell title={t("pageHeaders.dashboardTitle")} subtitle={t("pageHeaders.dashboardSubtitle")} user={user}>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="إجمالي الحوادث المسجلة" value={incidents.length} icon={AlertTriangle} tone="destructive" />
-        <KpiCard label="الحوادث المفتوحة" value={openIncidents} icon={ShieldAlert} tone="accent" />
-        <KpiCard label="متوسط التزام التفتيش" value={avgCompliance} unit="%" icon={ClipboardCheck} tone="blue" />
-        <KpiCard label="التصاريح النشطة" value={activePermits} icon={ShieldCheck} tone="primary" />
+        <KpiCard label={t("dashboard.totalIncidents")} value={incidents.length} icon={AlertTriangle} tone="destructive" />
+        <KpiCard label={t("dashboard.recentIncidents")} value={openIncidents} icon={ShieldAlert} tone="accent" />
+        <KpiCard label={t("dashboard.avgInspectionCompliance")} value={avgCompliance} unit="%" icon={ClipboardCheck} tone="blue" />
+        <KpiCard label={t("dashboard.activePermits")} value={activePermits} icon={ShieldCheck} tone="primary" />
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-8">
-        <MiniStat label="إجمالي المخالفات" value={violations.length} />
-        <MiniStat label="ملاحظات وشيكة" value={nearMisses} />
-        <MiniStat label="ملاحظات إيجابية" value={positiveObservations} tone="positive" />
-        <MiniStat label="الإجراءات المفتوحة" value={openActions} />
-        <MiniStat label="مخاطر عالية" value={highRisks} />
-        <MiniStat label="عمليات التفتيش" value={inspections.length} />
-        <MiniStat label="سجل المخاطر" value={risks.length} />
-        <MiniStat label="إجمالي التصاريح" value={permits.length} />
+        <MiniStat label={t("dashboard.totalViolations")} value={violations.length} />
+        <MiniStat label={t("dashboard.nearMissesLabel")} value={nearMisses} />
+        <MiniStat label={t("dashboard.positiveObservations")} value={positiveObservations} tone="positive" />
+        <MiniStat label={t("dashboard.openActionsLabel")} value={openActions} />
+        <MiniStat label={t("dashboard.highRisksLabel")} value={highRisks} />
+        <MiniStat label={t("dashboard.inspectionsCount")} value={inspections.length} />
+        <MiniStat label={t("dashboard.riskRegister")} value={risks.length} />
+        <MiniStat label={t("dashboard.totalPermits")} value={permits.length} />
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -114,11 +113,11 @@ export default async function DashboardPage() {
         <IncidentTypeChart data={typeData} />
         <Card className="p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-base font-semibold text-foreground">الإجراءات التصحيحية ذات الأولوية</h3>
+            <h3 className="text-base font-semibold text-foreground">{t("dashboard.priorityActions")}</h3>
             <CheckSquare className="size-5 text-muted-foreground" />
           </div>
           {priorityActions.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">لا توجد إجراءات مفتوحة حالياً</p>
+            <p className="py-8 text-center text-sm text-muted-foreground">{t("dashboard.noOpenActions")}</p>
           ) : (
             <ul className="flex flex-col divide-y divide-border">
               {priorityActions.map((a) => (
@@ -126,7 +125,7 @@ export default async function DashboardPage() {
                   <div className="flex flex-col gap-1">
                     <span className="text-sm font-medium text-foreground">{a.title}</span>
                     <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>{a.assignedTo || "غير مُسند"}</span>
+                      <span>{a.assignedTo || t("dashboard.unassigned")}</span>
                       {a.dueDate && (
                         <span className="flex items-center gap-1">
                           <CalendarDays className="size-3" />
@@ -150,46 +149,46 @@ export default async function DashboardPage() {
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <FileWarning className="size-5 text-destructive" />
-            <h3 className="text-base font-semibold text-foreground">تقرير المخالفات</h3>
+            <h3 className="text-base font-semibold text-foreground">{t("dashboard.violationsReport")}</h3>
             <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
-              {openViolations} مفتوحة
+              {openViolations} {t("dashboard.openCount")}
             </span>
           </div>
           <Link
             href="/violations"
             className="flex items-center gap-1 text-sm font-medium text-primary hover:underline"
           >
-            عرض الكل
-            <ArrowLeft className="size-4" />
+            {t("dashboard.viewAll")}
+            <ArrowLeft className="size-4 rtl:rotate-0 ltr:rotate-180" />
           </Link>
         </div>
         {recentViolations.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">لا توجد مخالفات مسجلة حالياً</p>
+          <p className="py-8 text-center text-sm text-muted-foreground">{t("dashboard.noViolationsYet")}</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-right text-sm">
+            <table className="w-full text-start text-sm">
               <thead>
                 <tr className="border-b border-border text-xs text-muted-foreground">
-                  <th className="py-2 pl-3 font-medium">رقم المخالفة</th>
-                  <th className="py-2 pl-3 font-medium">المخالف</th>
-                  <th className="py-2 pl-3 font-medium">النوع</th>
-                  <th className="py-2 pl-3 font-medium">التصنيف</th>
-                  <th className="py-2 pl-3 font-medium">التاريخ</th>
-                  <th className="py-2 font-medium">الحالة</th>
+                  <th className="py-2 pe-3 font-medium">{t("dashboard.colViolationNo")}</th>
+                  <th className="py-2 pe-3 font-medium">{t("dashboard.colOffender")}</th>
+                  <th className="py-2 pe-3 font-medium">{t("dashboard.colType")}</th>
+                  <th className="py-2 pe-3 font-medium">{t("dashboard.colCategory")}</th>
+                  <th className="py-2 pe-3 font-medium">{t("dashboard.colDate")}</th>
+                  <th className="py-2 font-medium">{t("dashboard.colStatus")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {recentViolations.map((v) => (
                   <tr key={v.id} className="text-foreground">
-                    <td className="py-3 pl-3 font-mono text-xs" dir="ltr">
+                    <td className="py-3 pe-3 font-mono text-xs" dir="ltr">
                       {v.documentNo || "-"}
                     </td>
-                    <td className="py-3 pl-3">{v.employeeName || "-"}</td>
-                    <td className="py-3 pl-3 text-muted-foreground">{v.violationType || "-"}</td>
-                    <td className="py-3 pl-3 text-muted-foreground">
-                      {categoryLabels[v.category ?? "internal"] ?? "-"}
+                    <td className="py-3 pe-3">{v.employeeName || "-"}</td>
+                    <td className="py-3 pe-3 text-muted-foreground">{v.violationType || "-"}</td>
+                    <td className="py-3 pe-3 text-muted-foreground">
+                      {v.category ? categoryLabel(t, v.category) : "-"}
                     </td>
-                    <td className="py-3 pl-3 text-muted-foreground" dir="ltr">
+                    <td className="py-3 pe-3 text-muted-foreground" dir="ltr">
                       {v.violationDate ?? "-"}
                     </td>
                     <td className="py-3">
@@ -209,9 +208,9 @@ export default async function DashboardPage() {
             <FileSignature className="size-5" />
           </div>
           <div>
-            <p className="text-sm font-medium text-foreground">مرحباً {user.name}</p>
+            <p className="text-sm font-medium text-foreground">{t("dashboard.welcome")} {user.name}</p>
             <p className="text-xs text-muted-foreground">
-              جميع بياناتك تُحفظ تلقائياً في قاعدة بيانات آمنة وخاصة بحسابك.
+              {t("dashboard.autoSaveNote")}
             </p>
           </div>
         </div>

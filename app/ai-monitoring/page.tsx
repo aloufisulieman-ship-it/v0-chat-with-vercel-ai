@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic"
 export default async function AiMonitoringPage() {
   const user = await requireHseReviewer()
   const rows = await getDetections()
-  const t = await getServerT()
+  const { t } = await getServerT()
 
   // تحويل التواريخ إلى نصوص لتتوافق مع بيانات الـ API أثناء التحديث الحي.
   const initial: DetectionDto[] = rows.map((r) => ({

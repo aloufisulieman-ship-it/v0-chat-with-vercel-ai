@@ -20,9 +20,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "@/hooks/use-toast"
 import { permitTypeOptions, permitStatusOptions, permitTypeExtraFields } from "@/lib/labels"
+import { useI18n } from "@/lib/i18n/client"
+import { permitTypeLabel, statusLabel } from "@/lib/i18n/labels"
 
 // نموذج إصدار تصريح عمل مع حقول ديناميكية تتغيّر حسب نوع التصريح المختار.
 export function PermitDialog({ action }: { action: (formData: FormData) => Promise<void> }) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [type, setType] = useState(permitTypeOptions[0].value)
   const [isPending, startTransition] = useTransition()
@@ -37,12 +40,12 @@ export function PermitDialog({ action }: { action: (formData: FormData) => Promi
     startTransition(async () => {
       try {
         await action(formData)
-        toast({ title: "تم الحفظ بنجاح", description: "تم إصدار التصريح وحفظه في قاعدة البيانات." })
+        toast({ title: t("permitDialog.savedTitle"), description: t("permitDialog.savedDesc") })
         setOpen(false)
       } catch (err) {
         toast({
-          title: "تعذّر الحفظ",
-          description: err instanceof Error ? err.message : "حدث خطأ غير متوقع.",
+          title: t("permitDialog.saveFailedTitle"),
+          description: err instanceof Error ? err.message : t("permitDialog.saveFailedDesc"),
           variant: "destructive",
         })
       }
@@ -54,26 +57,26 @@ export function PermitDialog({ action }: { action: (formData: FormData) => Promi
       <DialogTrigger asChild>
         <Button className="gap-2 self-start sm:self-auto">
           <Plus className="size-4" />
-          إصدار تصريح
+          {t("permitDialog.issue")}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>إصدار تصريح عمل</DialogTitle>
-          <DialogDescription>اختر نوع التصريح وأدخل بياناته.</DialogDescription>
+          <DialogTitle>{t("permitDialog.issueTitle")}</DialogTitle>
+          <DialogDescription>{t("permitDialog.issueDesc")}</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {/* نوع التصريح — يحدّد الحقول الظاهرة */}
           <div className="flex flex-col gap-2 sm:col-span-2">
-            <Label htmlFor="type">نوع التصريح</Label>
+            <Label htmlFor="type">{t("permitDialog.permitType")}</Label>
             <Select name="type" value={type} onValueChange={setType}>
               <SelectTrigger id="type">
-                <SelectValue placeholder="اختر..." />
+                <SelectValue placeholder={t("permitDialog.choose")} />
               </SelectTrigger>
               <SelectContent>
                 {permitTypeOptions.map((o) => (
                   <SelectItem key={o.value} value={o.value}>
-                    {o.label}
+                    {permitTypeLabel(t, o.value)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -83,19 +86,19 @@ export function PermitDialog({ action }: { action: (formData: FormData) => Promi
           {/* عنوان التصريح */}
           <div className="flex flex-col gap-2 sm:col-span-2">
             <Label htmlFor="title">
-              عنوان التصريح<span className="text-destructive"> *</span>
+              {t("permitDialog.permitTitle")}<span className="text-destructive"> *</span>
             </Label>
-            <Input id="title" name="title" required placeholder="مثال: أعمال تمديد كهرباء المستودع" />
+            <Input id="title" name="title" required placeholder={t("permitDialog.permitTitlePlaceholder")} />
           </div>
 
           {/* الحقول العامة */}
           <div className="flex flex-col gap-2">
-            <Label htmlFor="location">الموقع</Label>
-            <Input id="location" name="location" placeholder="مثال: المستودع الرئيسي" />
+            <Label htmlFor="location">{t("permitDialog.location")}</Label>
+            <Input id="location" name="location" placeholder={t("permitDialog.locationPlaceholder")} />
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="requestedBy">الجهة/الشخص المصرّح له</Label>
-            <Input id="requestedBy" name="requestedBy" placeholder="مثال: قسم الصيانة" />
+            <Label htmlFor="requestedBy">{t("permitDialog.authorized")}</Label>
+            <Input id="requestedBy" name="requestedBy" placeholder={t("permitDialog.authorizedPlaceholder")} />
           </div>
 
           {/* الحقول الديناميكية الخاصة بالنوع */}

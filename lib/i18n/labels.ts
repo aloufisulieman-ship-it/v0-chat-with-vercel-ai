@@ -60,3 +60,10 @@ export function moduleLabel(t: TFunction, value: string): string {
   const translated = t(key)
   return translated === key ? value : translated
 }
+
+// تصنيف المخالفة (internal | external).
+export function categoryLabel(t: TFunction, value: string): string {
+  const key = `violationCategory.${value}`
+  const translated = t(key)
+  return translated === key ? value : translated
+}

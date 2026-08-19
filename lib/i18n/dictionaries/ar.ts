@@ -97,6 +97,29 @@ export const ar = {
     autoSaveNote: "جميع بياناتك تُحفظ تلقائياً في قاعدة بيانات آمنة وخاصة بحسابك.",
   },
 
+  // التقارير
+  reports: {
+    openIncidents: "الحوادث المفتوحة",
+    openActions: "الإجراءات المفتوحة",
+    avgCompliance: "متوسط التزام التفتيش",
+    activePermits: "التصاريح النشطة",
+    totalIncidents: "إجمالي الحوادث",
+    nearMisses: "ملاحظات وشيكة",
+    highRisks: "مخاطر عالية",
+    riskRegister: "سجل المخاطر",
+    autoComputeNote:
+      "تُحسب جميع المؤشرات والرسوم البيانية تلقائياً من بياناتك الفعلية المسجّلة في النظام، وتتحدّث فور إضافة أي سجل جديد.",
+    exportTitle: "إنشاء وتصدير التقارير",
+    exportSubtitle: "اختر نوع التقرير والمدة لمعاينة البيانات، ثم صدّرها بصيغة PDF أو Excel أو أرسلها بالبريد الإلكتروني.",
+  },
+
+  // سجل الموظفين
+  employees: {
+    totalEmployees: "إجمالي الموظفين",
+    activeEmployees: "الموظفون النشطون",
+    incompleteProfiles: "ملفات غير مكتملة",
+  },
+
   // المخالفات
   violations: {
     title: "المخالفات",
@@ -129,6 +152,57 @@ export const ar = {
     approvedBy: "اعتمده",
     workLocation: "موقع العمل",
     noPermits: "لا توجد تصاريح",
+    totalPermits: "إجمالي التصاريح",
+    activePermits: "تصاريح نشطة",
+    pendingApproval: "بانتظار الاعتماد",
+    registryTitle: "سجل تصاريح العمل",
+    emptyMessage: "لا توجد تصاريح. أصدر تصريحاً جديداً للبدء.",
+    colPermitNo: "رقم التصريح",
+    colPermit: "التصريح",
+    colType: "النوع",
+    colLocation: "الموقع",
+    colRequestedBy: "مقدّم الطلب",
+    colFrom: "من",
+    colTo: "إلى",
+    colStatus: "الحالة",
+    defaultSubtitle: "تصريح عمل",
+    fPermitNo: "رقم التصريح",
+    fPermitTitle: "عنوان التصريح",
+    fType: "النوع",
+    fLocation: "الموقع",
+    fAuthorized: "الجهة/الشخص المصرّح له",
+    fIssueDate: "تاريخ الإصدار",
+    fExpiryDate: "تاريخ الانتهاء",
+    fApprovalStatus: "حالة الاعتماد",
+    fRejectedBy: "رفض بواسطة",
+    fApprovedBy: "اعتمد بواسطة",
+    fRejectionDate: "تاريخ الرفض",
+    fApprovalDate: "تاريخ الاعتماد",
+    fRejectionReason: "سبب الرفض",
+  },
+
+  // نموذج إصدار تصريح
+  permitDialog: {
+    issue: "إصدار تصريح",
+    issueTitle: "إصدار تصريح عمل",
+    issueDesc: "اختر نوع التصريح وأدخل بياناته.",
+    permitType: "نوع التصريح",
+    choose: "اختر...",
+    permitTitle: "عنوان التصريح",
+    permitTitlePlaceholder: "مثال: أعمال تمديد كهرباء المستودع",
+    location: "الموقع",
+    locationPlaceholder: "مثال: المستودع الرئيسي",
+    authorized: "الجهة/الشخص المصرّح له",
+    authorizedPlaceholder: "مثال: قسم الصيانة",
+    approvalStatus: "حالة الاعتماد",
+    issueDate: "تاريخ الإصدار",
+    expiryDate: "تاريخ الانتهاء",
+    savedTitle: "تم الحفظ بنجاح",
+    savedDesc: "تم إصدار التصريح وحفظه في قاعدة البيانات.",
+    saveFailedTitle: "تعذّر الحفظ",
+    saveFailedDesc: "حدث خطأ غير متوقع.",
+    saving: "جارٍ الحفظ...",
+    save: "حفظ",
   },
 
   // التدريب
@@ -264,6 +338,11 @@ export const ar = {
     rejected: "مرفوض",
     active: "ساري",
     expired: "منتهٍ",
+    completed: "مكتمل",
+    resolved: "تم الحل",
+    converted: "محوّلة إلى مخالفة",
+    sufficient: "كافٍ",
+    low_stock: "مخزون منخفض",
   },
 
   // أنواع الحوادث

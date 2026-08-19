@@ -95,6 +95,27 @@ export const en: Dictionary = {
     autoSaveNote: "All your data is saved automatically in a secure database private to your account.",
   },
 
+  reports: {
+    openIncidents: "Open Incidents",
+    openActions: "Open Actions",
+    avgCompliance: "Avg. Inspection Compliance",
+    activePermits: "Active Permits",
+    totalIncidents: "Total Incidents",
+    nearMisses: "Near Misses",
+    highRisks: "High Risks",
+    riskRegister: "Risk Register",
+    autoComputeNote:
+      "All indicators and charts are computed automatically from your actual recorded data, and update instantly whenever a new record is added.",
+    exportTitle: "Generate & Export Reports",
+    exportSubtitle: "Choose a report type and period to preview data, then export as PDF or Excel or send by email.",
+  },
+
+  employees: {
+    totalEmployees: "Total Employees",
+    activeEmployees: "Active Employees",
+    incompleteProfiles: "Incomplete Profiles",
+  },
+
   violations: {
     title: "Violations",
     subtitle: "Log and track safety violations",
@@ -125,6 +146,56 @@ export const en: Dictionary = {
     approvedBy: "Approved By",
     workLocation: "Work Location",
     noPermits: "No permits",
+    totalPermits: "Total Permits",
+    activePermits: "Active Permits",
+    pendingApproval: "Pending Approval",
+    registryTitle: "Work Permits Register",
+    emptyMessage: "No permits. Issue a new permit to get started.",
+    colPermitNo: "Permit No.",
+    colPermit: "Permit",
+    colType: "Type",
+    colLocation: "Location",
+    colRequestedBy: "Requested By",
+    colFrom: "From",
+    colTo: "To",
+    colStatus: "Status",
+    defaultSubtitle: "Work Permit",
+    fPermitNo: "Permit No.",
+    fPermitTitle: "Permit Title",
+    fType: "Type",
+    fLocation: "Location",
+    fAuthorized: "Authorized Party/Person",
+    fIssueDate: "Issue Date",
+    fExpiryDate: "Expiry Date",
+    fApprovalStatus: "Approval Status",
+    fRejectedBy: "Rejected By",
+    fApprovedBy: "Approved By",
+    fRejectionDate: "Rejection Date",
+    fApprovalDate: "Approval Date",
+    fRejectionReason: "Rejection Reason",
+  },
+
+  permitDialog: {
+    issue: "Issue Permit",
+    issueTitle: "Issue Work Permit",
+    issueDesc: "Choose the permit type and enter its details.",
+    permitType: "Permit Type",
+    choose: "Select…",
+    permitTitle: "Permit Title",
+    permitTitlePlaceholder: "e.g. Warehouse electrical wiring works",
+    location: "Location",
+    locationPlaceholder: "e.g. Main warehouse",
+    authorized: "Authorized Party/Person",
+    authorizedPlaceholder: "e.g. Maintenance department",
+    approvalStatus: "Approval Status",
+    issueDate: "Issue Date",
+    expiryDate: "Expiry Date",
+    savedTitle: "Saved successfully",
+    savedDesc: "The permit was issued and saved to the database.",
+    saveFailedTitle: "Save failed",
+    saveFailedDesc: "An unexpected error occurred.",
+    saving: "Saving…",
+    save: "Save",
   },
 
   training: {
@@ -253,6 +324,11 @@ export const en: Dictionary = {
     rejected: "Rejected",
     active: "Active",
     expired: "Expired",
+    completed: "Completed",
+    resolved: "Resolved",
+    converted: "Converted to Violation",
+    sufficient: "Sufficient",
+    low_stock: "Low Stock",
   },
 
   incidentType: {
@@ -270,6 +346,11 @@ export const en: Dictionary = {
     tuktuk: "Tuk-Tuk Driving Permit",
     visitor: "Visitor Badge",
     trainee: "Trainee Badge",
+  },
+
+  violationCategory: {
+    internal: "Internal",
+    external: "External",
   },
 
   department: {
