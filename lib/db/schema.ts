@@ -368,6 +368,19 @@ export const aiDetection = pgTable("ai_detections", {
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
+// إشعارات المراقبة الذكية — سجل لكل مستلم عن كل اكتشاف عالي الخطورة/حرج.
+// (مدموج من فرع ai-smart-monitoring مع مواءمة الأنواع لبنية main:
+// userId نصّي مطابق لجدول user، وdetectionId يشير إلى aiDetection.id الرقمي.)
+export const aiMonitoringNotification = pgTable("ai_monitoring_notifications", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  detectionId: integer("detection_id").notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+})
+
 // كاميرات الهاتف المتصلة حالياً — سجل واحد لكل كاميرا (userId + cameraId فريد).
 // يُحدّث lastFrameUrl و lastSeenAt مع كل استدعا�� لمسار /api/ai-monitoring/analyze،
 // ما يتيح للوحة المدير عرض بث "شبه حي" لكل كاميرا نشطة.

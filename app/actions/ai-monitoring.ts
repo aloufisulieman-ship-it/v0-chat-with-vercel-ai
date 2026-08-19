@@ -1,8 +1,8 @@
 "use server"
 
 import { db } from "@/lib/db"
-import { aiDetection, activeCameraStream, user } from "@/lib/db/schema"
-import { and, desc, eq, gte } from "drizzle-orm"
+import { aiDetection, activeCameraStream, aiMonitoringNotification, user } from "@/lib/db/schema"
+import { and, desc, eq, gte, isNull, inArray, or } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { requireUser, requireHseReviewerId } from "@/lib/session"
 import type { DetectionType, DetectionStatus } from "@/lib/ai-monitoring"
@@ -228,8 +228,74 @@ export async function saveDetection(input: {
     })
     .returning()
 
+  // إشعار المسؤولين والمفتشين عند الاكتشافات عالية الخطورة/الحرجة (سلوك مدموج من
+  // فرع ai-smart-monitoring). لا يوقف فشلُ الإشعار حفظَ الاكتشاف.
+  if (severity === "high" || severity === "critical") {
+    try {
+      await createDetectionNotifications(row, severity)
+    } catch {
+      /* تجاهل أخطاء الإشعار حتى لا يفشل حفظ الاكتشاف */
+    }
+  }
+
   revalidatePath("/ai-monitoring")
   return row
+}
+
+// إنشاء إشعارات لكل مستلم مؤهّل (مدير/مسؤول أو أقسام التفتيش/العمليات/غرفة التحكم)
+// عن اكتشاف عالي الخطورة. مطابق لسلوك فرع ai-smart-monitoring مع مواءمة الأنواع.
+async function createDetectionNotifications(
+  detection: AiDetection,
+  severity: string,
+): Promise<void> {
+  const recipients = await db
+    .select({ id: user.id })
+    .from(user)
+    .where(
+      and(
+        eq(user.status, "approved"),
+        or(
+          inArray(user.role, ["admin", "manager"]),
+          inArray(user.department, ["inspector", "operations", "control_room"]),
+        ),
+      ),
+    )
+  if (!recipients.length) return
+  await db
+    .insert(aiMonitoringNotification)
+    .values(
+      recipients.map((recipient) => ({
+        userId: recipient.id,
+        detectionId: detection.id,
+        title: severity === "critical" ? "تنبيه كاميرا حرج" : "تنبيه كاميرا عالي الخطورة",
+        message: `${detection.cameraLocation || detection.inspectorName} — ${detection.detectionId}`,
+      })),
+    )
+    .onConflictDoNothing()
+}
+
+// إشعارات المستخدم الحالي غير المقروءة (الأحدث أولاً) — يستهلكها مسار
+// /api/ai-monitoring/notifications لعرض جرس الإشعارات.
+export async function getUnreadAiNotifications() {
+  const current = await requireUser()
+  return db
+    .select()
+    .from(aiMonitoringNotification)
+    .where(
+      and(eq(aiMonitoringNotification.userId, current.id), isNull(aiMonitoringNotification.readAt)),
+    )
+    .orderBy(desc(aiMonitoringNotification.createdAt))
+}
+
+// تعليم كل إشعارات المستخدم الحالي غير المقروءة كمقروءة.
+export async function markAiNotificationsRead() {
+  const current = await requireUser()
+  await db
+    .update(aiMonitoringNotification)
+    .set({ readAt: new Date() })
+    .where(
+      and(eq(aiMonitoringNotification.userId, current.id), isNull(aiMonitoringNotification.readAt)),
+    )
 }
 
 // تحديث حالة اكتشاف (اطّلاع / معالجة / إنذار خاطئ).
