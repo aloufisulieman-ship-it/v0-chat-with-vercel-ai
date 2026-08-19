@@ -8,28 +8,30 @@ import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { requireModule } from "@/lib/session"
 import { getDocuments, createDocument, deleteDocument } from "@/app/actions/hse"
-import { statusLabels } from "@/lib/labels"
+import { getServerT } from "@/lib/i18n/server"
+import { statusLabel } from "@/lib/i18n/labels"
 
 type DocItem = Awaited<ReturnType<typeof getDocuments>>[number]
-
-const docStatusOptions = [
-  { value: "active", label: "ساري" },
-  { value: "in_progress", label: "قيد المراجعة" },
-  { value: "expired", label: "منتهٍ" },
-]
-
-const fields: FieldDef[] = [
-  { name: "title", label: "اسم المستند", required: true, full: true, placeholder: "مثال: سياسة السلامة العامة" },
-  { name: "category", label: "التصنيف", placeholder: "مثال: سياسات" },
-  { name: "version", label: "الإصدار", defaultValue: "1.0" },
-  { name: "owner", label: "الجهة المالكة" },
-  { name: "status", label: "الحالة", type: "select", options: docStatusOptions },
-  { name: "reviewDate", label: "تاريخ المراجعة", type: "date" },
-]
 
 export default async function DocumentsPage() {
   const user = await requireModule("documents")
   const documents = await getDocuments()
+  const { t } = await getServerT()
+
+  const docStatusOptions = [
+    { value: "active", label: t("documentsMod.statusActive") },
+    { value: "in_progress", label: t("documentsMod.statusInReview") },
+    { value: "expired", label: t("documentsMod.statusExpired") },
+  ]
+
+  const fields: FieldDef[] = [
+    { name: "title", label: t("documentsMod.fName"), required: true, full: true, placeholder: t("documentsMod.fNamePlaceholder") },
+    { name: "category", label: t("documentsMod.fCategory"), placeholder: t("documentsMod.fCategoryPlaceholder") },
+    { name: "version", label: t("documentsMod.fVersion"), defaultValue: "1.0" },
+    { name: "owner", label: t("documentsMod.fOwner") },
+    { name: "status", label: t("documentsMod.fStatus"), type: "select", options: docStatusOptions },
+    { name: "reviewDate", label: t("documentsMod.fReviewDate"), type: "date" },
+  ]
 
   const active = documents.filter((d) => d.status === "active").length
   const review = documents.filter((d) => d.status === "in_progress").length
@@ -38,7 +40,7 @@ export default async function DocumentsPage() {
   const columns: Column<DocItem>[] = [
     {
       key: "title",
-      header: "المستند",
+      header: t("documentsMod.colDoc"),
       render: (r) => (
         <span className="flex items-center gap-2 font-medium text-foreground">
           <FileText className="size-4 text-muted-foreground" />
@@ -46,11 +48,11 @@ export default async function DocumentsPage() {
         </span>
       ),
     },
-    { key: "category", header: "التصنيف", render: (r) => <span className="text-muted-foreground">{r.category || "-"}</span> },
-    { key: "version", header: "الإصدار", render: (r) => <span className="font-mono text-xs" dir="ltr">{r.version}</span> },
-    { key: "owner", header: "الجهة المالكة", render: (r) => <span className="text-muted-foreground">{r.owner || "-"}</span> },
-    { key: "reviewDate", header: "تاريخ المراجعة", render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.reviewDate ?? "-"}</span> },
-    { key: "status", header: "الحالة", render: (r) => <StatusBadge status={r.status ?? "active"} /> },
+    { key: "category", header: t("documentsMod.fCategory"), render: (r) => <span className="text-muted-foreground">{r.category || "-"}</span> },
+    { key: "version", header: t("documentsMod.fVersion"), render: (r) => <span className="font-mono text-xs" dir="ltr">{r.version}</span> },
+    { key: "owner", header: t("documentsMod.fOwner"), render: (r) => <span className="text-muted-foreground">{r.owner || "-"}</span> },
+    { key: "reviewDate", header: t("documentsMod.fReviewDate"), render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.reviewDate ?? "-"}</span> },
+    { key: "status", header: t("documentsMod.fStatus"), render: (r) => <StatusBadge status={r.status ?? "active"} /> },
     {
       key: "actions",
       header: "",
@@ -61,14 +63,14 @@ export default async function DocumentsPage() {
             module="documents"
             recordId={r.id}
             title={r.title}
-            subtitle="مستند"
+            subtitle={t("documentsMod.detailsSubtitle")}
             fields={[
-              { label: "اسم المستند", value: r.title },
-              { label: "التصنيف", value: r.category || "-" },
-              { label: "الإصدار", value: r.version || "-" },
-              { label: "الجهة المالكة", value: r.owner || "-" },
-              { label: "تاريخ المراجعة", value: r.reviewDate ?? "-" },
-              { label: "الحالة", value: statusLabels[r.status ?? ""] ?? "-" },
+              { label: t("documentsMod.fName"), value: r.title },
+              { label: t("documentsMod.fCategory"), value: r.category || "-" },
+              { label: t("documentsMod.fVersion"), value: r.version || "-" },
+              { label: t("documentsMod.fOwner"), value: r.owner || "-" },
+              { label: t("documentsMod.fReviewDate"), value: r.reviewDate ?? "-" },
+              { label: t("documentsMod.fStatus"), value: r.status ? statusLabel(t, r.status) : "-" },
             ]}
             initialAttachments={[]}
           />
@@ -80,21 +82,21 @@ export default async function DocumentsPage() {
 
   return (
     <AppShell
-      title="إدارة الوثائق"
-      subtitle="مكتبة السياسات والإجراءات والخطط والسجلات الخاصة بالسلامة"
+      title={t("pageHeaders.documentsTitle")}
+      subtitle={t("pageHeaders.documentsSubtitle")}
       user={user}
-      action={<RecordDialog title="تسجيل مستند" description="سجّل مستنداً جديداً." triggerLabel="رفع مستند" fields={fields} action={createDocument} />}
+      action={<RecordDialog title={t("documentsMod.dialogTitle")} description={t("documentsMod.dialogDesc")} triggerLabel={t("documentsMod.trigger")} fields={fields} action={createDocument} />}
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="إجمالي الوثائق" value={documents.length} icon={FolderKanban} tone="blue" />
-        <KpiCard label="سارية" value={active} icon={FileCheck2} tone="primary" />
-        <KpiCard label="قيد المراجعة" value={review} icon={FileClock} tone="accent" />
-        <KpiCard label="منتهية" value={expired} icon={FileText} tone="destructive" />
+        <KpiCard label={t("documentsMod.kpiTotal")} value={documents.length} icon={FolderKanban} tone="blue" />
+        <KpiCard label={t("documentsMod.kpiActive")} value={active} icon={FileCheck2} tone="primary" />
+        <KpiCard label={t("documentsMod.kpiReview")} value={review} icon={FileClock} tone="accent" />
+        <KpiCard label={t("documentsMod.kpiExpired")} value={expired} icon={FileText} tone="destructive" />
       </div>
 
       <div className="mt-6">
-        <h2 className="mb-3 text-lg font-semibold text-foreground">مكتبة الوثائق</h2>
-        <DataTable columns={columns} rows={documents} emptyMessage="لا توجد وثائق. سجّل مستنداً جديداً للبدء." />
+        <h2 className="mb-3 text-lg font-semibold text-foreground">{t("documentsMod.registryTitle")}</h2>
+        <DataTable columns={columns} rows={documents} emptyMessage={t("documentsMod.emptyMessage")} />
       </div>
     </AppShell>
   )

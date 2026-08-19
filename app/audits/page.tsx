@@ -62,14 +62,14 @@ export default async function AuditsPage() {
             module="audits"
             recordId={r.id}
             title={r.title}
-            subtitle="تقرير تدقيق"
+            subtitle={t("auditsMod.detailsSubtitle")}
             fields={[
-              { label: "عنوان التدقيق", value: r.title },
-              { label: "المعيار", value: r.standard || "-" },
-              { label: "المدقق", value: r.auditor || "-" },
-              { label: "النتيجة", value: `${r.score ?? 0}%` },
-              { label: "الحالة", value: statusLabels[r.status ?? ""] ?? "-" },
-              { label: "تاريخ التدقيق", value: r.auditDate ?? "-" },
+              { label: t("auditsMod.fTitle"), value: r.title },
+              { label: t("auditsMod.fStandard"), value: r.standard || "-" },
+              { label: t("auditsMod.fAuditor"), value: r.auditor || "-" },
+              { label: t("auditsMod.fScore"), value: `${r.score ?? 0}%` },
+              { label: t("auditsMod.fStatus"), value: r.status ? statusLabel(t, r.status) : "-" },
+              { label: t("auditsMod.fDate"), value: r.auditDate ?? "-" },
             ]}
             initialAttachments={[]}
           />
@@ -81,21 +81,21 @@ export default async function AuditsPage() {
 
   return (
     <AppShell
-      title="التدقيق والامتثال"
-      subtitle="إدارة عمليات التدقيق الداخلية والخارجية ومتابعة المطابقة للمعايير"
+      title={t("pageHeaders.auditsTitle")}
+      subtitle={t("pageHeaders.auditsSubtitle")}
       user={user}
-      action={<RecordDialog title="تدقيق جديد" description="سجّل عملية تدقيق." triggerLabel="تدقيق جديد" fields={fields} action={createAudit} />}
+      action={<RecordDialog title={t("auditsMod.dialogTitle")} description={t("auditsMod.dialogDesc")} triggerLabel={t("auditsMod.trigger")} fields={fields} action={createAudit} />}
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="عمليات التدقيق" value={audits.length} icon={ClipboardList} tone="blue" />
-        <KpiCard label="متوسط النتيجة" value={avg} unit="%" icon={Gauge} tone="primary" />
-        <KpiCard label="مجدولة" value={scheduled} icon={FileWarning} tone="accent" />
-        <KpiCard label="مغلقة" value={closed} icon={BadgeCheck} tone="primary" />
+        <KpiCard label={t("auditsMod.kpiTotal")} value={audits.length} icon={ClipboardList} tone="blue" />
+        <KpiCard label={t("auditsMod.kpiAvg")} value={avg} unit="%" icon={Gauge} tone="primary" />
+        <KpiCard label={t("auditsMod.kpiScheduled")} value={scheduled} icon={FileWarning} tone="accent" />
+        <KpiCard label={t("auditsMod.kpiClosed")} value={closed} icon={BadgeCheck} tone="primary" />
       </div>
 
       <div className="mt-6">
-        <h2 className="mb-3 text-lg font-semibold text-foreground">سجل عمليات التدقيق</h2>
-        <DataTable columns={columns} rows={audits} emptyMessage="لا توجد عمليات تدقيق. أضف تدقيقاً جديداً للبدء." />
+        <h2 className="mb-3 text-lg font-semibold text-foreground">{t("auditsMod.registryTitle")}</h2>
+        <DataTable columns={columns} rows={audits} emptyMessage={t("auditsMod.emptyMessage")} />
       </div>
     </AppShell>
   )
