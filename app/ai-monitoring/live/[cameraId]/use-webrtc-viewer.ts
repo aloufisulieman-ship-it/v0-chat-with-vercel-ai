@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { createPeer, pollSignals, postSignal, type IncomingSignal } from "@/lib/webrtc-client"
 
 // خطاف المُشاهد (المدير): يطلب بثاً حياً من كاميرا مفتش عبر WebRTC ويعرضه في <video>.
@@ -45,6 +45,16 @@ export function useWebrtcViewer(opts: { cameraId: string; enabled: boolean }) {
   // هل يحتوي البث المستقبَل على مسار صوت؟ (لإظهار/تعطيل زر الصوت بشكل صحيح).
   const [hasAudio, setHasAudio] = useState(false)
 
+  // حالة التحدّث (talk-back): هل أُضيف مسار المايكروفون إلى التفاوض بعد؟
+  const [talkEnabled, setTalkEnabled] = useState(false)
+  // هل المايكروفون يبثّ صوت المدير حالياً (غير مكتوم)؟ لعرض مؤشر "تتحدث الآن".
+  const [talkActive, setTalkActive] = useState(false)
+  // رسالة خطأ المايكروفون بالعربية (رفض الصلاحية/عدم وجود جهاز…).
+  const [talkError, setTalkError] = useState<string | null>(null)
+  // مسار وتدفّق المايكروفون المحلي — يُحفظ في refs ليبقى ثابتاً عبر إعادة التفاوض.
+  const micStreamRef = useRef<MediaStream | null>(null)
+  const micTrackRef = useRef<MediaStreamTrack | null>(null)
+
   const viewerSessionIdRef = useRef<string>("")
   if (!viewerSessionIdRef.current) viewerSessionIdRef.current = makeSessionId()
 
@@ -84,6 +94,14 @@ export function useWebrtcViewer(opts: { cameraId: string; enabled: boolean }) {
       pc.addTransceiver("video", { direction: "recvonly" })
       // استقبال الصوت أيضاً (صوت الميكروفون من كاميرا المفتش).
       pc.addTransceiver("audio", { direction: "recvonly" })
+
+      // صوت ثنائي الاتجاه (talk-back): عند تفعيل المايكروفون نضيف مساراً سمعياً ثالثاً
+      // باتجاه sendonly لإرسال صوت المدير إلى الكاميرا. يُضاف فقط بعد أن يمنح المستخدم
+      // صلاحية المايكروفون (لا نطلبها قبل رغبته بالتحدّث). المُشاهد هو صاحب العرض
+      // (offerer) فيحقّ له تعريف هذا المسار، وتستقبله الكاميرا وتشغّله لدى المفتش.
+      if (talkEnabled && micTrackRef.current) {
+        pc.addTransceiver(micTrackRef.current, { direction: "sendonly" })
+      }
 
       pc.ontrack = (e) => {
         const remoteStream = e.streams[0] ?? null
@@ -223,7 +241,65 @@ export function useWebrtcViewer(opts: { cameraId: string; enabled: boolean }) {
       teardownPeer()
       if (videoRef.current) videoRef.current.srcObject = null
     }
-  }, [cameraId, enabled])
+    // ملاحظة: talkEnabled ضمن التبعيّات عمداً — أول تفعيل للمايكروفون يعيد التفاوض
+    // مرّة واحدة لإضافة مسار الصوت الصادر، وبعدها يتم الكتم/إلغاء الكتم دون إعادة تفاوض.
+  }, [cameraId, enabled, talkEnabled])
 
-  return { videoRef, status, error, stats, hasAudio }
+  // تنظيف المايكروفون عند مغادرة الصفحة فقط (منفصل عن دورة حياة الاتصال حتى لا
+  // يُغلق المايكروفون في كل إعادة تفاوض).
+  useEffect(() => {
+    return () => {
+      micStreamRef.current?.getTracks().forEach((t) => t.stop())
+      micStreamRef.current = null
+      micTrackRef.current = null
+    }
+  }, [])
+
+  // تبديل التحدّث: أول ضغطة تطلب صلاحية المايكروفون وتضيف مساره (إعادة تفاوض واحدة)،
+  // والضغطات التالية تكتم/تُلغي الكتم فوراً دون قطع البث الحي.
+  const toggleTalk = useCallback(async () => {
+    setTalkError(null)
+
+    // كتم/إلغاء الكتم بعد أن أصبح المايكروفون مُفعّلاً (لا حاجة لإعادة تفاوض).
+    if (talkEnabled && micTrackRef.current) {
+      const next = !micTrackRef.current.enabled
+      micTrackRef.current.enabled = next
+      setTalkActive(next)
+      return
+    }
+
+    // أول تفعيل: اطلب صلاحية المايكروفون من المتصفح.
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setTalkError("المتصفح لا يدعم الوصول إلى المايكروفون.")
+      return
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      })
+      const track = stream.getAudioTracks()[0]
+      if (!track) {
+        stream.getTracks().forEach((t) => t.stop())
+        setTalkError("تعذّر العثور على مايكروفون متاح.")
+        return
+      }
+      track.enabled = true
+      micStreamRef.current = stream
+      micTrackRef.current = track
+      // إعادة تفاوض واحدة لإضافة مسار الصوت الصادر إلى الاتصال الحالي.
+      setTalkEnabled(true)
+      setTalkActive(true)
+    } catch (e) {
+      const err = e as DOMException
+      if (err?.name === "NotAllowedError" || err?.name === "SecurityError") {
+        setTalkError("تم رفض إذن المايكروفون. فعّله من إعدادات المتصفح لتتمكّن من التحدّث.")
+      } else if (err?.name === "NotFoundError" || err?.name === "OverconstrainedError") {
+        setTalkError("لا يوجد مايكروفون متاح على هذا الجهاز.")
+      } else {
+        setTalkError("تعذّر تشغيل المايكروفون. حاول مرة أخرى.")
+      }
+    }
+  }, [talkEnabled])
+
+  return { videoRef, status, error, stats, hasAudio, talkActive, talkError, toggleTalk }
 }

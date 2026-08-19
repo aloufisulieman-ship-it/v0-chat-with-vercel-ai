@@ -14,6 +14,8 @@ import {
   UserRound,
   Volume2,
   VolumeX,
+  Mic,
+  MicOff,
   Camera,
   Loader2,
   Video,
@@ -100,11 +102,27 @@ export function LiveView({
 
   // البث الحي المباشر (WebRTC): فيديو لحظي ندّاً لِند. يسقط تلقائياً إلى اللقطات
   // إن لم تكن الكاميرا تبث بثاً حياً.
-  const { videoRef, status: webrtcStatus, error: webrtcError, stats, hasAudio } = useWebrtcViewer({
+  const {
+    videoRef,
+    status: webrtcStatus,
+    error: webrtcError,
+    stats,
+    hasAudio,
+    talkActive,
+    talkError,
+    toggleTalk,
+  } = useWebrtcViewer({
     cameraId,
     enabled: true,
   })
   const webrtcLive = webrtcStatus === "live"
+
+  // إظهار خطأ المايكروفون كإشعار عربي واضح عند تغيّره.
+  useEffect(() => {
+    if (talkError) {
+      toast({ title: "تعذّر تشغيل المايكروفون", description: talkError, variant: "destructive" })
+    }
+  }, [talkError])
 
   // كتم الصوت افتراضاً (شرط التشغيل التلقائي)؛ المدير يفعّله بنقرة (إيماءة المستخدم).
   const [audioOn, setAudioOn] = useState(false)
@@ -476,6 +494,36 @@ export function LiveView({
                 لا يوجد صوت من المصدر
               </div>
             ))}
+
+          {/* زر التحدّث مع المفتش (talk-back) — يظهر أثناء البث الحي المباشر فقط.
+              أول ضغطة تطلب صلاحية المايكروفون ثم تبدأ إرسال صوت المدير للكاميرا؛
+              الضغطات التالية تكتم/تُلغي الكتم فوراً. عند التحدّث يظهر مؤشر نابض
+              بنفس نمط مؤشر البث الحي. */}
+          {webrtcLive && (
+            <button
+              onClick={() => void toggleTalk()}
+              className={cn(
+                "absolute left-3 top-[6.5rem] z-10 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium backdrop-blur transition-colors",
+                talkActive
+                  ? "bg-destructive text-white hover:bg-destructive/90"
+                  : "bg-black/60 text-white hover:bg-black/75",
+              )}
+              aria-pressed={talkActive}
+            >
+              {talkActive ? (
+                <>
+                  <span className="size-2 animate-pulse rounded-full bg-white" aria-hidden="true" />
+                  <Mic className="size-4" />
+                  تتحدّث الآن
+                </>
+              ) : (
+                <>
+                  <MicOff className="size-4" />
+                  التحدّث مع المفتش
+                </>
+              )}
+            </button>
+          )}
 
           {/* مؤشر التسجيل الجاري (REC) */}
           {recording && (

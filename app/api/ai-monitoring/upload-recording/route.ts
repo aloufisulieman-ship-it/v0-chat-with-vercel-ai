@@ -23,6 +23,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             "video/x-matroska",
             "video/ogg",
             "image/jpeg",
+            // الصيغ الصوتية للنُسخ الصوتية المرفقة بالتسجيلات (نُدرج صيغاً بلاحقة الترميز
+            // احتياطاً لأن بعض المتصفحات ترسل النوع كاملاً ومطابقة Vercel Blob تامة).
+            "audio/webm",
+            "audio/webm;codecs=opus",
+            "audio/ogg",
+            "audio/ogg;codecs=opus",
+            "audio/mpeg",
+            "audio/mp4",
+            "audio/wav",
           ],
           maximumSizeInBytes: 500 * 1024 * 1024, // 500MB
           addRandomSuffix: false,

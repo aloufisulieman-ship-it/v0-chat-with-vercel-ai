@@ -17,6 +17,7 @@ import {
   Eye,
   Mic,
   MicOff,
+  Volume2,
   SwitchCamera,
 } from "lucide-react"
 import { Card } from "@/components/ui/card"
@@ -518,7 +519,7 @@ export function MobileCamera() {
       recordMimeRef.current = mime
 
       // نُسجّل من قناة canvas تُحاكي عنصر الفيديو الحالي (بدل التسجيل المباشر من مسار
-      // الكاميرا)، حتى يستمر التسجيل بسلاسة عبر تبديل الكاميرا دون تجميد الفيديو.
+      // الكاميرا)، حت�� يستمر التسجيل بسلاسة عبر تبديل الكاميرا دون تجميد الفيديو.
       // نضيف مسار الصوت نفسه (كائن المسار ذاته) فيتبع حالة كتم/تفعيل الميكروفون.
       const recCanvas = recCanvasRef.current ?? document.createElement("canvas")
       recCanvasRef.current = recCanvas
@@ -654,13 +655,34 @@ export function MobileCamera() {
   // البث الحي المباشر (WebRTC): يعيد استخدام نفس بث الكاميرا وينقله للمدير لحظياً
   // كلما كانت الكاميرا تصوّر (بث أو تسجيل). مستقل عن رفع الإطارات/التحليل ويعمل ندّاً لِند.
   const getStream = useCallback(() => streamRef.current, [])
-  const { viewerCount, error: broadcastError, replaceVideoTrack } = useWebrtcBroadcaster({
+  const {
+    viewerCount,
+    error: broadcastError,
+    replaceVideoTrack,
+    talkbackStream,
+    managerTalking,
+  } = useWebrtcBroadcaster({
     active: cameraOn,
     inspectorName,
     getStream,
   })
   // نخزّن دالة استبدال المسار في مرجع ليستخدمها switchCamera دون تبعيات دورية.
   replaceVideoTrackRef.current = replaceVideoTrack
+
+  // تشغيل صوت التحدّث (talk-back) القادم من المدير على مكبّر صوت جهاز المفتش.
+  // نربط التدفّق الوارد بعنصر <audio> مخفي ونحاول التشغيل تلقائياً (بعد أن بدأ
+  // المفتش الجلسة بإيماءة، فالتشغيل التلقائي مسموح عادةً).
+  const talkbackAudioRef = useRef<HTMLAudioElement>(null)
+  useEffect(() => {
+    const el = talkbackAudioRef.current
+    if (!el) return
+    if (talkbackStream) {
+      el.srcObject = talkbackStream
+      void el.play().catch(() => {})
+    } else {
+      el.srcObject = null
+    }
+  }, [talkbackStream])
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-5">
@@ -771,12 +793,22 @@ export function MobileCamera() {
             تسجيل {formatDuration(recordSeconds)}
           </div>
         )}
-        {cameraOn && viewerCount > 0 && (
+        {cameraOn && viewerCount > 0 && !managerTalking && (
           <div className="absolute right-3 bottom-3 flex items-center gap-1.5 rounded-full bg-primary/90 px-2.5 py-1 text-xs font-semibold text-primary-foreground">
             <Eye className="size-3.5" />
             المدير يشاهد مباشرة
           </div>
         )}
+        {/* مؤشر تحدّث المدير عبر الصوت (talk-back) — نابض ليجذب انتباه المفتش للاستماع */}
+        {cameraOn && managerTalking && (
+          <div className="absolute right-3 bottom-3 flex items-center gap-1.5 rounded-full bg-destructive px-2.5 py-1 text-xs font-semibold text-white">
+            <span className="size-2 animate-pulse rounded-full bg-white" aria-hidden="true" />
+            <Volume2 className="size-3.5" />
+            المدير يتحدّث إليك
+          </div>
+        )}
+        {/* عنصر صوت مخفي لتشغيل صوت المدير الوارد على مكبّر صوت الجهاز */}
+        <audio ref={talkbackAudioRef} autoPlay className="hidden" />
         {analyzing && (
           <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white">
             <Loader2 className="size-3.5 animate-spin" />
