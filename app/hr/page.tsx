@@ -97,10 +97,10 @@ export default async function HrPage() {
 
       {/* القائمة الثانية: الحوادث الداخلية المحوّلة (طرف متضرر موظف) */}
       <section className="mt-10">
-        <h2 className="mb-3 text-lg font-semibold text-foreground">الحوادث الداخلية المحوّلة</h2>
+        <h2 className="mb-3 text-lg font-semibold text-foreground">{t("hr.incidentsSection")}</h2>
         {incidents.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-            لا توجد حوادث داخلية تخص موظفين.
+            {t("hr.noIncidents")}
           </p>
         ) : (
           <div className="flex flex-col gap-4">
@@ -115,10 +115,10 @@ export default async function HrPage() {
                 closedBy={i.hrClosedBy ?? ""}
                 closedAt={i.hrClosedAt ? i.hrClosedAt.toISOString() : ""}
                 rows={[
-                  { label: "رقم الحادثة", value: <span dir="ltr" className="font-mono text-xs">{i.documentNo || "-"}</span> },
-                  { label: "النوع", value: i.title },
-                  { label: "الموقع", value: i.location || "-" },
-                  { label: "التاريخ", value: <span dir="ltr" className="font-mono text-xs">{i.incidentDate ?? "-"}</span> },
+                  { label: t("hr.incidentNo"), value: <span dir="ltr" className="font-mono text-xs">{i.documentNo || "-"}</span> },
+                  { label: t("hr.type"), value: i.title },
+                  { label: t("hr.location"), value: i.location || "-" },
+                  { label: t("hr.date"), value: <span dir="ltr" className="font-mono text-xs">{i.incidentDate ?? "-"}</span> },
                 ]}
                 initialAction={i.hrAction ?? ""}
                 initialDate={i.hrActionDate ?? ""}
@@ -128,26 +128,26 @@ export default async function HrPage() {
                     module="incidents"
                     recordId={i.id}
                     title={i.title}
-                    subtitle="تقرير حادثة"
+                    subtitle={t("hr.incidentReport")}
                     documentNo={i.documentNo || undefined}
                     trigger={
                       <Button type="button" variant="outline" size="sm">
                         <Eye className="size-4" />
-                        عرض التفاصيل
+                        {t("hr.viewDetails")}
                       </Button>
                     }
                     fields={[
-                      { label: "رقم الحادثة", value: i.documentNo || "-" },
-                      { label: "نوع الحادثة", value: i.title },
-                      { label: "الموقع", value: i.location || "-" },
-                      { label: "تاريخ الحادثة", value: i.incidentDate ?? "-" },
-                      { label: "الخطورة", value: severityLabels[i.severity ?? ""] ?? "-" },
-                      { label: "وصف تفصيلي", value: i.description || "-" },
-                      { label: "الأطراف المتضررة", value: formatParties(i.parties) },
-                      { label: "إجراء الموارد البشرية", value: i.hrAction || "-" },
-                      { label: "تاريخ إجراء HR", value: i.hrActionDate ?? "-" },
-                      { label: "ملاحظات HR", value: i.hrNotes || "-" },
-                      { label: "الحالة", value: statusLabels[i.status ?? ""] ?? "-" },
+                      { label: t("hr.incidentNo"), value: i.documentNo || "-" },
+                      { label: t("hr.incidentType"), value: i.title },
+                      { label: t("hr.location"), value: i.location || "-" },
+                      { label: t("hr.incidentDate"), value: i.incidentDate ?? "-" },
+                      { label: t("hr.severity"), value: i.severity ? severityLabel(t, i.severity) : "-" },
+                      { label: t("hr.description"), value: i.description || "-" },
+                      { label: t("hr.parties"), value: formatParties(i.parties) },
+                      { label: t("hr.hrAction"), value: i.hrAction || "-" },
+                      { label: t("hr.hrActionDate"), value: i.hrActionDate ?? "-" },
+                      { label: t("hr.hrNotes"), value: i.hrNotes || "-" },
+                      { label: t("hr.status"), value: i.status ? statusLabel(t, i.status) : "-" },
                     ]}
                     initialAttachments={[]}
                   />
