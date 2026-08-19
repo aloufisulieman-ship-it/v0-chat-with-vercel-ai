@@ -251,6 +251,16 @@ export const en: Dictionary = {
     tbPrintColSignature: "Signature",
     tbPrintPhotoTitle: "Session Photo",
     tbPrintFooter: "Health, Safety & Environment Management System (HSE) — This document was generated electronically",
+    tbCardPh: "Card",
+    tbPrintHeader: "Daily Toolbox Talk",
+    tbRecordNo: "Record No.",
+    daySun: "Sunday",
+    dayMon: "Monday",
+    dayTue: "Tuesday",
+    dayWed: "Wednesday",
+    dayThu: "Thursday",
+    dayFri: "Friday",
+    daySat: "Saturday",
   },
 
   employeeReg: {
