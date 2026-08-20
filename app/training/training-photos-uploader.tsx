@@ -51,7 +51,8 @@ export function TrainingPhotosUploader({
           disabled={busy}
           className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-foreground hover:bg-muted disabled:opacity-50"
         >
-          {busy ? <Loader2 className="size-4 animate-spin" /> : <Camera className="size-4" />} التقاط صورة
+          {busy ? <Loader2 className="size-4 animate-spin" /> : <Camera className="size-4" />}{" "}
+          {t("trainingExtras.capturePhoto")}
         </button>
         <button
           type="button"
@@ -59,7 +60,7 @@ export function TrainingPhotosUploader({
           disabled={busy}
           className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-foreground hover:bg-muted disabled:opacity-50"
         >
-          <ImagePlus className="size-4" /> رفع من الجهاز
+          <ImagePlus className="size-4" /> {t("trainingExtras.uploadFromDevice")}
         </button>
       </div>
 
@@ -87,14 +88,14 @@ export function TrainingPhotosUploader({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={p || "/placeholder.svg"}
-                alt={`صورة الدورة ${i + 1}`}
+                alt={t("trainingExtras.coursePhotoAlt").replace("{n}", String(i + 1))}
                 className="h-20 w-20 rounded-md border border-border object-cover"
               />
               <button
                 type="button"
                 onClick={() => removeAt(i)}
                 className="absolute -right-1.5 -top-1.5 rounded-full bg-destructive p-0.5 text-destructive-foreground shadow"
-                aria-label="حذف الصورة"
+                aria-label={t("trainingExtras.deletePhoto")}
               >
                 <X className="size-3.5" />
               </button>

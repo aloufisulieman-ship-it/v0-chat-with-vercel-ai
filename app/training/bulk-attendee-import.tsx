@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "@/hooks/use-toast"
 import * as XLSX from "xlsx"
+import { useI18n } from "@/lib/i18n/client"
 
 export type ParsedAttendee = { name: string; designation: string }
 
@@ -27,6 +28,7 @@ function looksLikeHeader(row: ParsedAttendee) {
 }
 
 export function BulkAttendeeImport({ onImport }: { onImport: (rows: ParsedAttendee[]) => void }) {
+  const { t, dir } = useI18n()
   const [open, setOpen] = useState(false)
   const [text, setText] = useState("")
   const [parsed, setParsed] = useState<ParsedAttendee[]>([])
@@ -58,10 +60,14 @@ export function BulkAttendeeImport({ onImport }: { onImport: (rows: ParsedAttend
       const cleaned = mapped.length > 0 && looksLikeHeader(mapped[0]) ? mapped.slice(1) : mapped
       setParsed(cleaned)
       if (cleaned.length === 0) {
-        toast({ title: "لم يتم العثور على أسماء في الملف", variant: "destructive" })
+        toast({ title: t("trainingExtras.noNamesInFile"), variant: "destructive" })
       }
     } catch {
-      toast({ title: "تعذّر قراءة الملف", description: "تأكد أنه ملف Excel أو CSV صالح.", variant: "destructive" })
+      toast({
+        title: t("trainingExtras.fileReadFailed"),
+        description: t("trainingExtras.fileReadFailedDesc"),
+        variant: "destructive",
+      })
     } finally {
       if (fileRef.current) fileRef.current.value = ""
     }
@@ -69,11 +75,11 @@ export function BulkAttendeeImport({ onImport }: { onImport: (rows: ParsedAttend
 
   function confirmImport() {
     if (parsed.length === 0) {
-      toast({ title: "لا يوجد متدربون للاستيراد", variant: "destructive" })
+      toast({ title: t("trainingExtras.noTraineesToImport"), variant: "destructive" })
       return
     }
     onImport(parsed)
-    toast({ title: `تم استيراد ${parsed.length} متدرب` })
+    toast({ title: t("trainingExtras.importedCount").replace("{count}", String(parsed.length)) })
     reset()
     setOpen(false)
   }
@@ -87,37 +93,37 @@ export function BulkAttendeeImport({ onImport }: { onImport: (rows: ParsedAttend
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset() }}>
       <DialogTrigger asChild>
         <Button type="button" variant="outline" size="sm" className="gap-1">
-          <Upload className="size-4" /> استيراد قائمة
+          <Upload className="size-4" /> {t("trainingExtras.importList")}
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg" dir="rtl">
+      <DialogContent className="sm:max-w-lg" dir={dir}>
         <DialogHeader>
-          <DialogTitle>استيراد قائمة الحضور</DialogTitle>
+          <DialogTitle>{t("trainingExtras.importAttendanceTitle")}</DialogTitle>
         </DialogHeader>
 
         <Tabs defaultValue="paste">
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="paste" className="gap-1.5"><ClipboardPaste className="size-4" /> لصق نص</TabsTrigger>
-            <TabsTrigger value="file" className="gap-1.5"><FileSpreadsheet className="size-4" /> ملف Excel/CSV</TabsTrigger>
+            <TabsTrigger value="paste" className="gap-1.5">
+              <ClipboardPaste className="size-4" /> {t("trainingExtras.tabPaste")}
+            </TabsTrigger>
+            <TabsTrigger value="file" className="gap-1.5">
+              <FileSpreadsheet className="size-4" /> {t("trainingExtras.tabFile")}
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="paste" className="flex flex-col gap-2">
-            <p className="text-xs text-muted-foreground">
-              الصق اسماً واحداً في كل سطر. لإضافة الوظيفة، افصلها بفاصلة أو مسافتين (مثال: أحمد علي، فني).
-            </p>
+            <p className="text-xs text-muted-foreground">{t("trainingExtras.pasteHint")}</p>
             <Textarea
               rows={6}
               value={text}
               onChange={(e) => { setText(e.target.value); parseText(e.target.value) }}
-              placeholder={"أحمد علي، فني سلامة\nخالد سعيد، مشرف"}
-              dir="rtl"
+              placeholder={t("trainingExtras.pastePlaceholder")}
+              dir={dir}
             />
           </TabsContent>
 
           <TabsContent value="file" className="flex flex-col gap-2">
-            <p className="text-xs text-muted-foreground">
-              العمود الأول = الاسم، العمود الثاني (اختياري) = الوظيفة.
-            </p>
+            <p className="text-xs text-muted-foreground">{t("trainingExtras.fileHint")}</p>
             <input
               ref={fileRef}
               type="file"
@@ -131,7 +137,7 @@ export function BulkAttendeeImport({ onImport }: { onImport: (rows: ParsedAttend
         {parsed.length > 0 && (
           <div className="rounded-lg border border-border">
             <div className="border-b border-border bg-muted px-3 py-2 text-sm font-semibold">
-              معاينة ({parsed.length})
+              {t("trainingExtras.preview")} ({parsed.length})
             </div>
             <div className="max-h-48 overflow-y-auto">
               {parsed.map((r, i) => (
@@ -146,10 +152,10 @@ export function BulkAttendeeImport({ onImport }: { onImport: (rows: ParsedAttend
 
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={() => { reset(); setOpen(false) }} className="gap-1">
-            <X className="size-4" /> إلغاء
+            <X className="size-4" /> {t("trainingExtras.cancel")}
           </Button>
           <Button type="button" onClick={confirmImport} disabled={parsed.length === 0} className="gap-1">
-            <Check className="size-4" /> استيراد {parsed.length > 0 ? `(${parsed.length})` : ""}
+            <Check className="size-4" /> {t("trainingExtras.importAction")} {parsed.length > 0 ? `(${parsed.length})` : ""}
           </Button>
         </div>
       </DialogContent>
