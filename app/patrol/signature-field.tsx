@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react"
 import SignatureCanvas from "react-signature-canvas"
 import { X, PenLine } from "lucide-react"
+import { useI18n } from "@/lib/i18n/client"
 
 // حقل توقيع رقمي مبني على react-signature-canvas.
 // يُستورد ديناميكياً (ssr:false) من patrol-client لأن المكتبة تعتمد على DOM.
@@ -20,6 +21,7 @@ export default function SignatureField({
   disabled?: boolean
   disabledText?: string
 }) {
+  const { t } = useI18n()
   const padRef = useRef<SignatureCanvas>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
 
@@ -70,7 +72,7 @@ export default function SignatureField({
             onClick={clear}
             className="text-xs text-gray-400 hover:text-red-500 flex items-center gap-1"
           >
-            <X className="size-3" /> مسح
+            <X className="size-3" /> {t("patrol.clear")}
           </button>
         )}
       </div>
@@ -93,11 +95,11 @@ export default function SignatureField({
         {(!value || disabled) && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             {disabled ? (
-              <span className="text-xs text-gray-400">{disabledText || "معطّل"}</span>
+              <span className="text-xs text-gray-400">{disabledText || t("patrol.disabled")}</span>
             ) : (
               !value && (
                 <span className="flex items-center gap-1 text-xs text-gray-400">
-                  <PenLine className="size-3" /> وقّع هنا
+                  <PenLine className="size-3" /> {t("patrol.signHere")}
                 </span>
               )
             )}

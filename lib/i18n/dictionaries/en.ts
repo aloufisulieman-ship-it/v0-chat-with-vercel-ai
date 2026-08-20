@@ -1414,7 +1414,7 @@ export const en: Dictionary = {
     "تشغيل معدات بدون تدريب أو ترخيص": "Operating equipment without training or license",
     "الإهمال في تأمين منطقة العمل": "Negligence in securing the work area",
     "عدم الإبلاغ عن حادثة أو إصابة": "Failure to report an incident or injury",
-    "إهمال نظافة موقع ال��مل": "Neglecting worksite cleanliness",
+    "إهمال نظافة موقع العمل": "Neglecting worksite cleanliness",
     "عدم التخلص الصحيح من النفايات": "Improper waste disposal",
     "سد مخارج الطوارئ أو ممرات الإخلاء": "Blocking emergency exits or evacuation routes",
     "تخزين مواد بطريقة غير آمنة": "Storing materials unsafely",
@@ -1793,6 +1793,9 @@ export const en: Dictionary = {
     failSaveViolation: "Failed to save violation",
     failSaveObservation: "Failed to save observation",
     itemSuffix: "entries",
+    clear: "Clear",
+    disabled: "Disabled",
+    signHere: "Sign here",
     categories: {
       forklift: "Forklift",
       tuktuk: "Tuk-tuk",
