@@ -314,6 +314,31 @@ export const ar = {
     daySat: "السبت",
   },
 
+  trainingExtras: {
+    // رافع الصور
+    coursePhotos: "صور الدورة (اختياري)",
+    capturePhoto: "التقاط صورة",
+    uploadFromDevice: "رفع من الجهاز",
+    coursePhotoAlt: "صورة الدورة {n}",
+    deletePhoto: "حذف الصورة",
+    // استيراد قائمة الحضور
+    importList: "استيراد قائمة",
+    importAttendanceTitle: "استيراد قائمة الحضور",
+    tabPaste: "لصق نص",
+    tabFile: "ملف Excel/CSV",
+    pasteHint: "الصق اسماً واحداً في كل سطر. لإضافة الوظيفة، افصلها بفاصلة أو مسافتين (مثال: أحمد علي، فني).",
+    pastePlaceholder: "أحمد علي، فني سلامة\nخالد سعيد، مشرف",
+    fileHint: "العمود الأول = الاسم، العمود الثاني (اختياري) = الوظيفة.",
+    preview: "معاينة",
+    cancel: "إلغاء",
+    importAction: "استيراد",
+    noNamesInFile: "لم يتم العثور على أسماء في الملف",
+    fileReadFailed: "تعذّر قراءة الملف",
+    fileReadFailedDesc: "تأكد أنه ملف Excel أو CSV صالح.",
+    noTraineesToImport: "لا يوجد متدربون للاستيراد",
+    importedCount: "تم استيراد {count} متدرب",
+  },
+
   employeeReg: {
     editAria: "تعديل {name}",
     deleteAria: "حذف {name}",
@@ -1188,7 +1213,7 @@ export const ar = {
       audioOn: "الصوت مفعّل",
       enableAudio: "تفعيل الصوت",
       noAudioSourceAria: "لا يوجد صوت وارد من مصدر البث",
-      noAudioSource: "لا يوجد صوت من المصدر",
+      noAudioSource: "لا يوجد ص��ت من المصدر",
       talkingNow: "تتحدّث الآن",
       talkToInspector: "التحدّث مع المفتش",
       noViolationsYet: "لا توجد مخالفات مرصودة حتى الآن",
@@ -1301,7 +1326,7 @@ export const ar = {
       audioStartMic: "تشغيل الميكروفون",
       // كاميرا الهاتف
       phoneStreamTitle: "بث كاميرا الهاتف",
-      phoneStreamSubtitle: "حوّل هاتفك إلى كاميرا مراقبة: ابدأ البث الحي للتحليل اللحظي، أو سجّل مقطع فيديو ليُراجعه مسؤول السلامة لاحقاً.",
+      phoneStreamSubtitle: "حوّل هاتفك إلى كاميرا مراقبة: ابدأ البث الحي للتح��يل اللحظي، أو سجّل مقطع فيديو ليُراجعه مسؤول السلامة لاحقاً.",
       sessionData: "بيانات الجلسة",
       inspectorPlaceholder: "مثال: خالد العتيبي",
       locationPlaceholder: "مثال: بوابة رقم 3 أو منطقة التحميل",
@@ -1564,9 +1589,9 @@ export const ar = {
     financeTitle: "المالية",
     financeSubtitle: "متابعة المخالفات والحوادث المحوّلة إلى المالية وتسجيل رقم الستلمنت وإيصال الدفع",
     actionsTitle: "الإجراءات التصحيحية",
-    actionsSubtitle: "متابعة الإجراءات التصحيحية والوقائية (CAPA) حتى الإغلاق",
+    actionsSubtitle: "مت��بعة الإجراءات التصحيحية والوقائية (CAPA) حتى الإغلاق",
     auditsTitle: "التدقيق والامتثال",
-    auditsSubtitle: "إدارة عمليات التدقيق الداخلية والخارجية ومتابعة المطابقة للمعايير",
+    auditsSubtitle: "إدارة عمليات التدقيق الد��خلية والخارجية ومتابعة المطابقة للمعايير",
     documentsTitle: "إدارة الوثائق",
     documentsSubtitle: "مكتبة السياسات والإجراءات والخطط والسجلات الخاصة بالسلامة",
     reportsTitle: "التقارير والتحليلات",
@@ -1743,6 +1768,29 @@ export const ar = {
     selectAll: "تحديد الكل",
   },
 
+  settingsPage: {
+    facilityInfo: "معلومات المنشأة",
+    myAccount: "حسابي",
+    accountName: "الاسم",
+    accountEmail: "البريد الإلكتروني",
+    accountRole: "الدور",
+    roleHint: "لتغيير دورك أو إدارة المستخدمين الآخرين، استخدم صفحة إدارة المستخدمين (متاحة لمدير النظام فقط).",
+    changePassword: "تغيير كلمة المرور",
+    teamAndPerms: "فريق السلامة والصلاحيات",
+    manageUsers: "إدارة المستخدمين",
+    adminOnlyTeam: "عرض الفريق وإدارة الصلاحيات متاحان لمدير النظام فقط.",
+    noMembers: "لا يوجد أعضاء بعد.",
+    you: "(أنت)",
+  },
+
+  pendingPage: {
+    rejectedTitle: "تم رفض طلب الوصول",
+    rejectedBody: "لم تتم الموافقة على حسابك للوصول إلى النظام. يرجى التواصل مع مدير النظام لمزيد من المعلومات.",
+    pendingTitle: "حسابك بانتظار الموافقة",
+    pendingBody:
+      "مرحباً {name}، تم إنشاء حسابك بنجاح وهو الآن بانتظار موافقة مدير النظام. سيتم تفعيل وصولك فور الموافقة عليه.",
+  },
+
   attachments: {
     unsupportedTitle: "ملفات غير مدعومة",
     unsupportedDesc: "يُسمح برفع الصور فقط.",
@@ -1905,7 +1953,7 @@ export const ar = {
       tuktuk: "توك توك",
       loading: "شحن وتفريغ",
       vest: "سترة عاكسة",
-      crossing: "ممرات المشاة",
+      crossing: "م��رات المشاة",
       shoes: "جوتي السلامة",
       other: "أخرى",
     },

@@ -4,6 +4,7 @@ import { useRef, useState } from "react"
 import { Camera, ImagePlus, X, Loader2 } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import { compressImage } from "@/lib/image-compress"
+import { useI18n } from "@/lib/i18n/client"
 
 // Course-wide photo uploader: supports camera capture and file selection,
 // compresses each image, and shows deletable thumbnails. Stores base64 strings.
@@ -14,6 +15,7 @@ export function TrainingPhotosUploader({
   photos: string[]
   onChange: (next: string[]) => void
 }) {
+  const { t } = useI18n()
   const cameraRef = useRef<HTMLInputElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
@@ -41,7 +43,7 @@ export function TrainingPhotosUploader({
 
   return (
     <div className="flex flex-col gap-2">
-      <Label className="text-sm font-medium">صور الدورة (اختياري)</Label>
+      <Label className="text-sm font-medium">{t("trainingExtras.coursePhotos")}</Label>
       <div className="flex flex-wrap gap-2">
         <button
           type="button"

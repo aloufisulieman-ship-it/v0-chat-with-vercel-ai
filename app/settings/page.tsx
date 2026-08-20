@@ -9,17 +9,22 @@ import { requireUser } from "@/lib/session"
 import { getCompany } from "@/app/actions/hse"
 import { getUsers } from "@/app/actions/users"
 import { getServerT } from "@/lib/i18n/server"
+import type { TFunction } from "@/lib/i18n/translate"
 
-const roleLabels: Record<string, string> = {
-  admin: "مدير النظام",
-  manager: "مدير",
-  user: "مستخدم",
+const roleKeys: Record<string, string> = {
+  admin: "usersManager.roleAdmin",
+  manager: "usersManager.roleManager",
+  user: "usersManager.roleUser",
 }
 
-const statusLabels: Record<string, { label: string; cls: string }> = {
-  approved: { label: "معتمد", cls: "bg-primary/10 text-primary" },
-  pending: { label: "بانتظار الموافقة", cls: "bg-accent/15 text-accent-foreground" },
-  rejected: { label: "مرفوض", cls: "bg-destructive/10 text-destructive" },
+const statusMeta: Record<string, { key: string; cls: string }> = {
+  approved: { key: "usersManager.statusApproved", cls: "bg-primary/10 text-primary" },
+  pending: { key: "usersManager.statusPending", cls: "bg-accent/15 text-accent-foreground" },
+  rejected: { key: "usersManager.statusRejected", cls: "bg-destructive/10 text-destructive" },
+}
+
+function roleLabel(t: TFunction, role?: string | null): string {
+  return t(roleKeys[role ?? "user"] ?? "usersManager.roleUser")
 }
 
 export default async function SettingsPage() {
@@ -35,7 +40,7 @@ export default async function SettingsPage() {
         <Card className="p-6">
           <div className="mb-4 flex items-center gap-2">
             <Building2 className="size-5 text-primary" />
-            <h3 className="text-base font-semibold text-foreground">معلومات المنشأة</h3>
+            <h3 className="text-base font-semibold text-foreground">{t("settingsPage.facilityInfo")}</h3>
           </div>
           <CompanyForm company={company} />
         </Card>
@@ -43,22 +48,22 @@ export default async function SettingsPage() {
         <Card className="flex flex-col gap-4 p-6">
           <div className="flex items-center gap-2">
             <UserCircle className="size-5 text-primary" />
-            <h3 className="text-base font-semibold text-foreground">حسابي</h3>
+            <h3 className="text-base font-semibold text-foreground">{t("settingsPage.myAccount")}</h3>
           </div>
           <div className="flex flex-col gap-3">
-            <Row label="الاسم" value={user.name} />
-            <Row label="البريد الإلكتروني" value={user.email} ltr />
-            <Row label="الدور" value={roleLabels[user.role ?? "user"] ?? user.role ?? "مستخدم"} />
+            <Row label={t("settingsPage.accountName")} value={user.name} />
+            <Row label={t("settingsPage.accountEmail")} value={user.email} ltr />
+            <Row label={t("settingsPage.accountRole")} value={roleLabel(t, user.role)} />
           </div>
           <div className="mt-auto rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground text-pretty">
-            لتغيير دورك أو إدارة المستخدمين الآخرين، استخدم صفحة إدارة المستخدمين (متاحة لمدير النظام فقط).
+            {t("settingsPage.roleHint")}
           </div>
         </Card>
 
         <Card className="p-6 lg:col-span-2">
           <div className="mb-4 flex items-center gap-2">
             <KeyRound className="size-5 text-primary" />
-            <h3 className="text-base font-semibold text-foreground">تغيير كلمة المرور</h3>
+            <h3 className="text-base font-semibold text-foreground">{t("settingsPage.changePassword")}</h3>
           </div>
           <div className="max-w-md">
             <ChangePasswordForm />
@@ -69,12 +74,12 @@ export default async function SettingsPage() {
           <div className="mb-4 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Users className="size-5 text-primary" />
-              <h3 className="text-base font-semibold text-foreground">فريق السلامة والصلاحيات</h3>
+              <h3 className="text-base font-semibold text-foreground">{t("settingsPage.teamAndPerms")}</h3>
             </div>
             {isAdmin && (
               <Button asChild variant="outline" size="sm" className="gap-2 bg-transparent">
                 <Link href="/users">
-                  إدارة المستخدمين
+                  {t("settingsPage.manageUsers")}
                   <ArrowLeft className="size-4" />
                 </Link>
               </Button>
@@ -83,14 +88,14 @@ export default async function SettingsPage() {
 
           {!isAdmin ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              عرض الفريق وإدارة الصلاحيات متاحان لمدير النظام فقط.
+              {t("settingsPage.adminOnlyTeam")}
             </p>
           ) : team.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">لا يوجد أعضاء بعد.</p>
+            <p className="py-6 text-center text-sm text-muted-foreground">{t("settingsPage.noMembers")}</p>
           ) : (
             <div className="flex flex-col divide-y divide-border">
               {team.map((m) => {
-                const st = statusLabels[m.status ?? "pending"] ?? statusLabels.pending
+                const st = statusMeta[m.status ?? "pending"] ?? statusMeta.pending
                 return (
                   <div key={m.id} className="flex items-center justify-between gap-3 py-3">
                     <div className="flex items-center gap-3">
@@ -100,16 +105,18 @@ export default async function SettingsPage() {
                       <div className="flex flex-col">
                         <span className="text-sm font-medium text-foreground">
                           {m.name}
-                          {m.id === user.id && <span className="mr-1 text-xs text-muted-foreground"> (أنت)</span>}
+                          {m.id === user.id && (
+                            <span className="mr-1 text-xs text-muted-foreground"> {t("settingsPage.you")}</span>
+                          )}
                         </span>
                         <span className="text-xs text-muted-foreground" dir="ltr">{m.email}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${st.cls}`}>{st.label}</span>
+                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${st.cls}`}>{t(st.key)}</span>
                       <span className="flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs font-medium text-foreground">
                         <ShieldCheck className="size-3.5 text-primary" />
-                        {roleLabels[m.role ?? "user"] ?? m.role}
+                        {roleLabel(t, m.role)}
                       </span>
                     </div>
                   </div>
