@@ -1,3 +1,4 @@
+import { cache } from "react"
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { user as userTable } from "@/lib/db/schema"
@@ -28,14 +29,22 @@ const userColumns = {
   locale: userTable.locale,
 }
 
-// Returns the authenticated user with role/status, or redirects to sign-in.
-export async function requireUser(): Promise<AppUser> {
+// Resolves the current session + user row in ONE database round trip, memoized
+// for the lifetime of a single request via React cache(). RootLayout and the
+// page both need the user, and without this each helper would re-run the
+// Better Auth session query plus the user lookup, doubling DB data transfer on
+// every navigation. cache() collapses those duplicate calls into one.
+const loadSessionUser = cache(async (): Promise<AppUser | null> => {
   const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) redirect("/sign-in")
+  if (!session?.user) return null
 
   const rows = await db.select(userColumns).from(userTable).where(eq(userTable.id, session.user.id)).limit(1)
+  return rows[0] ?? null
+})
 
-  const u = rows[0]
+// Returns the authenticated user with role/status, or redirects to sign-in.
+export async function requireUser(): Promise<AppUser> {
+  const u = await loadSessionUser()
   if (!u) redirect("/sign-in")
 
   // Users awaiting approval are sent to a holding page.
@@ -91,8 +100,5 @@ export async function requireModuleUserId(module: ModuleKey): Promise<string> {
 
 // Returns the user without enforcing approval (for the /pending page itself).
 export async function getCurrentUser(): Promise<AppUser | null> {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) return null
-  const rows = await db.select(userColumns).from(userTable).where(eq(userTable.id, session.user.id)).limit(1)
-  return rows[0] ?? null
+  return loadSessionUser()
 }
