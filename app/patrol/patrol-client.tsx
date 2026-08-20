@@ -32,6 +32,12 @@ import {
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
 import { ToastAction } from "@/components/ui/toast"
+import { useI18n } from "@/lib/i18n/client"
+
+// استبدال بسيط لعناصر النائبة {name}/{time}/{saved}... في نصوص الترجمة.
+function fill(template: string, vars: Record<string, string | number>): string {
+  return template.replace(/\{(\w+)\}/g, (_, k) => (k in vars ? String(vars[k]) : `{${k}}`))
+}
 
 // حقل التوقيع يعتمد على DOM، لذا يُحمّل ديناميكياً بدون SSR.
 const SignaturePad = dynamic(() => import("./signature-field"), {
@@ -45,7 +51,7 @@ type ViolationCategory = "forklift" | "tuktuk" | "loading" | "vest" | "crossing"
 interface ViolationTemplate {
   id: string
   category: ViolationCategory
-  text: string
+  textKey: string
   severity: "minor" | "moderate" | "serious"
 }
 
@@ -84,110 +90,126 @@ interface PatrolSession {
   notes: string
 }
 
+// الفئات تحمل مفتاح ترجمة (labelKey) بدل النص المباشر ليُترجَم لحظة العرض.
 const VIOLATION_CATEGORIES: {
   value: ViolationCategory
-  label: string
+  labelKey: string
   icon: typeof Truck
   color: string
   bg: string
 }[] = [
-  { value: "forklift", label: "رافعة شوكية", icon: Truck, color: "#dc2626", bg: "#fef2f2" },
-  { value: "tuktuk", label: "توك توك", icon: Truck, color: "#7c3aed", bg: "#f5f3ff" },
-  { value: "loading", label: "شحن وتفريغ", icon: Users, color: "#d97706", bg: "#fffbeb" },
-  { value: "vest", label: "سترة عاكسة", icon: PersonStanding, color: "#0284c7", bg: "#f0f9ff" },
-  { value: "crossing", label: "ممرات المشاة", icon: Footprints, color: "#059669", bg: "#f0fdf4" },
-  { value: "shoes", label: "جوتي السلامة", icon: HardHat, color: "#b45309", bg: "#fefce8" },
-  { value: "other", label: "أخرى", icon: ShieldAlert, color: "#6b7280", bg: "#f9fafb" },
+  { value: "forklift", labelKey: "patrol.categories.forklift", icon: Truck, color: "#dc2626", bg: "#fef2f2" },
+  { value: "tuktuk", labelKey: "patrol.categories.tuktuk", icon: Truck, color: "#7c3aed", bg: "#f5f3ff" },
+  { value: "loading", labelKey: "patrol.categories.loading", icon: Users, color: "#d97706", bg: "#fffbeb" },
+  { value: "vest", labelKey: "patrol.categories.vest", icon: PersonStanding, color: "#0284c7", bg: "#f0f9ff" },
+  { value: "crossing", labelKey: "patrol.categories.crossing", icon: Footprints, color: "#059669", bg: "#f0fdf4" },
+  { value: "shoes", labelKey: "patrol.categories.shoes", icon: HardHat, color: "#b45309", bg: "#fefce8" },
+  { value: "other", labelKey: "patrol.categories.other", icon: ShieldAlert, color: "#6b7280", bg: "#f9fafb" },
 ]
 
+// كل قالب يحمل textKey (مفتاح الترجمة). النص المخزَّن في الحالة/قاعدة البيانات
+// يُشتق بترجمة textKey لحظة الإضافة (بلغة العرض الحالية) لضمان قيمة نصية ثابتة.
 const VIOLATION_TEMPLATES: ViolationTemplate[] = [
-  { id: "F1", category: "forklift", severity: "serious", text: "قيادة الرافعة بسرعة زائدة داخل السوق" },
-  { id: "F2", category: "forklift", severity: "serious", text: "رافعة شوكية في منطقة مشاة بدون تحذير" },
-  { id: "F3", category: "forklift", severity: "moderate", text: "عدم ارتداء حزام الأمان أثناء قيادة الرافعة" },
-  { id: "F4", category: "forklift", severity: "moderate", text: "قيادة الرافعة بحمل مرفوع بشكل خاطئ" },
-  { id: "F5", category: "forklift", severity: "serious", text: "قيادة الرافعة بدون رخصة HSE سارية" },
-  { id: "F6", category: "forklift", severity: "moderate", text: "ترك الرافعة تعمل بدون مراقبة" },
-  { id: "F7", category: "forklift", severity: "minor", text: "عدم استخدام بوق التحذير عند الاقتراب من التقاطعات" },
-  { id: "F8", category: "forklift", severity: "serious", text: "حمل أشخاص على الرافعة الشوكية" },
-  { id: "T1", category: "tuktuk", severity: "serious", text: "قيادة التوك توك بسرعة زائدة داخل السوق" },
-  { id: "T2", category: "tuktuk", severity: "moderate", text: "عدم ارتداء حزام الأمان في التوك توك" },
-  { id: "T3", category: "tuktuk", severity: "serious", text: "قيادة التوك توك بدون رخصة HSE سارية" },
-  { id: "T4", category: "tuktuk", severity: "moderate", text: "تجاوز الحمولة المسموحة في التوك توك" },
-  { id: "T5", category: "tuktuk", severity: "minor", text: "التوك توك في مسار مخصص للرافعات الشوكية" },
-  { id: "T6", category: "tuktuk", severity: "moderate", text: "حمل أكثر من الطاقة الاستيعابية من الأشخاص" },
-  { id: "L1", category: "loading", severity: "serious", text: "رفع أحمال يدوياً بطريقة خاطئة" },
-  { id: "L2", category: "loading", severity: "moderate", text: "عمال في منطقة تشغيل الرافعة بدون تنسيق" },
-  { id: "L3", category: "loading", severity: "serious", text: "الوقوف تحت حمل مرفوع بالرافعة" },
-  { id: "L4", category: "loading", severity: "moderate", text: "بضائع غير مؤمّنة على البليت قبل الرفع" },
-  { id: "L5", category: "loading", severity: "minor", text: "عمال التفريغ بدون قفازات حماية" },
-  { id: "L6", category: "loading", severity: "moderate", text: "إعاقة ممر الطوارئ بالبضائع أثناء التفريغ" },
-  { id: "L7", category: "loading", severity: "serious", text: "عمال على سطح الشاحنة بدون حماية من السقوط" },
-  { id: "V1", category: "vest", severity: "moderate", text: "عامل في ساحة التحميل بدون سترة عاكسة" },
-  { id: "V2", category: "vest", severity: "moderate", text: "عامل مستودع في مسار المركبات بدون سترة عاكسة" },
-  { id: "V3", category: "vest", severity: "minor", text: "سترة عاكسة مرتداة بشكل غير صحيح" },
-  { id: "V4", category: "vest", severity: "moderate", text: "زائر في منطقة العمليات بدون سترة عاكسة" },
-  { id: "V5", category: "vest", severity: "moderate", text: "سائق مركبة نزل بدون سترة عاكسة" },
-  { id: "C1", category: "crossing", severity: "serious", text: "عبور المشاة من خارج الممر المخصص" },
-  { id: "C2", category: "crossing", severity: "serious", text: "مشاة يسيرون في مسار الرافعات الشوكية" },
-  { id: "C3", category: "crossing", severity: "moderate", text: "تجاهل إشارات التوقف عند الممر" },
-  { id: "C4", category: "crossing", severity: "moderate", text: "ممر مشاة محجوب ببضائع أو مركبات" },
-  { id: "C5", category: "crossing", severity: "minor", text: "مشاة يستخدمون هواتفهم عند العبور" },
-  { id: "S1", category: "shoes", severity: "moderate", text: "عامل في منطقة التحميل بدون حذاء سلامة" },
-  { id: "S2", category: "shoes", severity: "moderate", text: "عامل مستودع يرتدي أحذية عادية أثناء التشغيل" },
-  { id: "S3", category: "shoes", severity: "minor", text: "عامل يرتدي أحذية سلامة تالفة" },
-  { id: "S4", category: "shoes", severity: "moderate", text: "عامل فرز بدون حذاء واق من الثقل" },
-  { id: "O1", category: "other", severity: "moderate", text: "التدخين في منطقة ممنوعة" },
-  { id: "O2", category: "other", severity: "minor", text: "إلقاء النفايات خارج الحاويات المخصصة" },
-  { id: "O3", category: "other", severity: "moderate", text: "العمل بدون تصريح عمل ساري" },
-  { id: "O4", category: "other", severity: "serious", text: "تجاهل تعليمات مسؤول السلامة" },
+  { id: "F1", category: "forklift", severity: "serious", textKey: "patrol.tpl.F1" },
+  { id: "F2", category: "forklift", severity: "serious", textKey: "patrol.tpl.F2" },
+  { id: "F3", category: "forklift", severity: "moderate", textKey: "patrol.tpl.F3" },
+  { id: "F4", category: "forklift", severity: "moderate", textKey: "patrol.tpl.F4" },
+  { id: "F5", category: "forklift", severity: "serious", textKey: "patrol.tpl.F5" },
+  { id: "F6", category: "forklift", severity: "moderate", textKey: "patrol.tpl.F6" },
+  { id: "F7", category: "forklift", severity: "minor", textKey: "patrol.tpl.F7" },
+  { id: "F8", category: "forklift", severity: "serious", textKey: "patrol.tpl.F8" },
+  { id: "T1", category: "tuktuk", severity: "serious", textKey: "patrol.tpl.T1" },
+  { id: "T2", category: "tuktuk", severity: "moderate", textKey: "patrol.tpl.T2" },
+  { id: "T3", category: "tuktuk", severity: "serious", textKey: "patrol.tpl.T3" },
+  { id: "T4", category: "tuktuk", severity: "moderate", textKey: "patrol.tpl.T4" },
+  { id: "T5", category: "tuktuk", severity: "minor", textKey: "patrol.tpl.T5" },
+  { id: "T6", category: "tuktuk", severity: "moderate", textKey: "patrol.tpl.T6" },
+  { id: "L1", category: "loading", severity: "serious", textKey: "patrol.tpl.L1" },
+  { id: "L2", category: "loading", severity: "moderate", textKey: "patrol.tpl.L2" },
+  { id: "L3", category: "loading", severity: "serious", textKey: "patrol.tpl.L3" },
+  { id: "L4", category: "loading", severity: "moderate", textKey: "patrol.tpl.L4" },
+  { id: "L5", category: "loading", severity: "minor", textKey: "patrol.tpl.L5" },
+  { id: "L6", category: "loading", severity: "moderate", textKey: "patrol.tpl.L6" },
+  { id: "L7", category: "loading", severity: "serious", textKey: "patrol.tpl.L7" },
+  { id: "V1", category: "vest", severity: "moderate", textKey: "patrol.tpl.V1" },
+  { id: "V2", category: "vest", severity: "moderate", textKey: "patrol.tpl.V2" },
+  { id: "V3", category: "vest", severity: "minor", textKey: "patrol.tpl.V3" },
+  { id: "V4", category: "vest", severity: "moderate", textKey: "patrol.tpl.V4" },
+  { id: "V5", category: "vest", severity: "moderate", textKey: "patrol.tpl.V5" },
+  { id: "C1", category: "crossing", severity: "serious", textKey: "patrol.tpl.C1" },
+  { id: "C2", category: "crossing", severity: "serious", textKey: "patrol.tpl.C2" },
+  { id: "C3", category: "crossing", severity: "moderate", textKey: "patrol.tpl.C3" },
+  { id: "C4", category: "crossing", severity: "moderate", textKey: "patrol.tpl.C4" },
+  { id: "C5", category: "crossing", severity: "minor", textKey: "patrol.tpl.C5" },
+  { id: "S1", category: "shoes", severity: "moderate", textKey: "patrol.tpl.S1" },
+  { id: "S2", category: "shoes", severity: "moderate", textKey: "patrol.tpl.S2" },
+  { id: "S3", category: "shoes", severity: "minor", textKey: "patrol.tpl.S3" },
+  { id: "S4", category: "shoes", severity: "moderate", textKey: "patrol.tpl.S4" },
+  { id: "O1", category: "other", severity: "moderate", textKey: "patrol.tpl.O1" },
+  { id: "O2", category: "other", severity: "minor", textKey: "patrol.tpl.O2" },
+  { id: "O3", category: "other", severity: "moderate", textKey: "patrol.tpl.O3" },
+  { id: "O4", category: "other", severity: "serious", textKey: "patrol.tpl.O4" },
 ]
 
-const OBSERVATION_TEMPLATES = [
-  "إضاءة غير كافية في المنطقة",
-  "أرضية زلقة أو متشققة",
-  "علامات تحذيرية مفقودة أو تالفة",
-  "ممر مشاة يحتاج تجديد الدهان",
-  "تسرب زيت من رافعة شوكية",
-  "طفاية حريق تحتاج فحص دوري",
-  "مرايا التقاطعات تحتاج تعديل",
-  "معدات مكسورة تحتاج صيانة",
+const OBSERVATION_TEMPLATE_KEYS = [
+  "patrol.obs.obs1",
+  "patrol.obs.obs2",
+  "patrol.obs.obs3",
+  "patrol.obs.obs4",
+  "patrol.obs.obs5",
+  "patrol.obs.obs6",
+  "patrol.obs.obs7",
+  "patrol.obs.obs8",
 ]
 
-const POSITIVE_TEMPLATES = [
-  "التزام كامل بمعدات الحماية الشخصية",
-  "سلوك قيادة ممتاز وآمن",
-  "استجابة فورية لتعليمات السلامة",
-  "ترتيب ومنظومة ممتازة في المنطقة",
-  "تعاون إيجابي مع فريق HSE",
+const POSITIVE_TEMPLATE_KEYS = [
+  "patrol.pos.pos1",
+  "patrol.pos.pos2",
+  "patrol.pos.pos3",
+  "patrol.pos.pos4",
+  "patrol.pos.pos5",
 ]
 
-const LOCATIONS = [
-  "البوابة الرئيسية",
-  "البوابة الخلفية",
-  "ساحة التحميل أ",
-  "ساحة التحميل ب",
-  "ساحة التحميل ج",
-  "ممر الرافعات الرئيسي",
-  "منطقة تقاطع المركبات",
-  "مستودع A",
-  "مستودع B",
-  "مستودع C",
-  "مستودع D",
-  "منطقة الفرز",
-  "منطقة التغليف",
-  "منطقة التخزين البارد",
-  "ممر المشاة الرئيسي",
-  "ممر المشاة الجانبي",
-  "موقف السيارات",
-  "مكاتب الإدارة",
-  "المطعم والاستراحة",
-  "منطقة النفايات",
+const LOCATION_KEYS = [
+  "patrol.loc.loc1",
+  "patrol.loc.loc2",
+  "patrol.loc.loc3",
+  "patrol.loc.loc4",
+  "patrol.loc.loc5",
+  "patrol.loc.loc6",
+  "patrol.loc.loc7",
+  "patrol.loc.loc8",
+  "patrol.loc.loc9",
+  "patrol.loc.loc10",
+  "patrol.loc.loc11",
+  "patrol.loc.loc12",
+  "patrol.loc.loc13",
+  "patrol.loc.loc14",
+  "patrol.loc.loc15",
+  "patrol.loc.loc16",
+  "patrol.loc.loc17",
+  "patrol.loc.loc18",
+  "patrol.loc.loc19",
+  "patrol.loc.loc20",
 ]
 
-const SEVERITY_LABELS = {
-  minor: { label: "بسيطة", color: "#16a34a", bg: "#f0fdf4" },
-  moderate: { label: "متوسطة", color: "#d97706", bg: "#fffbeb" },
-  serious: { label: "جسيمة", color: "#dc2626", bg: "#fef2f2" },
+const ROUTE_KEYS = ["patrol.routes.r1", "patrol.routes.r2", "patrol.routes.r3", "patrol.routes.r4", "patrol.routes.r5"]
+
+const FORKLIFT_EQUIP_KEYS = [
+  "patrol.equipForklift.ef1",
+  "patrol.equipForklift.ef2",
+  "patrol.equipForklift.ef3",
+  "patrol.equipForklift.ef4",
+  "patrol.equipForklift.ef5",
+]
+
+const TUKTUK_EQUIP_KEYS = ["patrol.equipTuktuk.et1", "patrol.equipTuktuk.et2", "patrol.equipTuktuk.et3"]
+
+// ألوان الخطورة فقط؛ التسمية تُترجَم عبر مفتاح patrol.severity.<level>.
+const SEVERITY_STYLES = {
+  minor: { color: "#16a34a", bg: "#f0fdf4" },
+  moderate: { color: "#d97706", bg: "#fffbeb" },
+  serious: { color: "#dc2626", bg: "#fef2f2" },
 }
 
 function generateId(prefix: string) {
@@ -203,15 +225,18 @@ function nowTime() {
 // تُرسل بيانات المخالفة إلى /api/patrol-violation الذي يستدعي نفس دالة
 // createViolationFull المستخدمة في نموذج المخالفات. تُطابَق أسماء الحقول مع عقد
 // المسار (place / violationDate / violationTime / images) ليُحفظ السجل ويظهر في /violations.
-async function saveViolationToDB(entry: PatrolEntry): Promise<{ documentNo: string }> {
+async function saveViolationToDB(
+  entry: PatrolEntry,
+  t: (k: string) => string,
+): Promise<{ documentNo: string }> {
   const description = entry.equipmentNo
-    ? `${entry.description} — رقم المعدة: ${entry.equipmentNo}${entry.equipmentType ? ` (${entry.equipmentType})` : ""}`
+    ? `${entry.description} — ${t("patrol.equipmentNo")}: ${entry.equipmentNo}${entry.equipmentType ? ` (${entry.equipmentType})` : ""}`
     : entry.description
   const res = await fetch("/api/patrol-violation", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      employeeName: entry.employeeName || "غير محدد",
+      employeeName: entry.employeeName || t("violations.notInSource"),
       employeeNo: entry.employeeNo || "",
       companyName: entry.companyName || "MHS",
       violationType: entry.description,
@@ -227,7 +252,7 @@ async function saveViolationToDB(entry: PatrolEntry): Promise<{ documentNo: stri
   })
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
-    throw new Error(data?.error || "فشل الحفظ")
+    throw new Error(data?.error || t("patrol.badgeError"))
   }
   return res.json()
 }
@@ -235,7 +260,10 @@ async function saveViolationToDB(entry: PatrolEntry): Promise<{ documentNo: stri
 // ── حفظ الملاحظة/الإيجابية في قاعدة البيانات ────────────────────────────────────
 // تُرسل بيانات الملاحظة (observation) أو الإيجابية (positive) إلى
 // /api/patrol-observation ليُحفظ السجل ويظهر في لوحة التحكم والتقارير.
-async function saveObservationToDB(entry: PatrolEntry): Promise<{ documentNo: string }> {
+async function saveObservationToDB(
+  entry: PatrolEntry,
+  t: (k: string) => string,
+): Promise<{ documentNo: string }> {
   const res = await fetch("/api/patrol-observation", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -251,7 +279,7 @@ async function saveObservationToDB(entry: PatrolEntry): Promise<{ documentNo: st
   })
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
-    throw new Error(data?.error || "فشل الحفظ")
+    throw new Error(data?.error || t("patrol.badgeError"))
   }
   return res.json()
 }
@@ -259,6 +287,7 @@ async function saveObservationToDB(entry: PatrolEntry): Promise<{ documentNo: st
 // ── Photo Capture ──────────────────────────────────────────────────────────────
 
 function PhotoCapture({ onCapture }: { onCapture: (b: string) => void }) {
+  const { t } = useI18n()
   const ref = useRef<HTMLInputElement>(null)
   return (
     <>
@@ -282,7 +311,7 @@ function PhotoCapture({ onCapture }: { onCapture: (b: string) => void }) {
         className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold"
         style={{ background: "#1e3a5f", color: "#fff" }}
       >
-        <Camera size={15} /> صورة
+        <Camera size={15} /> {t("patrol.photo")}
       </button>
     </>
   )
@@ -299,10 +328,11 @@ function SaveBadge({
   documentNo?: string
   errorMsg?: string
 }) {
+  const { t } = useI18n()
   if (status === "saving")
     return (
       <span className="text-xs flex items-center gap-1 text-blue-400">
-        <CloudUpload size={12} className="animate-pulse" /> جاري الحفظ...
+        <CloudUpload size={12} className="animate-pulse" /> {t("patrol.badgeSaving")}
       </span>
     )
   if (status === "saved")
@@ -314,13 +344,13 @@ function SaveBadge({
   if (status === "error")
     return (
       <span className="text-xs flex items-center gap-1 text-red-400">
-        <AlertCircle size={12} /> {errorMsg || "فشل الحفظ"}
+        <AlertCircle size={12} /> {errorMsg || t("patrol.badgeError")}
       </span>
     )
-  return <span className="text-xs text-gray-300">مسودة</span>
+  return <span className="text-xs text-gray-300">{t("patrol.badgeDraft")}</span>
 }
 
-// ── Entry Card ───────────────────────────────────────────────────────────────�����
+// ── Entry Card ───────────────────────────────────────────────────────────────������
 
 function EntryCard({
   entry,
@@ -331,9 +361,10 @@ function EntryCard({
   onDelete: () => void
   onRetry?: () => void
 }) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const catInfo = VIOLATION_CATEGORIES.find((c) => c.value === entry.category)
-  const sevInfo = entry.severity ? SEVERITY_LABELS[entry.severity] : null
+  const sevInfo = entry.severity ? SEVERITY_STYLES[entry.severity] : null
   const borderColor =
     entry.type === "violation" ? "#ef4444" : entry.type === "observation" ? "#f59e0b" : "#22c55e"
 
@@ -367,15 +398,15 @@ function EntryCard({
                 className="text-xs font-bold px-2 py-0.5 rounded-full"
                 style={{ background: catInfo.bg, color: catInfo.color }}
               >
-                {catInfo.label}
+                {t(catInfo.labelKey)}
               </span>
             )}
-            {sevInfo && (
+            {sevInfo && entry.severity && (
               <span
                 className="text-xs font-bold px-2 py-0.5 rounded-full"
                 style={{ background: sevInfo.bg, color: sevInfo.color }}
               >
-                {sevInfo.label}
+                {t(`patrol.severity.${entry.severity}`)}
               </span>
             )}
             <span className="text-xs text-gray-400 flex items-center gap-0.5">
@@ -386,7 +417,9 @@ function EntryCard({
           <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
             <MapPin size={10} /> {entry.location}
             {entry.workerCount && entry.workerCount > 1 && (
-              <span className="text-blue-500 font-bold">· {entry.workerCount} عمال</span>
+              <span className="text-blue-500 font-bold">
+                · {entry.workerCount} {t("patrol.workers")}
+              </span>
             )}
           </p>
           <div className="mt-1 flex items-center gap-2">
@@ -399,7 +432,7 @@ function EntryCard({
                 }}
                 className="text-xs font-bold text-blue-500 flex items-center gap-1"
               >
-                <RefreshCw size={11} /> إعادة المحاولة
+                <RefreshCw size={11} /> {t("patrol.retry")}
               </button>
             )}
           </div>
@@ -420,19 +453,19 @@ function EntryCard({
             <div className="mt-2 rounded-xl p-2.5 space-y-1.5" style={{ background: "#f8fafc" }}>
               {entry.employeeName && (
                 <div className="flex justify-between text-xs">
-                  <span className="text-gray-400">الاسم</span>
+                  <span className="text-gray-400">{t("patrol.name")}</span>
                   <span className="font-bold text-gray-700">{entry.employeeName}</span>
                 </div>
               )}
               {entry.companyName && (
                 <div className="flex justify-between text-xs">
-                  <span className="text-gray-400">الشركة</span>
+                  <span className="text-gray-400">{t("patrol.company")}</span>
                   <span className="font-bold text-gray-700">{entry.companyName}</span>
                 </div>
               )}
               {entry.employeeNo && (
                 <div className="flex justify-between text-xs">
-                  <span className="text-gray-400">رقم الهوية / الوظيفي</span>
+                  <span className="text-gray-400">{t("patrol.idNo")}</span>
                   <span className="font-bold text-gray-700 font-mono" dir="ltr">
                     {entry.employeeNo}
                   </span>
@@ -440,7 +473,7 @@ function EntryCard({
               )}
               {entry.equipmentNo && (
                 <div className="flex justify-between text-xs">
-                  <span className="text-gray-400">رقم المعدة</span>
+                  <span className="text-gray-400">{t("patrol.equipmentNo")}</span>
                   <span className="font-bold text-gray-700 font-mono" dir="ltr">
                     {entry.equipmentNo}
                   </span>
@@ -448,7 +481,7 @@ function EntryCard({
               )}
               {entry.equipmentType && (
                 <div className="flex justify-between text-xs">
-                  <span className="text-gray-400">نوع المعدة</span>
+                  <span className="text-gray-400">{t("patrol.equipmentType")}</span>
                   <span className="font-bold text-gray-700">{entry.equipmentType}</span>
                 </div>
               )}
@@ -468,7 +501,7 @@ function EntryCard({
           )}
           <div className="flex justify-end mt-2">
             <button onClick={onDelete} className="text-xs text-red-400 flex items-center gap-1">
-              <Trash2 size={12} /> حذف
+              <Trash2 size={12} /> {t("patrol.delete")}
             </button>
           </div>
         </div>
@@ -488,12 +521,13 @@ function AddEntryModal({
   onAdd: (e: PatrolEntry) => void
   officerName: string
 }) {
+  const { t } = useI18n()
   const [step, setStep] = useState<"type" | "category" | "template" | "details">("type")
   const [entryType, setEntryType] = useState<EntryType>("violation")
   const [category, setCategory] = useState<ViolationCategory>("forklift")
   const [template, setTemplate] = useState<ViolationTemplate | null>(null)
   const [customText, setCustomText] = useState("")
-  const [location, setLocation] = useState(LOCATIONS[0])
+  const [location, setLocation] = useState(() => t(LOCATION_KEYS[0]))
   const [photos, setPhotos] = useState<string[]>([])
   const [workerCount, setWorkerCount] = useState(1)
   const [employeeName, setEmployeeName] = useState("")
