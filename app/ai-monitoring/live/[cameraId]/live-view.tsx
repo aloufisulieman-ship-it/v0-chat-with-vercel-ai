@@ -76,9 +76,12 @@ function relativeTime(iso: string, now: number, t: TFunction, fmt: (n: number) =
 export function LiveView({
   cameraId,
   initial,
+  serverNow,
 }: {
   cameraId: string
   initial: CameraLiveStatus
+  // طابع زمني من الخادم لتوحيد أول تصيير بين الخادم والعميل (تفادي عدم تطابق الترطيب).
+  serverNow: number
 }) {
   const { t, formatNumber } = useI18n()
   const { data } = useSWR<CameraLiveStatus>(
@@ -93,8 +96,11 @@ export function LiveView({
   )
 
   // مؤقت محلي كل ثانية لتحديث الوقت النسبي ومؤشر الاتصال بين عمليات الجلب.
-  const [now, setNow] = useState(() => Date.now())
+  // نبدأ من طابع الخادم الزمني لا من Date.now() حتى يتطابق أول تصيير على الخادم
+  // والعميل؛ ثم نبدّله للوقت الحقيقي بعد التركيب فيبدأ العدّ الحي.
+  const [now, setNow] = useState(serverNow)
   useEffect(() => {
+    setNow(Date.now())
     const id = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(id)
   }, [])
