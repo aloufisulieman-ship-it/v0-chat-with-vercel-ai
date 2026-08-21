@@ -19,12 +19,19 @@ import {
   MicOff,
   Volume2,
   SwitchCamera,
+  Car,
+  IdCard,
+  Bike,
+  ShieldAlert,
+  ScanLine,
 } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { severityStyles } from "@/lib/ai-monitoring"
 import { upload } from "@vercel/blob/client"
 import { createRecording } from "@/app/actions/recordings"
+import { getRecentReads, type UnifiedRead } from "@/app/actions/ai-recognition"
+import { RECOGNITION_MODES, type RecognitionMode } from "@/lib/ai-recognition"
 import { useWebrtcBroadcaster } from "./use-webrtc-broadcaster"
 import { useI18n } from "@/lib/i18n/client"
 import { detectionTypeLabel, severityLabel } from "@/lib/i18n/labels"
@@ -42,12 +49,36 @@ const CONNECTED_THRESHOLD_MS = 6000
 const MAX_WIDTH = 640
 const JPEG_QUALITY = 0.45
 
+type PlateResult = { value: string; confidence: number }
+type EmployeeResult = { value: string; confidence: number; matched: boolean; name: string; department: string }
+type TuktukResult = {
+  value: string
+  confidence: number
+  permitStatus: "valid" | "expired" | "not_found"
+  driverName: string
+  documentNo: string
+}
+type PrefillResult = {
+  source: "employee_id" | "tuktuk" | "plate"
+  employeeName?: string
+  employeeNo?: string
+  driverName?: string
+  vehicleNo?: string
+}
+
 type LastResult = {
   at: number
   count: number
   detections: { type: string; severity: string; confidence: number; description: string }[]
+  plate?: PlateResult
+  employee?: EmployeeResult
+  tuktuk?: TuktukResult
+  prefill?: PrefillResult
   error?: string
 }
+
+// أوضاع التعرّف الافتراضية عند فتح الصفحة (المخالفات مفعّلة كما في السابق).
+const DEFAULT_MODES: RecognitionMode[] = ["violations"]
 
 // اختيار أفضل صيغة تسجيل مدعومة في المتصفح (WebM أولاً ثم MP4).
 function pickRecordingMime(): { mimeType: string; ext: string } {
@@ -77,7 +108,7 @@ function formatDuration(totalSeconds: number): string {
 }
 
 export function MobileCamera() {
-  const { t, formatNumber } = useI18n()
+  const { t, formatNumber, locale } = useI18n()
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -131,6 +162,18 @@ export function MobileCamera() {
   const [lastResult, setLastResult] = useState<LastResult | null>(null)
   const [now, setNow] = useState(() => Date.now())
 
+  // أوضاع التعرّف النشطة (قابلة للتعديل قبل بدء الجلسة). modesRef يُقرأ داخل حلقة
+  // التحليل دون إعادة إنشائها. نحتفظ بها في localStorage تسهيلاً على المفتش.
+  const [modes, setModes] = useState<RecognitionMode[]>(DEFAULT_MODES)
+  const modesRef = useRef<RecognitionMode[]>(DEFAULT_MODES)
+  useEffect(() => {
+    modesRef.current = modes
+  }, [modes])
+
+  // آخر القراءات (لوحات/أرقام وظيفية/توك توك) لعرضها أسفل الصفحة.
+  const [recentReads, setRecentReads] = useState<UnifiedRead[]>([])
+  const [loadingReads, setLoadingReads] = useState(false)
+
   // حالة التسجيل.
   const [recording, setRecording] = useState(false)
   const [recordSeconds, setRecordSeconds] = useState(0)
@@ -148,6 +191,15 @@ export function MobileCamera() {
   useEffect(() => {
     setInspectorName(localStorage.getItem("aiCam.inspector") ?? "")
     setLocation(localStorage.getItem("aiCam.location") ?? "")
+    try {
+      const saved = JSON.parse(localStorage.getItem("aiCam.modes") ?? "null")
+      if (Array.isArray(saved)) {
+        const valid = saved.filter((m): m is RecognitionMode => RECOGNITION_MODES.includes(m))
+        if (valid.length) setModes(valid)
+      }
+    } catch {
+      /* تجاهل تخزين تالف */
+    }
   }, [])
 
   useEffect(() => {
@@ -156,6 +208,20 @@ export function MobileCamera() {
   useEffect(() => {
     localStorage.setItem("aiCam.location", location)
   }, [location])
+  useEffect(() => {
+    localStorage.setItem("aiCam.modes", JSON.stringify(modes))
+  }, [modes])
+
+  // تبديل وضع تعرّف (لا يُسمح بإفراغ كل الأوضاع — يبقى وضع واحد على الأقل).
+  const toggleMode = useCallback((mode: RecognitionMode) => {
+    setModes((prev) => {
+      if (prev.includes(mode)) {
+        const next = prev.filter((m) => m !== mode)
+        return next.length ? next : prev
+      }
+      return [...prev, mode]
+    })
+  }, [])
 
   // بدء الجلسة: يتطلب تعبئة الحقلين الإلزاميين قبل تفعيل أزرار البث/التسجيل.
   const bothFilled = inspectorName.trim().length > 0 && location.trim().length > 0
@@ -367,28 +433,78 @@ export function MobileCamera() {
     }
   }, [captureJpeg, inspectorName, location, t])
 
-  // الحلقة البطيئة: إرسال الإطار للتحليل بالذكاء الاصطناعي (Claude Sonnet 4.6).
+  // تحديث قائمة آخر القراءات (لوحات/أرقام وظيفية/توك توك).
+  const refreshReads = useCallback(async () => {
+    setLoadingReads(true)
+    try {
+      const rows = await getRecentReads(20)
+      setRecentReads(rows)
+    } catch {
+      /* تجاهل فشل التحديث */
+    } finally {
+      setLoadingReads(false)
+    }
+  }, [])
+
+  // تحميل القراءات الأخيرة عند فتح الصفحة.
+  useEffect(() => {
+    void refreshReads()
+  }, [refreshReads])
+
+  // الحلقة البطيئة: إرسال الإطار للتعرّف بالذكاء الاصطناعي (Claude Sonnet 4.6) وفق
+  // الأوضاع النشطة — مخالفات و/أو لوحات و/أو رقم وظيفي و/أو توك توك في طلب واحد.
   const analyzeFrame = useCallback(async () => {
     if (analyzingRef.current) return
+    const activeModes = modesRef.current
+    if (!activeModes.length) return
     const image = captureJpeg()
     if (!image) return
     analyzingRef.current = true
     setAnalyzing(true)
     try {
-      const res = await fetch("/api/ai-monitoring/analyze", {
+      const res = await fetch("/api/ai-monitoring/recognize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           image,
           inspectorName: inspectorName || t("aiMonitoring.cam.defaultCamName"),
           cameraLocation: location,
+          modes: activeModes,
         }),
       })
       const data = await res.json()
       if (!res.ok) {
         setLastResult({ at: Date.now(), count: 0, detections: [], error: data?.error || t("aiMonitoring.cam.analysisError") })
       } else {
-        setLastResult({ at: Date.now(), count: data.count ?? 0, detections: data.detections ?? [] })
+        setLastResult({
+          at: Date.now(),
+          count: data.violations?.count ?? 0,
+          detections: data.violations?.detections ?? [],
+          plate: data.plate
+            ? { value: data.plate.value, confidence: data.plate.confidence }
+            : undefined,
+          employee: data.employee
+            ? {
+                value: data.employee.value,
+                confidence: data.employee.confidence,
+                matched: Boolean(data.employee.matched),
+                name: data.employee.name ?? "",
+                department: data.employee.department ?? "",
+              }
+            : undefined,
+          tuktuk: data.tuktuk
+            ? {
+                value: data.tuktuk.value,
+                confidence: data.tuktuk.confidence,
+                permitStatus: data.tuktuk.permitStatus ?? "not_found",
+                driverName: data.tuktuk.driverName ?? "",
+                documentNo: data.tuktuk.documentNo ?? "",
+              }
+            : undefined,
+          prefill: data.prefill,
+        })
+        // إن التقطنا قراءة هوية، حدّث قائمة القراءات الأخيرة.
+        if (data.plate || data.employee || data.tuktuk) void refreshReads()
       }
     } catch {
       setLastResult({ at: Date.now(), count: 0, detections: [], error: t("aiMonitoring.cam.analysisConn") })
@@ -396,7 +512,7 @@ export function MobileCamera() {
       analyzingRef.current = false
       setAnalyzing(false)
     }
-  }, [captureJpeg, inspectorName, location, t])
+  }, [captureJpeg, inspectorName, location, t, refreshReads])
 
   // بدء البث الحي (رفع الإطارات + التحليل).
   const startStreaming = useCallback(async () => {
@@ -734,6 +850,39 @@ export function MobileCamera() {
             />
           </label>
         </div>
+        {/* اختيار أوضاع التعرّف: يمكن تفعيل أكثر من وضع معاً (الوضع المدمج) */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-1.5">
+            <ScanLine className="size-4 text-muted-foreground" />
+            <span className="text-sm font-medium text-foreground">{t("aiMonitoring.cam.modesTitle")}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {RECOGNITION_MODES.map((mode) => {
+              const active = modes.includes(mode)
+              const Icon =
+                mode === "violations" ? ShieldAlert : mode === "plate" ? Car : mode === "employee_id" ? IdCard : Bike
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => toggleMode(mode)}
+                  disabled={sessionStarted}
+                  aria-pressed={active}
+                  className={cn(
+                    "flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+                    active
+                      ? "border-primary/40 bg-primary/10 text-primary"
+                      : "border-input bg-background text-muted-foreground hover:bg-muted",
+                  )}
+                >
+                  <Icon className="size-4 shrink-0" />
+                  <span className="truncate">{t(`aiMonitoring.cam.mode_${mode}`)}</span>
+                </button>
+              )
+            })}
+          </div>
+          <p className="text-xs text-muted-foreground">{t("aiMonitoring.cam.modesHint")}</p>
+        </div>
         {sessionError && <p className="text-sm text-destructive">{sessionError}</p>}
         {!sessionStarted ? (
           <button
@@ -993,20 +1142,117 @@ export function MobileCamera() {
       <Card className="flex flex-col gap-3 p-4">
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-foreground">{t("aiMonitoring.cam.lastAnalysis")}</span>
-          {lastResult && !lastResult.error && lastResult.count === 0 && (
+          {lastResult && !lastResult.error && lastResult.count === 0 && modes.includes("violations") && (
             <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
               <CheckCircle2 className="size-3.5" />
               {t("aiMonitoring.cam.noViolationsBadge")}
             </span>
           )}
         </div>
+
+        {/* تنبيه الوضع المدمج: هوية مطابقة رُبطت تلقائياً بالمخالفة */}
+        {lastResult?.prefill && (
+          <div className="flex items-start gap-2 rounded-lg border border-primary/30 bg-primary/10 p-3 text-sm text-primary">
+            <IdCard className="mt-0.5 size-4 shrink-0" />
+            <span>
+              {lastResult.prefill.source === "employee_id"
+                ? t("aiMonitoring.cam.prefillEmployee")
+                    .replace("{name}", lastResult.prefill.employeeName ?? "")
+                    .replace("{no}", lastResult.prefill.employeeNo ?? "")
+                : lastResult.prefill.source === "tuktuk"
+                  ? t("aiMonitoring.cam.prefillTuktuk")
+                      .replace("{name}", lastResult.prefill.driverName ?? "")
+                      .replace("{no}", lastResult.prefill.vehicleNo ?? "")
+                  : t("aiMonitoring.cam.prefillPlate").replace("{no}", lastResult.prefill.vehicleNo ?? "")}
+            </span>
+          </div>
+        )}
+
+        {/* قراءات الهوية الفورية من الإطار الأخير */}
+        {lastResult && !lastResult.error && (lastResult.plate || lastResult.employee || lastResult.tuktuk) && (
+          <div className="flex flex-col gap-2">
+            {lastResult.plate && (
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <Car className="size-4 text-muted-foreground" />
+                  {t("aiMonitoring.cam.mode_plate")}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-sm font-semibold text-foreground" dir="ltr">
+                    {lastResult.plate.value}
+                  </span>
+                  <span className="font-mono text-xs text-muted-foreground" dir="ltr">
+                    {lastResult.plate.confidence}%
+                  </span>
+                </div>
+              </div>
+            )}
+            {lastResult.employee && (
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <IdCard className="size-4 text-muted-foreground" />
+                    <span className="font-mono" dir="ltr">
+                      {lastResult.employee.value}
+                    </span>
+                  </div>
+                  <div className={cn("text-xs", lastResult.employee.matched ? "text-primary" : "text-muted-foreground")}>
+                    {lastResult.employee.matched
+                      ? `${lastResult.employee.name}${lastResult.employee.department ? ` · ${lastResult.employee.department}` : ""}`
+                      : t("aiMonitoring.cam.noEmployeeMatch")}
+                  </div>
+                </div>
+                <span className="font-mono text-xs text-muted-foreground" dir="ltr">
+                  {lastResult.employee.confidence}%
+                </span>
+              </div>
+            )}
+            {lastResult.tuktuk && (
+              <div
+                className={cn(
+                  "flex items-center justify-between gap-3 rounded-lg border p-3",
+                  lastResult.tuktuk.permitStatus === "valid"
+                    ? "border-border"
+                    : "border-destructive/40 bg-destructive/10",
+                )}
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <Bike className="size-4 text-muted-foreground" />
+                    <span className="font-mono" dir="ltr">
+                      {lastResult.tuktuk.value}
+                    </span>
+                  </div>
+                  <div
+                    className={cn(
+                      "flex items-center gap-1 text-xs",
+                      lastResult.tuktuk.permitStatus === "valid" ? "text-primary" : "text-destructive",
+                    )}
+                  >
+                    {lastResult.tuktuk.permitStatus !== "valid" && <ShieldAlert className="size-3.5" />}
+                    {lastResult.tuktuk.permitStatus === "valid"
+                      ? `${t("aiMonitoring.cam.permitValid")}${lastResult.tuktuk.driverName ? ` · ${lastResult.tuktuk.driverName}` : ""}`
+                      : lastResult.tuktuk.permitStatus === "expired"
+                        ? t("aiMonitoring.cam.permitExpired")
+                        : t("aiMonitoring.cam.permitNotFound")}
+                  </div>
+                </div>
+                <span className="font-mono text-xs text-muted-foreground" dir="ltr">
+                  {lastResult.tuktuk.confidence}%
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* المخالفات (وضع المخالفات فقط) */}
         {!lastResult ? (
           <p className="text-sm text-muted-foreground">{t("aiMonitoring.cam.noFrameSent")}</p>
         ) : lastResult.error ? (
           <p className="text-sm text-destructive">{lastResult.error}</p>
-        ) : lastResult.count === 0 ? (
+        ) : modes.includes("violations") && lastResult.count === 0 ? (
           <p className="text-sm text-muted-foreground">{t("aiMonitoring.cam.noViolationLastFrame")}</p>
-        ) : (
+        ) : lastResult.count > 0 ? (
           <ul className="flex flex-col gap-2">
             {lastResult.detections.map((d, i) => (
               <li
@@ -1036,6 +1282,88 @@ export function MobileCamera() {
                 </div>
               </li>
             ))}
+          </ul>
+        ) : null}
+      </Card>
+
+      {/* آخر القراءات (لوحات/أرقام وظيفية/توك توك) */}
+      <Card className="flex flex-col gap-3 p-4">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-semibold text-foreground">{t("aiMonitoring.cam.recentReadsTitle")}</span>
+          <button
+            type="button"
+            onClick={refreshReads}
+            disabled={loadingReads}
+            className="inline-flex items-center gap-1 text-xs font-medium text-primary transition-colors hover:text-primary/80 disabled:opacity-50"
+          >
+            {loadingReads ? <Loader2 className="size-3.5 animate-spin" /> : <ScanLine className="size-3.5" />}
+            {t("aiMonitoring.cam.refresh")}
+          </button>
+        </div>
+        {recentReads.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t("aiMonitoring.cam.noReads")}</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {recentReads.map((r) => {
+              const Icon = r.mode === "plate" ? Car : r.mode === "employee_id" ? IdCard : Bike
+              const alert = r.matchStatus === "expired" || r.matchStatus === "not_found"
+              return (
+                <li
+                  key={r.key}
+                  className={cn(
+                    "flex items-center justify-between gap-3 rounded-lg border p-3",
+                    alert && r.mode === "tuktuk" ? "border-destructive/40 bg-destructive/10" : "border-border",
+                  )}
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <Icon className="size-5 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm font-semibold text-foreground" dir="ltr">
+                          {r.value || "—"}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">{t(`aiMonitoring.cam.mode_${r.mode}`)}</span>
+                      </div>
+                      {(r.matchLabel || r.matchStatus !== "na") && (
+                        <div
+                          className={cn(
+                            "truncate text-xs",
+                            r.matchStatus === "valid" || r.matchStatus === "found"
+                              ? "text-primary"
+                              : r.matchStatus === "expired" || r.matchStatus === "not_found"
+                                ? "text-destructive"
+                                : "text-muted-foreground",
+                          )}
+                        >
+                          {r.matchLabel
+                            ? r.matchLabel
+                            : r.matchStatus === "not_found"
+                              ? r.mode === "tuktuk"
+                                ? t("aiMonitoring.cam.permitNotFound")
+                                : t("aiMonitoring.cam.noEmployeeMatch")
+                              : r.matchStatus === "expired"
+                                ? t("aiMonitoring.cam.permitExpired")
+                                : r.matchStatus === "valid"
+                                  ? t("aiMonitoring.cam.permitValid")
+                                  : ""}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <span className="font-mono text-xs text-muted-foreground" dir="ltr">
+                      {r.confidence}%
+                    </span>
+                    <span className="text-[11px] text-muted-foreground" dir="ltr">
+                      {new Date(r.capturedAt).toLocaleTimeString(locale === "ar" ? "ar-SA" : "en-GB", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </div>
+                </li>
+              )
+            })}
           </ul>
         )}
       </Card>
