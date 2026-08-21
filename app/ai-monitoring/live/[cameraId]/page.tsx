@@ -25,7 +25,7 @@ export default async function LiveCameraPage({
       subtitle={t("pageHeaders.liveSubtitle")}
       user={user}
     >
-      <LiveView cameraId={cameraId} initial={initial} />
+      <LiveView cameraId={cameraId} initial={initial} serverNow={Date.now()} />
     </AppShell>
   )
 }
