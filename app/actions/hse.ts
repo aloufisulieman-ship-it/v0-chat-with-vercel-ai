@@ -77,6 +77,22 @@ async function getUserId() {
   return session.user.id
 }
 
+// نطاق الرؤية على مستوى المؤسسة: المدير/الأدمن والمدير العام ومفتش السلامة يرَون
+// كل سجلات النظام، وبقية المستخدمين يرَون سجلاتهم فقط. هذه هي نفس القاعدة المطبّقة
+// أصلاً في المخالفات (getViolations) والملاحظات (getObservations)، ونوحّدها هنا في
+// مصدر واحد لتُطبَّق على كل الوحدات (حوادث/تفتيش/تصاريح/مخاطر/تدريب/إجراءات/تدقيق/
+// وثائق/التقارير). بدونها كان المراجعون غير الأدمن يرَون صفحات فارغة لأن كل السجلات
+// مملوكة لحساب الأدمن.
+async function isManagerUser(userId: string): Promise<boolean> {
+  const rows = await db
+    .select({ role: user.role, department: user.department })
+    .from(user)
+    .where(eq(user.id, userId))
+    .limit(1)
+  const u = rows[0]
+  return u?.role === "admin" || u?.department === "المدير العام" || u?.department === "مفتش السلامة"
+}
+
 function str(v: FormDataEntryValue | null, fallback = "") {
   return v == null ? fallback : String(v)
 }
@@ -121,6 +137,9 @@ export async function saveCompany(formData: FormData) {
 /* ---------------- Incidents ---------------- */
 export async function getIncidents() {
   const userId = await getUserId()
+  if (await isManagerUser(userId)) {
+    return db.select().from(incident).orderBy(desc(incident.createdAt))
+  }
   return db.select().from(incident).where(eq(incident.userId, userId)).orderBy(desc(incident.createdAt))
 }
 export async function createIncident(formData: FormData) {
@@ -258,6 +277,9 @@ export async function deleteIncident(id: number) {
 /* ---------------- Inspections ---------------- */
 export async function getInspections() {
   const userId = await getUserId()
+  if (await isManagerUser(userId)) {
+    return db.select().from(inspection).orderBy(desc(inspection.createdAt))
+  }
   return db.select().from(inspection).where(eq(inspection.userId, userId)).orderBy(desc(inspection.createdAt))
 }
 export async function createInspection(formData: FormData) {
@@ -284,6 +306,9 @@ export async function deleteInspection(id: number) {
 /* ---------------- Permits ---------------- */
 export async function getPermits() {
   const userId = await getUserId()
+  if (await isManagerUser(userId)) {
+    return db.select().from(permit).orderBy(desc(permit.createdAt))
+  }
   return db.select().from(permit).where(eq(permit.userId, userId)).orderBy(desc(permit.createdAt))
 }
 export async function createPermit(formData: FormData) {
@@ -368,6 +393,9 @@ export async function updatePermitStatus(
 /* ---------------- Risks ---------------- */
 export async function getRisks() {
   const userId = await getUserId()
+  if (await isManagerUser(userId)) {
+    return db.select().from(risk).orderBy(desc(risk.createdAt))
+  }
   return db.select().from(risk).where(eq(risk.userId, userId)).orderBy(desc(risk.createdAt))
 }
 export async function createRisk(formData: FormData) {
@@ -394,6 +422,9 @@ export async function deleteRisk(id: number) {
 /* ---------------- Training ---------------- */
 export async function getTrainings() {
   const userId = await getUserId()
+  if (await isManagerUser(userId)) {
+    return db.select().from(training).orderBy(desc(training.createdAt))
+  }
   return db.select().from(training).where(eq(training.userId, userId)).orderBy(desc(training.createdAt))
 }
 export async function createTraining(formData: FormData) {
@@ -680,6 +711,9 @@ export async function deleteTraining(id: number) {
 /* ---------------- Corrective actions ---------------- */
 export async function getActions() {
   const userId = await getUserId()
+  if (await isManagerUser(userId)) {
+    return db.select().from(correctiveAction).orderBy(desc(correctiveAction.createdAt))
+  }
   return db.select().from(correctiveAction).where(eq(correctiveAction.userId, userId)).orderBy(desc(correctiveAction.createdAt))
 }
 export async function createAction(formData: FormData) {
@@ -705,6 +739,9 @@ export async function deleteAction(id: number) {
 /* ---------------- Audits ---------------- */
 export async function getAudits() {
   const userId = await getUserId()
+  if (await isManagerUser(userId)) {
+    return db.select().from(audit).orderBy(desc(audit.createdAt))
+  }
   return db.select().from(audit).where(eq(audit.userId, userId)).orderBy(desc(audit.createdAt))
 }
 export async function createAudit(formData: FormData) {
@@ -729,6 +766,9 @@ export async function deleteAudit(id: number) {
 /* ---------------- Documents ---------------- */
 export async function getDocuments() {
   const userId = await getUserId()
+  if (await isManagerUser(userId)) {
+    return db.select().from(document).orderBy(desc(document.createdAt))
+  }
   return db.select().from(document).where(eq(document.userId, userId)).orderBy(desc(document.createdAt))
 }
 export async function createDocument(formData: FormData) {
@@ -753,13 +793,7 @@ export async function deleteDocument(id: number) {
 /* ---------------- Violations ---------------- */
 export async function getViolations() {
   const userId = await requireModuleUserId("violations")
-  const userRows = await db.select({ role: user.role, department: user.department }).from(user).where(eq(user.id, userId)).limit(1)
-  const u = userRows[0]
-  const isManager =
-    u?.role === "admin" ||
-    u?.department === "المدير العام" ||
-    u?.department === "مفتش السلامة"
-  if (isManager) {
+  if (await isManagerUser(userId)) {
     return db.select().from(violation).orderBy(desc(violation.createdAt))
   }
   return db.select().from(violation).where(eq(violation.userId, userId)).orderBy(desc(violation.createdAt))
@@ -1064,11 +1098,7 @@ export async function deleteViolation(id: number) {
 // يجلب كل الملاحظات/الإيجابيات الخاصة بالمستخدم؛ المدراء يرون الجميع.
 export async function getObservations() {
   const userId = await requireModuleUserId("violations")
-  const userRows = await db.select({ role: user.role, department: user.department }).from(user).where(eq(user.id, userId)).limit(1)
-  const u = userRows[0]
-  const isManager =
-    u?.role === "admin" || u?.department === "المدير العام" || u?.department === "مفتش السلامة"
-  if (isManager) {
+  if (await isManagerUser(userId)) {
     return db.select().from(observation).orderBy(desc(observation.createdAt))
   }
   return db.select().from(observation).where(eq(observation.userId, userId)).orderBy(desc(observation.createdAt))
@@ -1151,14 +1181,21 @@ export async function deleteObservation(id: number) {
 /* ---------------- Dashboard aggregates ---------------- */
 export async function getDashboardData() {
   const userId = await getUserId()
+  const isManager = await isManagerUser(userId)
+  // المدير/المراجع يرى كل سجلات المؤسسة؛ غيره يرى سجلاته فقط. نبني شرط الفلترة لكل
+  // جدول (undefined = بدون فلتر = كل السجلات) لتفادي تكرار الاستعلامات.
   const [inc, ins, per, rsk, act, obs, vio] = await Promise.all([
-    db.select().from(incident).where(eq(incident.userId, userId)),
-    db.select().from(inspection).where(eq(inspection.userId, userId)),
-    db.select().from(permit).where(eq(permit.userId, userId)),
-    db.select().from(risk).where(eq(risk.userId, userId)),
-    db.select().from(correctiveAction).where(eq(correctiveAction.userId, userId)),
-    db.select().from(observation).where(eq(observation.userId, userId)),
-    db.select().from(violation).where(eq(violation.userId, userId)).orderBy(desc(violation.createdAt)),
+    db.select().from(incident).where(isManager ? undefined : eq(incident.userId, userId)),
+    db.select().from(inspection).where(isManager ? undefined : eq(inspection.userId, userId)),
+    db.select().from(permit).where(isManager ? undefined : eq(permit.userId, userId)),
+    db.select().from(risk).where(isManager ? undefined : eq(risk.userId, userId)),
+    db.select().from(correctiveAction).where(isManager ? undefined : eq(correctiveAction.userId, userId)),
+    db.select().from(observation).where(isManager ? undefined : eq(observation.userId, userId)),
+    db
+      .select()
+      .from(violation)
+      .where(isManager ? undefined : eq(violation.userId, userId))
+      .orderBy(desc(violation.createdAt)),
   ])
   return { incidents: inc, inspections: ins, permits: per, risks: rsk, actions: act, observations: obs, violations: vio }
 }
@@ -1192,12 +1229,18 @@ export async function getReportData(
   dateTo: string,
 ): Promise<ReportSection[]> {
   const userId = await requireModuleUserId("reports")
+  // نفس قاعدة الرؤية: المدير/المراجع يصدّر تقارير كل المؤسسة، وغيره تقاريره فقط.
+  const isManager = await isManagerUser(userId)
   const from = (dateFrom || "").slice(0, 10)
   const to = (dateTo || "").slice(0, 10)
   const sections: ReportSection[] = []
 
   if (type === "incidents" || type === "all") {
-    const rows = await db.select().from(incident).where(eq(incident.userId, userId)).orderBy(desc(incident.createdAt))
+    const rows = await db
+      .select()
+      .from(incident)
+      .where(isManager ? undefined : eq(incident.userId, userId))
+      .orderBy(desc(incident.createdAt))
     const filtered = rows.filter((r) => inRange(r.incidentDate ?? null, from, to))
     sections.push({
       key: "incidents",
@@ -1224,7 +1267,11 @@ export async function getReportData(
   }
 
   if (type === "violations" || type === "all") {
-    const rows = await db.select().from(violation).where(eq(violation.userId, userId)).orderBy(desc(violation.createdAt))
+    const rows = await db
+      .select()
+      .from(violation)
+      .where(isManager ? undefined : eq(violation.userId, userId))
+      .orderBy(desc(violation.createdAt))
     const filtered = rows.filter((r) => inRange(r.violationDate ?? null, from, to))
     sections.push({
       key: "violations",
@@ -1249,7 +1296,11 @@ export async function getReportData(
   }
 
   if (type === "inspections" || type === "all") {
-    const rows = await db.select().from(inspection).where(eq(inspection.userId, userId)).orderBy(desc(inspection.createdAt))
+    const rows = await db
+      .select()
+      .from(inspection)
+      .where(isManager ? undefined : eq(inspection.userId, userId))
+      .orderBy(desc(inspection.createdAt))
     const filtered = rows.filter((r) => inRange(r.inspectionDate ?? null, from, to))
     sections.push({
       key: "inspections",
@@ -1279,7 +1330,11 @@ export async function getReportData(
     const rows = await db
       .select()
       .from(observation)
-      .where(and(eq(observation.userId, userId), eq(observation.kind, "observation")))
+      .where(
+        isManager
+          ? eq(observation.kind, "observation")
+          : and(eq(observation.userId, userId), eq(observation.kind, "observation")),
+      )
       .orderBy(desc(observation.createdAt))
     const filtered = rows.filter((r) => inRange(r.observationDate ?? null, from, to))
     sections.push({
@@ -1308,7 +1363,11 @@ export async function getReportData(
     const rows = await db
       .select()
       .from(observation)
-      .where(and(eq(observation.userId, userId), eq(observation.kind, "positive")))
+      .where(
+        isManager
+          ? eq(observation.kind, "positive")
+          : and(eq(observation.userId, userId), eq(observation.kind, "positive")),
+      )
       .orderBy(desc(observation.createdAt))
     const filtered = rows.filter((r) => inRange(r.observationDate ?? null, from, to))
     sections.push({
