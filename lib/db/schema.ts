@@ -485,3 +485,49 @@ export const translationCache = pgTable(
     lookupIdx: uniqueIndex("translation_cache_lookup_idx").on(t.sourceHash, t.targetLocale),
   }),
 )
+
+// ---------- التعرّف متعدد الأوضاع من كاميرا الهاتف (لوحات/رقم وظيفي/توك توك) ----------
+// كل جدول يخزّن قراءة واحدة مستخرجة بالذكاء الاصطناعي من إطار كاميرا، مع نطاق
+// الرؤية مقصوراً على userId (نفس نمط باقي جداول التطبيق).
+
+// قراءات لوحات المركبات (الوضع 2).
+export const plateRead = pgTable("plate_reads", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  plateNumber: text("plate_number").notNull().default(""),
+  confidence: integer("confidence").notNull().default(0), // 0-100
+  imageUrl: text("image_url").notNull().default(""),
+  cameraName: text("camera_name").notNull().default(""),
+  location: text("location").notNull().default(""),
+  capturedAt: timestamp("captured_at").notNull().defaultNow(),
+})
+
+// قراءات الرقم الوظيفي من زيّ العامل (الوضع 3).
+export const employeeIdRead = pgTable("employee_id_reads", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  employeeNumber: text("employee_number").notNull().default(""),
+  // معرّف الموظف المطابق في جدول employees (رقمي)، أو null إن لم يُطابق.
+  matchedEmployeeId: integer("matched_employee_id"),
+  confidence: integer("confidence").notNull().default(0), // 0-100
+  imageUrl: text("image_url").notNull().default(""),
+  cameraName: text("camera_name").notNull().default(""),
+  location: text("location").notNull().default(""),
+  capturedAt: timestamp("captured_at").notNull().defaultNow(),
+})
+
+// قراءات رقم التوك توك (الوضع 4).
+// permitStatus: valid | expired | not_found — حالة مطابقة تصريح القيادة.
+export const tuktukRead = pgTable("tuktuk_reads", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  tuktukNumber: text("tuktuk_number").notNull().default(""),
+  // معرّف تصريح التوك توك المطابق في جدول permit (رقمي)، أو null.
+  matchedPermitId: integer("matched_permit_id"),
+  permitStatus: text("permit_status").notNull().default("not_found"),
+  confidence: integer("confidence").notNull().default(0), // 0-100
+  imageUrl: text("image_url").notNull().default(""),
+  cameraName: text("camera_name").notNull().default(""),
+  location: text("location").notNull().default(""),
+  capturedAt: timestamp("captured_at").notNull().defaultNow(),
+})
