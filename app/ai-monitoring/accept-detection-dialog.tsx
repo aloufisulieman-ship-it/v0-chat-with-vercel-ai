@@ -14,10 +14,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
-import { detectionTypeLabels, severityLabels, severityStyles } from "@/lib/ai-monitoring"
+import { severityStyles } from "@/lib/ai-monitoring"
+import { detectionTypeLabel, severityLabel } from "@/lib/i18n/labels"
 import { updateDetectionStatus } from "@/app/actions/ai-monitoring"
 import { acceptDetectionAsViolation } from "@/app/actions/hse"
 import { toast } from "@/hooks/use-toast"
+import { useI18n } from "@/lib/i18n/client"
 
 // الحقول التي تحتاجها النافذة من صف الاكتشاف (شكل مصغّر لتفادي الاعتماد الدائري).
 type DetectionLike = {
@@ -29,20 +31,38 @@ type DetectionLike = {
   cameraLocation: string
   inspectorName: string
   cameraId: string
-  snapshotUrl: string
+  // توفّر لقطة إثبات (اللقطة نفسها تُجلب عند الطلب من مسار .../snapshot).
+  hasSnapshot: boolean
   notes: string
 }
 
 const DETECTIONS_KEY = "/api/ai-monitoring/detections"
 
 export function AcceptDetectionDialog({ detection: d }: { detection: DetectionLike }) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [category, setCategory] = useState<"internal" | "external" | null>(null)
   const [pending, setPending] = useState<null | "resolve" | "convert">(null)
+  // لقطة الإثبات تُجلب عند فتح النافذة (لا تأتي مع بيانات الجدول الخفيفة).
+  const [snapshot, setSnapshot] = useState<string | null>(null)
+  const [snapFailed, setSnapFailed] = useState(false)
 
-  const typeLabel = detectionTypeLabels[d.detectionType] ?? d.detectionType
+  async function loadSnapshot() {
+    if (!d.hasSnapshot || snapshot !== null) return
+    try {
+      const res = await fetch(`/api/ai-monitoring/detections/${d.id}/snapshot`)
+      if (!res.ok) throw new Error("failed")
+      const json = (await res.json()) as { snapshotUrl?: string }
+      if (json.snapshotUrl) setSnapshot(json.snapshotUrl)
+      else setSnapFailed(true)
+    } catch {
+      setSnapFailed(true)
+    }
+  }
+
+  const typeLabel = detectionTypeLabel(t, d.detectionType)
   const inspector = d.inspectorName || d.cameraId || "-"
-  const location = d.cameraLocation || "غير محدد"
+  const location = d.cameraLocation || t("aiMonitoring.cam.notSpecified")
 
   function reset() {
     setCategory(null)
@@ -55,11 +75,14 @@ export function AcceptDetectionDialog({ detection: d }: { detection: DetectionLi
     try {
       await updateDetectionStatus(d.id, "resolved")
       await mutate(DETECTIONS_KEY)
-      toast({ title: "تم قبول الاكتشاف", description: `تم وضع الاكتشاف ${d.detectionId} كـ «تمت المعالجة».` })
+      toast({
+        title: t("aiMonitoring.cam.acceptedTitle"),
+        description: t("aiMonitoring.cam.acceptedDesc").replace("{id}", d.detectionId),
+      })
       setOpen(false)
       reset()
     } catch (e) {
-      toast({ title: "تعذّر إتمام العملية", description: (e as Error).message, variant: "destructive" })
+      toast({ title: t("aiMonitoring.cam.opFailed"), description: (e as Error).message, variant: "destructive" })
       setPending(null)
     }
   }
@@ -72,13 +95,18 @@ export function AcceptDetectionDialog({ detection: d }: { detection: DetectionLi
       const { documentNo } = await acceptDetectionAsViolation(d.id, category)
       await mutate(DETECTIONS_KEY)
       toast({
-        title: "تم إنشاء المخالفة",
-        description: `أُنشئت المخالفة ${documentNo} وأُحيلت إلى ${category === "external" ? "المالية" : "الموارد البشرية"}.`,
+        title: t("aiMonitoring.cam.violationCreated"),
+        description: t("aiMonitoring.cam.violationCreatedDesc")
+          .replace("{no}", documentNo)
+          .replace(
+            "{dest}",
+            category === "external" ? t("aiMonitoring.cam.toFinance") : t("aiMonitoring.cam.toHr"),
+          ),
       })
       setOpen(false)
       reset()
     } catch (e) {
-      toast({ title: "تعذّر إنشاء المخالفة", description: (e as Error).message, variant: "destructive" })
+      toast({ title: t("aiMonitoring.cam.violationCreateFailed"), description: (e as Error).message, variant: "destructive" })
       setPending(null)
     }
   }
@@ -90,14 +118,15 @@ export function AcceptDetectionDialog({ detection: d }: { detection: DetectionLi
       open={open}
       onOpenChange={(o) => {
         setOpen(o)
+        if (o) void loadSnapshot()
         if (!o) reset()
       }}
     >
       <DialogTrigger asChild>
         <button
           className="rounded-md p-1.5 text-primary hover:bg-muted disabled:opacity-50"
-          title="قبول"
-          aria-label="قبول الاكتشاف"
+          title={t("aiMonitoring.cam.accept")}
+          aria-label={t("aiMonitoring.cam.acceptDetection")}
         >
           <CircleCheck className="size-4" />
         </button>
@@ -105,9 +134,9 @@ export function AcceptDetectionDialog({ detection: d }: { detection: DetectionLi
 
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>قبول الاكتشاف {d.detectionId}</DialogTitle>
+          <DialogTitle>{t("aiMonitoring.cam.acceptDetectionTitle").replace("{id}", d.detectionId)}</DialogTitle>
           <DialogDescription>
-            راجع بيانات الاكتشاف المعبّأة تلقائياً، ثم اقبله فقط أو حوّله إلى مخالفة رسمية.
+            {t("aiMonitoring.cam.acceptDialogDesc")}
           </DialogDescription>
         </DialogHeader>
 
@@ -115,13 +144,21 @@ export function AcceptDetectionDialog({ detection: d }: { detection: DetectionLi
           {/* نوع المخالفة — إلزامي عند التحويل */}
           <div className="flex flex-col gap-2">
             <span className="text-sm font-medium text-foreground">
-              نوع المخالفة <span className="text-destructive">*</span>
+              {t("aiMonitoring.cam.violationType")} <span className="text-destructive">*</span>
             </span>
             <div className="grid grid-cols-2 gap-2">
               {(
                 [
-                  { value: "internal", label: "داخلية", hint: "إحالة للموارد البشرية" },
-                  { value: "external", label: "خارجية", hint: "إحالة للمالية" },
+                  {
+                    value: "internal",
+                    label: t("aiMonitoring.cam.internal"),
+                    hint: t("aiMonitoring.cam.internalHint"),
+                  },
+                  {
+                    value: "external",
+                    label: t("aiMonitoring.cam.external"),
+                    hint: t("aiMonitoring.cam.externalHint"),
+                  },
                 ] as const
               ).map((opt) => (
                 <button
@@ -145,27 +182,27 @@ export function AcceptDetectionDialog({ detection: d }: { detection: DetectionLi
 
           {/* مراجعة البيانات المعبّأة تلقائياً */}
           <div className="grid gap-3 rounded-lg border border-border bg-muted/30 p-3 text-sm">
-            <ReviewRow icon={ShieldAlert} label="نوع/وصف المخالفة">
+            <ReviewRow icon={ShieldAlert} label={t("aiMonitoring.cam.reviewViolation")}>
               <span className="font-medium text-foreground">{typeLabel}</span>
               {d.notes ? <p className="mt-0.5 text-xs text-muted-foreground">{d.notes}</p> : null}
             </ReviewRow>
-            <ReviewRow icon={MapPin} label="الموقع">
+            <ReviewRow icon={MapPin} label={t("aiMonitoring.cam.location")}>
               <span className="text-foreground">{location}</span>
             </ReviewRow>
-            <ReviewRow icon={ShieldAlert} label="درجة الخطورة">
+            <ReviewRow icon={ShieldAlert} label={t("aiMonitoring.cam.reviewSeverity")}>
               <span
                 className={cn(
                   "inline-flex rounded-full border px-2 py-0.5 text-xs font-medium",
                   severityStyles[d.severity] ?? "",
                 )}
               >
-                {severityLabels[d.severity] ?? d.severity}
+                {severityLabel(t, d.severity)}
               </span>
               <span className="ms-2 font-mono text-xs text-muted-foreground" dir="ltr">
                 {d.confidenceScore}%
               </span>
             </ReviewRow>
-            <ReviewRow icon={UserRound} label="المفتش / الموقع">
+            <ReviewRow icon={UserRound} label={t("aiMonitoring.cam.reviewInspectorLocation")}>
               <span className="text-foreground">
                 {inspector}
                 {d.cameraLocation ? ` — ${d.cameraLocation}` : ""}
@@ -173,16 +210,23 @@ export function AcceptDetectionDialog({ detection: d }: { detection: DetectionLi
             </ReviewRow>
           </div>
 
-          {/* لقطة الإثبات — تُرفق تلقائياً بالمخالفة */}
-          {d.snapshotUrl ? (
+          {/* لقطة الإثبات — تُرفق تلقائياً بالمخالفة (تُجلب عند فتح النافذة) */}
+          {d.hasSnapshot ? (
             <div className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium text-muted-foreground">لقطة الإثبات (تُرفق تلقائياً)</span>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={d.snapshotUrl || "/placeholder.svg"}
-                alt={`لقطة إثبات ${typeLabel}`}
-                className="max-h-48 w-full rounded-lg border border-border object-contain"
-              />
+              <span className="text-xs font-medium text-muted-foreground">{t("aiMonitoring.cam.evidenceAuto")}</span>
+              {snapshot ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={snapshot || "/placeholder.svg"}
+                  alt={t("aiMonitoring.cam.evidenceAlt").replace("{type}", typeLabel)}
+                  className="max-h-48 w-full rounded-lg border border-border bg-muted object-contain"
+                  onError={() => setSnapFailed(true)}
+                />
+              ) : (
+                <div className="flex h-32 items-center justify-center rounded-lg border border-border bg-muted text-xs text-muted-foreground">
+                  {snapFailed ? t("aiMonitoring.cam.snapFailed") : t("aiMonitoring.cam.snapLoading")}
+                </div>
+              )}
             </div>
           ) : null}
         </div>
@@ -195,17 +239,17 @@ export function AcceptDetectionDialog({ detection: d }: { detection: DetectionLi
             className="inline-flex items-center justify-center gap-2 rounded-lg border border-input px-4 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
           >
             {pending === "resolve" ? <Loader2 className="size-4 animate-spin" /> : <CircleCheck className="size-4" />}
-            قبول فقط
+            {t("aiMonitoring.cam.acceptOnly")}
           </button>
           <button
             type="button"
             onClick={acceptAndConvert}
             disabled={busy || !category}
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            title={!category ? "اختر نوع المخالفة أولاً" : undefined}
+            title={!category ? t("aiMonitoring.cam.chooseTypeFirst") : undefined}
           >
             {pending === "convert" ? <Loader2 className="size-4 animate-spin" /> : <FileWarning className="size-4" />}
-            قبول وتحويل لمخالفة
+            {t("aiMonitoring.cam.acceptConvert")}
           </button>
         </DialogFooter>
       </DialogContent>
@@ -235,12 +279,13 @@ function ReviewRow({
 
 // رابط سريع لعرض المخالفة المرتبطة في سجل المخالفات.
 export function LinkedViolationLink({ documentNo }: { documentNo: string }) {
+  const { t } = useI18n()
   return (
     <Link
       href="/violations"
       className="inline-flex items-center gap-1 rounded-md border border-blue-500/30 bg-blue-500/10 px-2 py-1 font-mono text-xs text-blue-600 hover:bg-blue-500/20 dark:text-blue-400"
       dir="ltr"
-      title={`عرض المخالفة ${documentNo}`}
+      title={t("aiMonitoring.cam.viewViolation").replace("{no}", documentNo)}
     >
       <ExternalLink className="size-3" />
       {documentNo}

@@ -12,6 +12,8 @@ export const user = pgTable("user", {
   department: text("department").notNull().default(""),
   // JSON array of module values the user can access, e.g. ["dashboard","violations"]
   permissions: text("permissions").notNull().default("[]"),
+  // تفضيل لغة الواجهة لكل مستخدم ("ar" | "en") — يبقى ثابتًا عبر كل الجلسات.
+  locale: text("locale").notNull().default("ar"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
@@ -355,6 +357,10 @@ export const aiDetection = pgTable("ai_detections", {
   inspectorName: text("inspector_name").notNull().default(""), // اسم المفتش/الموظف صاحب الجلسة
   cameraLocation: text("camera_location").notNull().default(""),
   detectionType: text("detection_type").notNull().default("no_ppe"),
+  // كل أنواع المخالفات المرصودة في نفس اللقطة/الإطار كسلسلة JSON (مثال:
+  // ["no_ppe","unsafe_stacking"]). detectionType أعلاه يبقى النوع الأساسي (الأشد
+  // خطورة) للتوافق مع الشارات والفلاتر والإحصاءات الحالية.
+  detectionTypes: text("detection_types").notNull().default(""),
   severity: text("severity").notNull().default("low"),
   confidenceScore: integer("confidence_score").notNull().default(0), // 0-100
   snapshotUrl: text("snapshot_url").notNull().default(""),
@@ -460,4 +466,68 @@ export const document = pgTable("document", {
   status: text("status").default("active"),
   reviewDate: date("reviewDate"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
+// ذاكرة ترجمة البيانات المُدخلة (أوصاف/ملاحظات) عبر الذكاء الاصطناعي.
+// نُخزّن الترجمة مرة واحدة لكل (نص مصدر + لغة هدف) لتجنّب تكرار الاستدعاءات
+// وتثبيت النتيجة. sourceHash = بصمة النص المصدر لتسريع البحث وتفادي مفاتيح ضخمة.
+export const translationCache = pgTable(
+  "translation_cache",
+  {
+    id: serial("id").primaryKey(),
+    sourceHash: text("source_hash").notNull(),
+    sourceText: text("source_text").notNull(),
+    targetLocale: text("target_locale").notNull(), // "ar" | "en"
+    translatedText: text("translated_text").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    lookupIdx: uniqueIndex("translation_cache_lookup_idx").on(t.sourceHash, t.targetLocale),
+  }),
+)
+
+// ---------- التعرّف متعدد الأوضاع من كاميرا الهاتف (لوحات/رقم وظيفي/توك توك) ----------
+// كل جدول يخزّن قراءة واحدة مستخرجة بالذكاء الاصطناعي من إطار كاميرا، مع نطاق
+// الرؤية مقصوراً على userId (نفس نمط باقي جداول التطبيق).
+
+// قراءات لوحات المركبات (الوضع 2).
+export const plateRead = pgTable("plate_reads", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  plateNumber: text("plate_number").notNull().default(""),
+  confidence: integer("confidence").notNull().default(0), // 0-100
+  imageUrl: text("image_url").notNull().default(""),
+  cameraName: text("camera_name").notNull().default(""),
+  location: text("location").notNull().default(""),
+  capturedAt: timestamp("captured_at").notNull().defaultNow(),
+})
+
+// قراءات الرقم الوظيفي من زيّ العامل (الوضع 3).
+export const employeeIdRead = pgTable("employee_id_reads", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  employeeNumber: text("employee_number").notNull().default(""),
+  // معرّف الموظف المطابق في جدول employees (رقمي)، أو null إن لم يُطابق.
+  matchedEmployeeId: integer("matched_employee_id"),
+  confidence: integer("confidence").notNull().default(0), // 0-100
+  imageUrl: text("image_url").notNull().default(""),
+  cameraName: text("camera_name").notNull().default(""),
+  location: text("location").notNull().default(""),
+  capturedAt: timestamp("captured_at").notNull().defaultNow(),
+})
+
+// قراءات رقم التوك توك (الوضع 4).
+// permitStatus: valid | expired | not_found — حالة مطابقة تصريح القيادة.
+export const tuktukRead = pgTable("tuktuk_reads", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  tuktukNumber: text("tuktuk_number").notNull().default(""),
+  // معرّف تصريح التوك توك المطابق في جدول permit (رقمي)، أو null.
+  matchedPermitId: integer("matched_permit_id"),
+  permitStatus: text("permit_status").notNull().default("not_found"),
+  confidence: integer("confidence").notNull().default(0), // 0-100
+  imageUrl: text("image_url").notNull().default(""),
+  cameraName: text("camera_name").notNull().default(""),
+  location: text("location").notNull().default(""),
+  capturedAt: timestamp("captured_at").notNull().defaultNow(),
 })

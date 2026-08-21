@@ -1,5 +1,8 @@
+"use client"
+
 import { cn } from "@/lib/utils"
-import { statusLabels, severityLabels } from "@/lib/labels"
+import { useI18n } from "@/lib/i18n/client"
+import { statusLabel, severityLabel } from "@/lib/i18n/labels"
 
 const statusStyles: Record<string, string> = {
   open: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
@@ -25,6 +28,7 @@ const severityStyles: Record<string, string> = {
 }
 
 export function StatusBadge({ status }: { status: string }) {
+  const { t } = useI18n()
   return (
     <span
       className={cn(
@@ -32,12 +36,13 @@ export function StatusBadge({ status }: { status: string }) {
         statusStyles[status] ?? "bg-muted text-muted-foreground border-border",
       )}
     >
-      {statusLabels[status] ?? status}
+      {statusLabel(t, status)}
     </span>
   )
 }
 
 export function SeverityBadge({ severity }: { severity: string }) {
+  const { t } = useI18n()
   return (
     <span
       className={cn(
@@ -45,7 +50,7 @@ export function SeverityBadge({ severity }: { severity: string }) {
         severityStyles[severity] ?? "bg-muted text-muted-foreground border-border",
       )}
     >
-      {severityLabels[severity] ?? severity}
+      {severityLabel(t, severity)}
     </span>
   )
 }

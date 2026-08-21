@@ -19,8 +19,18 @@ import {
   partyHospitalizedOptions,
   type IncidentParty,
 } from "@/lib/incident-types"
+import { useI18n } from "@/lib/i18n/client"
+import {
+  incidentSeverityLabel,
+  incidentStatusOptLabel,
+  partyAffiliationLabel,
+  partyInjuryLabel,
+  partyHospitalizedLabel,
+  incidentTypeCatalogLabel,
+} from "@/lib/i18n/labels"
 
 function SignaturePad({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  const { t } = useI18n()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [drawing, setDrawing] = useState(false)
 
@@ -68,7 +78,7 @@ function SignaturePad({ label, value, onChange }: { label: string; value: string
       <div className="flex items-center justify-between">
         <Label className="text-sm font-medium">{label}</Label>
         <button type="button" onClick={clear} className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1">
-          <X className="size-3" /> مسح
+          <X className="size-3" /> {t("incidentForm.clear")}
         </button>
       </div>
       <div className="relative rounded-lg border-2 border-dashed border-border bg-white overflow-hidden">
@@ -88,7 +98,7 @@ function SignaturePad({ label, value, onChange }: { label: string; value: string
         {!value && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <span className="text-xs text-muted-foreground flex items-center gap-1">
-              <PenLine className="size-3" /> وقّع هنا
+              <PenLine className="size-3" /> {t("incidentForm.signHere")}
             </span>
           </div>
         )}
@@ -102,6 +112,7 @@ const emptyParty: IncidentParty = {
 }
 
 export function IncidentFormDialog({ defaultReporter = "" }: { defaultReporter?: string }) {
+  const { t, dir } = useI18n()
   const [open, setOpen] = useState(false)
   const [step, setStep] = useState(1)
   const [isPending, startTransition] = useTransition()
@@ -172,25 +183,25 @@ export function IncidentFormDialog({ defaultReporter = "" }: { defaultReporter?:
         fd.append("hrSignature", hrSignature)
         fd.append("gmSignature", gmSignature)
         await createIncidentFull(fd)
-        toast({ title: "تم الحفظ بنجاح", description: "تم تسجيل الحادثة في قاعدة البيانات." })
+        toast({ title: t("incidentForm.savedTitle"), description: t("incidentForm.savedDesc") })
         setOpen(false)
         resetForm()
       } catch (err) {
-        toast({ title: "تعذّر الحفظ", description: err instanceof Error ? err.message : "حدث خطأ.", variant: "destructive" })
+        toast({ title: t("incidentForm.saveFailedTitle"), description: err instanceof Error ? err.message : t("incidentForm.saveFailedDesc"), variant: "destructive" })
       }
     })
   }
 
-  const steps = ["بيانات الحادثة", "الأطراف المتضررة", "التواقيع"]
+  const steps = [t("incidentForm.stepData"), t("incidentForm.stepParties"), t("incidentForm.stepSignatures")]
 
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetForm() }}>
       <DialogTrigger asChild>
-        <Button className="gap-2"><AlertTriangle className="size-4" /> الإبلاغ عن حادثة</Button>
+        <Button className="gap-2"><AlertTriangle className="size-4" /> {t("incidentForm.trigger")}</Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[92svh] overflow-y-auto sm:max-w-2xl" dir="rtl">
+      <DialogContent className="max-h-[92svh] overflow-y-auto sm:max-w-2xl" dir={dir}>
         <DialogHeader>
-          <DialogTitle>الإبلاغ عن حادثة</DialogTitle>
+          <DialogTitle>{t("incidentForm.dialogTitle")}</DialogTitle>
         </DialogHeader>
 
         <div className="flex items-center gap-2 mb-4">
@@ -209,105 +220,105 @@ export function IncidentFormDialog({ defaultReporter = "" }: { defaultReporter?:
         {step === 1 && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1 sm:col-span-2">
-              <Label>تحويل الحادثة إلى <span className="text-destructive">*</span></Label>
+              <Label>{t("incidentForm.routeTo")} <span className="text-destructive">*</span></Label>
               <Select value={form.routedTo} onValueChange={v => setForm(f => ({ ...f, routedTo: v }))}>
-                <SelectTrigger><SelectValue placeholder="اختر جهة التحويل..." /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={t("incidentForm.routePlaceholder")} /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="hr">الموارد البشرية (HR)</SelectItem>
-                  <SelectItem value="finance">المالية (Finance)</SelectItem>
+                  <SelectItem value="hr">{t("incidentForm.routeHr")}</SelectItem>
+                  <SelectItem value="finance">{t("incidentForm.routeFinance")}</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">ستظهر الحادثة في قائمة الجهة المختارة فقط.</p>
+              <p className="text-xs text-muted-foreground">{t("incidentForm.routeHint")}</p>
             </div>
             <div className="flex flex-col gap-1 sm:col-span-2">
-              <Label>نوع الحادثة <span className="text-destructive">*</span></Label>
+              <Label>{t("incidentForm.incidentType")} <span className="text-destructive">*</span></Label>
               <Select value={form.title} onValueChange={v => setForm(f => ({ ...f, title: v }))}>
-                <SelectTrigger><SelectValue placeholder="اختر نوع الحادثة..." /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={t("incidentForm.incidentTypePlaceholder")} /></SelectTrigger>
                 <SelectContent className="max-h-72">
-                  {INCIDENT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                  {INCIDENT_TYPES.map(it => <SelectItem key={it} value={it}>{incidentTypeCatalogLabel(t, it)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div className="flex flex-col gap-1">
-              <Label>تاريخ الحادثة</Label>
+              <Label>{t("incidentForm.incidentDate")}</Label>
               <Input type="date" value={form.incidentDate} onChange={e => setForm(f => ({ ...f, incidentDate: e.target.value }))} dir="ltr" />
             </div>
             <div className="flex flex-col gap-1">
-              <Label>وقت الحادثة</Label>
-              <Input value={form.incidentTime} onChange={e => setForm(f => ({ ...f, incidentTime: e.target.value }))} placeholder="مثال: 10:30 صباحاً" />
+              <Label>{t("incidentForm.incidentTime")}</Label>
+              <Input value={form.incidentTime} onChange={e => setForm(f => ({ ...f, incidentTime: e.target.value }))} placeholder={t("incidentForm.incidentTimePlaceholder")} />
             </div>
             <div className="flex flex-col gap-1">
-              <Label>موقع الحادثة</Label>
-              <Input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} placeholder="مثال: المستودع الرئيسي" />
+              <Label>{t("incidentForm.location")}</Label>
+              <Input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} placeholder={t("incidentForm.locationPlaceholder")} />
             </div>
             <div className="flex flex-col gap-1">
-              <Label>مستوى الخطورة</Label>
+              <Label>{t("incidentForm.severity")}</Label>
               <Select value={form.severity} onValueChange={v => setForm(f => ({ ...f, severity: v }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {incidentSeverityOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                  {incidentSeverityOptions.map(o => <SelectItem key={o.value} value={o.value}>{incidentSeverityLabel(t, o.value)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div className="flex flex-col gap-1">
-              <Label>الحالة</Label>
+              <Label>{t("incidentForm.status")}</Label>
               <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {incidentStatusOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                  {incidentStatusOptions.map(o => <SelectItem key={o.value} value={o.value}>{incidentStatusOptLabel(t, o.value)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div className="flex flex-col gap-1">
-              <Label>المبلّغ عن الحادثة</Label>
-              <Input value={form.reportedBy} onChange={e => setForm(f => ({ ...f, reportedBy: e.target.value }))} placeholder="اسم المبلّغ" />
+              <Label>{t("incidentForm.reporter")}</Label>
+              <Input value={form.reportedBy} onChange={e => setForm(f => ({ ...f, reportedBy: e.target.value }))} placeholder={t("incidentForm.reporterPlaceholder")} />
             </div>
             <div className="flex flex-col gap-1 sm:col-span-2">
-              <Label>وصف تفصيلي للحادثة</Label>
-              <Textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={3} placeholder="اشرح ما حدث بالتفصيل..." />
+              <Label>{t("incidentForm.description")}</Label>
+              <Textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={3} placeholder={t("incidentForm.descriptionPlaceholder")} />
             </div>
             <div className="flex flex-col gap-1">
-              <Label>الأسباب المباشرة</Label>
+              <Label>{t("incidentForm.directCauses")}</Label>
               <Textarea value={form.directCauses} onChange={e => setForm(f => ({ ...f, directCauses: e.target.value }))} rows={2} />
             </div>
             <div className="flex flex-col gap-1">
-              <Label>الأسباب الجذرية</Label>
+              <Label>{t("incidentForm.rootCauses")}</Label>
               <Textarea value={form.rootCauses} onChange={e => setForm(f => ({ ...f, rootCauses: e.target.value }))} rows={2} />
             </div>
             <div className="flex flex-col gap-1">
-              <Label>وصف الأضرار المادية</Label>
+              <Label>{t("incidentForm.propertyDamage")}</Label>
               <Textarea value={form.propertyDamage} onChange={e => setForm(f => ({ ...f, propertyDamage: e.target.value }))} rows={2} />
             </div>
             <div className="flex flex-col gap-1">
-              <Label>تقدير تكلفة الأضرار (ريال)</Label>
-              <Input type="number" min={0} inputMode="decimal" value={form.damageCost} onChange={e => setForm(f => ({ ...f, damageCost: e.target.value }))} placeholder="مثال: 5000" dir="ltr" />
+              <Label>{t("incidentForm.damageCost")}</Label>
+              <Input type="number" min={0} inputMode="decimal" value={form.damageCost} onChange={e => setForm(f => ({ ...f, damageCost: e.target.value }))} placeholder={t("incidentForm.damageCostPlaceholder")} dir="ltr" />
             </div>
             <div className="flex flex-col gap-1 sm:col-span-2">
-              <Label>الإجراءات الفورية المتخذة</Label>
+              <Label>{t("incidentForm.immediateActions")}</Label>
               <Textarea value={form.immediateActions} onChange={e => setForm(f => ({ ...f, immediateActions: e.target.value }))} rows={2} />
             </div>
             <div className="flex flex-col gap-1 sm:col-span-2">
-              <Label>الشهود</Label>
-              <Textarea value={form.witnesses} onChange={e => setForm(f => ({ ...f, witnesses: e.target.value }))} rows={2} placeholder="أسماء الشهود وبياناتهم" />
+              <Label>{t("incidentForm.witnesses")}</Label>
+              <Textarea value={form.witnesses} onChange={e => setForm(f => ({ ...f, witnesses: e.target.value }))} rows={2} placeholder={t("incidentForm.witnessesPlaceholder")} />
             </div>
             <div className="flex flex-col gap-1">
-              <Label>هل أُبلغت الجهات المختصة؟</Label>
+              <Label>{t("incidentForm.authoritiesNotified")}</Label>
               <Select value={form.authoritiesNotified} onValueChange={v => setForm(f => ({ ...f, authoritiesNotified: v, authorityName: v === "no" ? "" : f.authorityName }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="no">لا</SelectItem>
-                  <SelectItem value="yes">نعم</SelectItem>
+                  <SelectItem value="no">{t("incidentForm.no")}</SelectItem>
+                  <SelectItem value="yes">{t("incidentForm.yes")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             {form.authoritiesNotified === "yes" && (
               <div className="flex flex-col gap-1">
-                <Label>اسم الجهة <span className="text-destructive">*</span></Label>
-                <Input value={form.authorityName} onChange={e => setForm(f => ({ ...f, authorityName: e.target.value }))} placeholder="مثال: الدفاع المدني" />
+                <Label>{t("incidentForm.authorityName")} <span className="text-destructive">*</span></Label>
+                <Input value={form.authorityName} onChange={e => setForm(f => ({ ...f, authorityName: e.target.value }))} placeholder={t("incidentForm.authorityNamePlaceholder")} />
               </div>
             )}
             <div className="flex flex-col gap-1 sm:col-span-2">
-              <Label>توصيات منع التكرار</Label>
+              <Label>{t("incidentForm.recommendations")}</Label>
               <Textarea value={form.recommendations} onChange={e => setForm(f => ({ ...f, recommendations: e.target.value }))} rows={2} />
             </div>
           </div>
@@ -317,66 +328,66 @@ export function IncidentFormDialog({ defaultReporter = "" }: { defaultReporter?:
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-sm font-medium text-foreground">
-                <Users className="size-4 text-muted-foreground" /> الأطراف المتضررة
+                <Users className="size-4 text-muted-foreground" /> {t("incidentForm.partiesTitle")}
               </span>
               <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => setParties(p => [...p, { ...emptyParty }])}>
-                <Plus className="size-4" /> إضافة طرف
+                <Plus className="size-4" /> {t("incidentForm.addParty")}
               </Button>
             </div>
 
             {parties.length === 0 ? (
-              <p className="text-center text-sm text-muted-foreground py-6">لا توجد أطراف مضافة. اضغط &quot;إضافة طرف&quot; لإضافة المتضررين.</p>
+              <p className="text-center text-sm text-muted-foreground py-6">{t("incidentForm.noParties")}</p>
             ) : (
               parties.map((p, i) => (
                 <div key={i} className="rounded-lg border border-border p-3 flex flex-col gap-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-foreground">الطرف {i + 1}</span>
+                    <span className="text-sm font-semibold text-foreground">{t("incidentForm.partyN")} {i + 1}</span>
                     <button type="button" onClick={() => setParties(arr => arr.filter((_, j) => j !== i))} className="text-destructive hover:opacity-80">
                       <Trash2 className="size-4" />
                     </button>
                   </div>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="flex flex-col gap-1">
-                      <Label>الاسم</Label>
-                      <Input value={p.name} onChange={e => updateParty(i, "name", e.target.value)} placeholder="الاسم الكامل" />
+                      <Label>{t("incidentForm.name")}</Label>
+                      <Input value={p.name} onChange={e => updateParty(i, "name", e.target.value)} placeholder={t("incidentForm.fullName")} />
                     </div>
                     <div className="flex flex-col gap-1">
-                      <Label>الجنسية</Label>
-                      <Input value={p.nationality} onChange={e => updateParty(i, "nationality", e.target.value)} placeholder="مثال: سعودي" />
+                      <Label>{t("incidentForm.nationality")}</Label>
+                      <Input value={p.nationality} onChange={e => updateParty(i, "nationality", e.target.value)} placeholder={t("incidentForm.nationalityPlaceholder")} />
                     </div>
                     <div className="flex flex-col gap-1">
-                      <Label>الجهة</Label>
+                      <Label>{t("incidentForm.affiliation")}</Label>
                       <Select value={p.affiliation} onValueChange={v => updateParty(i, "affiliation", v)}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {partyAffiliationOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                          {partyAffiliationOptions.map(o => <SelectItem key={o.value} value={o.value}>{partyAffiliationLabel(t, o.value)}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="flex flex-col gap-1">
-                      <Label>نوع الإصابة</Label>
+                      <Label>{t("incidentForm.injuryType")}</Label>
                       <Select value={p.injuryType} onValueChange={v => updateParty(i, "injuryType", v)}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {partyInjuryOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                          {partyInjuryOptions.map(o => <SelectItem key={o.value} value={o.value}>{partyInjuryLabel(t, o.value)}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="flex flex-col gap-1">
-                      <Label>تم نقله للمستشفى</Label>
+                      <Label>{t("incidentForm.hospitalized")}</Label>
                       <Select value={p.hospitalized} onValueChange={v => updateParty(i, "hospitalized", v)}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {partyHospitalizedOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                          {partyHospitalizedOptions.map(o => <SelectItem key={o.value} value={o.value}>{partyHospitalizedLabel(t, o.value)}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="flex flex-col gap-1 sm:col-span-2">
-                      <Label>صورة الإصابة (اختياري)</Label>
+                      <Label>{t("incidentForm.injuryPhoto")}</Label>
                       {p.injuryPhoto ? (
                         <div className="relative w-fit">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={p.injuryPhoto || "/placeholder.svg"} alt="صورة الإصابة" className="h-28 w-28 rounded-lg border border-border object-cover" />
+                          <img src={p.injuryPhoto || "/placeholder.svg"} alt={t("incidentForm.injuryPhotoAlt")} className="h-28 w-28 rounded-lg border border-border object-cover" />
                           <button
                             type="button"
                             onClick={() => updateParty(i, "injuryPhoto", "")}
@@ -387,7 +398,7 @@ export function IncidentFormDialog({ defaultReporter = "" }: { defaultReporter?:
                         </div>
                       ) : (
                         <label className="flex h-20 w-full cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border text-sm text-muted-foreground transition-colors hover:bg-muted/50">
-                          <Camera className="size-5" /> رفع صورة الإصابة
+                          <Camera className="size-5" /> {t("incidentForm.uploadInjuryPhoto")}
                           <input type="file" accept="image/*" className="hidden" onChange={(e) => handlePartyPhoto(i, e)} />
                         </label>
                       )}
@@ -399,10 +410,10 @@ export function IncidentFormDialog({ defaultReporter = "" }: { defaultReporter?:
 
             <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
               <span className="flex items-center gap-2 text-sm font-medium text-foreground">
-                <ImageIcon className="size-4 text-muted-foreground" /> صور موقع الحادث
+                <ImageIcon className="size-4 text-muted-foreground" /> {t("incidentForm.sitePhotos")}
               </span>
               <label className="flex h-24 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border text-sm text-muted-foreground transition-colors hover:bg-muted/50">
-                <Camera className="size-6" /> اضغط لرفع صورة أو أكثر لموقع الحادث
+                <Camera className="size-6" /> {t("incidentForm.uploadSitePhotos")}
                 <input type="file" accept="image/*" multiple className="hidden" onChange={handleSitePhotos} />
               </label>
               {sitePhotos.length > 0 && (
@@ -410,7 +421,7 @@ export function IncidentFormDialog({ defaultReporter = "" }: { defaultReporter?:
                   {sitePhotos.map((img, i) => (
                     <div key={i} className="relative">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={img || "/placeholder.svg"} alt={`صورة الموقع ${i + 1}`} className="h-24 w-full rounded-lg border border-border object-cover" />
+                      <img src={img || "/placeholder.svg"} alt={`${t("incidentForm.sitePhotoAlt")} ${i + 1}`} className="h-24 w-full rounded-lg border border-border object-cover" />
                       <button
                         type="button"
                         onClick={() => setSitePhotos((imgs) => imgs.filter((_, j) => j !== i))}
@@ -428,25 +439,25 @@ export function IncidentFormDialog({ defaultReporter = "" }: { defaultReporter?:
 
         {step === 3 && (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-            <SignaturePad label="توقيع المبلّغ" value={reporterSignature} onChange={setReporterSignature} />
-            <SignaturePad label="توقيع مسؤول السلامة" value={safetySignature} onChange={setSafetySignature} />
-            <SignaturePad label="توقيع الموارد البشرية" value={hrSignature} onChange={setHrSignature} />
-            <SignaturePad label="توقيع المدير العام" value={gmSignature} onChange={setGmSignature} />
+            <SignaturePad label={t("incidentForm.sigReporter")} value={reporterSignature} onChange={setReporterSignature} />
+            <SignaturePad label={t("incidentForm.sigSafety")} value={safetySignature} onChange={setSafetySignature} />
+            <SignaturePad label={t("incidentForm.sigHr")} value={hrSignature} onChange={setHrSignature} />
+            <SignaturePad label={t("incidentForm.sigGm")} value={gmSignature} onChange={setGmSignature} />
           </div>
         )}
 
         <div className="flex justify-between mt-4 pt-4 border-t">
           <Button type="button" variant="outline" onClick={() => step > 1 ? setStep(s => s - 1) : setOpen(false)} className="gap-1">
-            <ChevronRight className="size-4" />
-            {step === 1 ? "إلغاء" : "السابق"}
+            <ChevronRight className="size-4 rtl:rotate-0 ltr:rotate-180" />
+            {step === 1 ? t("incidentForm.cancel") : t("incidentForm.previous")}
           </Button>
           {step < 3 ? (
             <Button type="button" onClick={() => setStep(s => s + 1)} disabled={step === 1 && (!form.title || !form.routedTo)} className="gap-1">
-              التالي <ChevronLeft className="size-4" />
+              {t("incidentForm.next")} <ChevronLeft className="size-4 rtl:rotate-0 ltr:rotate-180" />
             </Button>
           ) : (
             <Button type="button" onClick={handleSave} disabled={isPending} className="gap-1">
-              {isPending ? "جارٍ الحفظ..." : "حفظ الحادثة"}
+              {isPending ? t("incidentForm.saving") : t("incidentForm.saveIncident")}
             </Button>
           )}
         </div>

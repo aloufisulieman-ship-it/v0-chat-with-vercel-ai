@@ -10,7 +10,9 @@ import { PermitApprovalActions } from "@/components/permit-approval-actions"
 import { DeleteButton } from "@/components/delete-button"
 import { requireModule } from "@/lib/session"
 import { getPermits, deletePermit, createPermit } from "@/app/actions/hse"
-import { permitTypeLabels, permitTypeExtraFields, statusLabels } from "@/lib/labels"
+import { permitTypeExtraFields } from "@/lib/labels"
+import { getServerT } from "@/lib/i18n/server"
+import { permitTypeLabel, statusLabel } from "@/lib/i18n/labels"
 
 type Permit = Awaited<ReturnType<typeof getPermits>>[number]
 
@@ -36,6 +38,7 @@ function parseDetails(raw: string | null): Record<string, string> {
 export default async function PermitsPage() {
   const user = await requireModule("permits")
   const permits = await getPermits()
+  const { locale, t } = await getServerT()
 
   // صلاحية اعتماد/رفض التصاريح: للمدير العام أو مفتش السلامة أو المشرف (admin).
   const canApprove =
@@ -47,32 +50,32 @@ export default async function PermitsPage() {
   const columns: Column<Permit>[] = [
     {
       key: "documentNo",
-      header: "رقم التصريح",
+      header: t("permits.colPermitNo"),
       render: (r) => (
         <span className="font-mono text-xs text-muted-foreground" dir="ltr">
           {r.documentNo || "-"}
         </span>
       ),
     },
-    { key: "title", header: "التصريح", render: (r) => <span className="font-medium text-foreground">{r.title}</span> },
+    { key: "title", header: t("permits.colPermit"), render: (r) => <span className="font-medium text-foreground">{r.title}</span> },
     {
       key: "type",
-      header: "النوع",
+      header: t("permits.colType"),
       render: (r) => {
         const Icon = permitTypeIcons[r.type ?? ""] ?? FileSignature
         return (
           <span className="flex items-center gap-2 text-muted-foreground">
             <Icon className="size-4 text-primary" />
-            {permitTypeLabels[r.type ?? ""] ?? "-"}
+            {r.type ? permitTypeLabel(t, r.type) : "-"}
           </span>
         )
       },
     },
-    { key: "location", header: "الموقع", render: (r) => <span className="text-muted-foreground">{r.location || "-"}</span> },
-    { key: "requestedBy", header: "مقدّم الطلب", render: (r) => <span className="text-muted-foreground">{r.requestedBy || "-"}</span> },
-    { key: "validFrom", header: "من", render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.validFrom ?? "-"}</span> },
-    { key: "validTo", header: "إلى", render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.validTo ?? "-"}</span> },
-    { key: "status", header: "الحالة", render: (r) => <StatusBadge status={r.status ?? "pending"} /> },
+    { key: "location", header: t("permits.colLocation"), render: (r) => <span className="text-muted-foreground">{r.location || "-"}</span> },
+    { key: "requestedBy", header: t("permits.colRequestedBy"), render: (r) => <span className="text-muted-foreground">{r.requestedBy || "-"}</span> },
+    { key: "validFrom", header: t("permits.colFrom"), render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.validFrom ?? "-"}</span> },
+    { key: "validTo", header: t("permits.colTo"), render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.validTo ?? "-"}</span> },
+    { key: "status", header: t("permits.colStatus"), render: (r) => <StatusBadge status={r.status ?? "pending"} /> },
     {
       key: "actions",
       header: "",
@@ -86,32 +89,32 @@ export default async function PermitsPage() {
             module="permits"
             recordId={r.id}
             title={r.title}
-            subtitle={permitTypeLabels[r.type ?? ""] ?? "تصريح عمل"}
+            subtitle={r.type ? permitTypeLabel(t, r.type) : t("permits.defaultSubtitle")}
             fields={[
-              { label: "رقم التصريح", value: r.documentNo || "-" },
-              { label: "عنوان التصريح", value: r.title },
-              { label: "النوع", value: permitTypeLabels[r.type ?? ""] ?? "-" },
-              { label: "الموقع", value: r.location || "-" },
-              { label: "الجهة/الشخص المصرّح له", value: r.requestedBy || "-" },
+              { label: t("permits.fPermitNo"), value: r.documentNo || "-" },
+              { label: t("permits.fPermitTitle"), value: r.title },
+              { label: t("permits.fType"), value: r.type ? permitTypeLabel(t, r.type) : "-" },
+              { label: t("permits.fLocation"), value: r.location || "-" },
+              { label: t("permits.fAuthorized"), value: r.requestedBy || "-" },
               // الحقول الديناميكية الخاصة بكل نوع تصريح.
               ...(permitTypeExtraFields[r.type ?? ""] ?? []).map((f) => ({
                 label: f.label,
                 value: parseDetails(r.details)[f.name] || "-",
               })),
-              { label: "تاريخ الإصدار", value: r.validFrom ?? "-" },
-              { label: "تاريخ الانتهاء", value: r.validTo ?? "-" },
-              { label: "حالة الاعتماد", value: statusLabels[r.status ?? ""] ?? "-" },
+              { label: t("permits.fIssueDate"), value: r.validFrom ?? "-" },
+              { label: t("permits.fExpiryDate"), value: r.validTo ?? "-" },
+              { label: t("permits.fApprovalStatus"), value: r.status ? statusLabel(t, r.status) : "-" },
               ...(r.approvedBy
                 ? [
-                    { label: r.status === "rejected" ? "رفض بواسطة" : "اعتمد بواسطة", value: r.approvedBy },
+                    { label: r.status === "rejected" ? t("permits.fRejectedBy") : t("permits.fApprovedBy"), value: r.approvedBy },
                     {
-                      label: r.status === "rejected" ? "تاريخ الرفض" : "تاريخ الاعتماد",
-                      value: r.approvedAt ? new Date(r.approvedAt).toLocaleString("ar") : "-",
+                      label: r.status === "rejected" ? t("permits.fRejectionDate") : t("permits.fApprovalDate"),
+                      value: r.approvedAt ? new Date(r.approvedAt).toLocaleString(locale === "en" ? "en-US" : "ar") : "-",
                     },
                   ]
                 : []),
               ...(r.status === "rejected" && r.rejectionReason
-                ? [{ label: "سبب الرفض", value: r.rejectionReason }]
+                ? [{ label: t("permits.fRejectionReason"), value: r.rejectionReason }]
                 : []),
             ]}
             initialAttachments={[]}
@@ -124,20 +127,20 @@ export default async function PermitsPage() {
 
   return (
     <AppShell
-      title="تصاريح العمل"
-      subtitle="إصدار ومراقبة تصاريح العمل عالية الخطورة (PTW)"
+      title={t("pageHeaders.permitsTitle")}
+      subtitle={t("pageHeaders.permitsSubtitle")}
       user={user}
       action={<PermitDialog action={createPermit} />}
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <KpiCard label="إجمالي التصاريح" value={permits.length} icon={FileSignature} tone="blue" />
-        <KpiCard label="تصاريح نشطة" value={active} icon={Clock} tone="primary" />
-        <KpiCard label="بانتظار الاعتماد" value={pending} icon={CheckCircle2} tone="accent" />
+        <KpiCard label={t("permits.totalPermits")} value={permits.length} icon={FileSignature} tone="blue" />
+        <KpiCard label={t("permits.activePermits")} value={active} icon={Clock} tone="primary" />
+        <KpiCard label={t("permits.pendingApproval")} value={pending} icon={CheckCircle2} tone="accent" />
       </div>
 
       <div className="mt-6">
-        <h2 className="mb-3 text-lg font-semibold text-foreground">سجل تصاريح العمل</h2>
-        <DataTable columns={columns} rows={permits} emptyMessage="لا توجد تصاريح. أصدر تصريحاً جديداً للبدء." />
+        <h2 className="mb-3 text-lg font-semibold text-foreground">{t("permits.registryTitle")}</h2>
+        <DataTable columns={columns} rows={permits} emptyMessage={t("permits.emptyMessage")} />
       </div>
     </AppShell>
   )

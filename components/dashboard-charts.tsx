@@ -15,6 +15,7 @@ import {
   CartesianGrid,
 } from "recharts"
 import { Card } from "@/components/ui/card"
+import { useI18n } from "@/lib/i18n/client"
 
 const tooltipStyle = {
   backgroundColor: "var(--color-popover)",
@@ -25,18 +26,20 @@ const tooltipStyle = {
 }
 
 function EmptyState() {
+  const { t } = useI18n()
   return (
     <div className="flex h-[220px] items-center justify-center text-sm text-muted-foreground">
-      لا توجد بيانات كافية لعرض الرسم البياني بعد
+      {t("dashboardCharts.noData")}
     </div>
   )
 }
 
 export function IncidentTrendChart({ data }: { data: { month: string; incidents: number }[] }) {
+  const { t } = useI18n()
   return (
     <Card className="p-5">
-      <h3 className="mb-1 text-base font-semibold text-foreground">اتجاه الحوادث</h3>
-      <p className="mb-4 text-xs text-muted-foreground">حسب شهر التسجيل</p>
+      <h3 className="mb-1 text-base font-semibold text-foreground">{t("dashboardCharts.trendTitle")}</h3>
+      <p className="mb-4 text-xs text-muted-foreground">{t("dashboardCharts.trendSubtitle")}</p>
       {data.length === 0 ? (
         <EmptyState />
       ) : (
@@ -52,7 +55,7 @@ export function IncidentTrendChart({ data }: { data: { month: string; incidents:
             <XAxis dataKey="month" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} />
             <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} />
             <Tooltip contentStyle={tooltipStyle} />
-            <Area type="monotone" dataKey="incidents" name="حوادث" stroke="var(--color-chart-1)" fill="url(#gInc)" strokeWidth={2} />
+            <Area type="monotone" dataKey="incidents" name={t("dashboardCharts.incidentsSeries")} stroke="var(--color-chart-1)" fill="url(#gInc)" strokeWidth={2} />
           </AreaChart>
         </ResponsiveContainer>
       )}
@@ -61,10 +64,11 @@ export function IncidentTrendChart({ data }: { data: { month: string; incidents:
 }
 
 export function IncidentTypeChart({ data }: { data: { type: string; count: number }[] }) {
+  const { t } = useI18n()
   return (
     <Card className="p-5">
-      <h3 className="mb-1 text-base font-semibold text-foreground">الحوادث حسب النوع</h3>
-      <p className="mb-4 text-xs text-muted-foreground">التصنيف العام</p>
+      <h3 className="mb-1 text-base font-semibold text-foreground">{t("dashboardCharts.byTypeTitle")}</h3>
+      <p className="mb-4 text-xs text-muted-foreground">{t("dashboardCharts.byTypeSubtitle")}</p>
       {data.length === 0 ? (
         <EmptyState />
       ) : (
@@ -74,7 +78,7 @@ export function IncidentTypeChart({ data }: { data: { type: string; count: numbe
             <XAxis dataKey="type" tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} interval={0} />
             <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} />
             <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--color-muted)" }} />
-            <Bar dataKey="count" name="العدد" fill="var(--color-chart-1)" radius={[6, 6, 0, 0]} />
+            <Bar dataKey="count" name={t("dashboardCharts.countSeries")} fill="var(--color-chart-1)" radius={[6, 6, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       )}
@@ -83,11 +87,12 @@ export function IncidentTypeChart({ data }: { data: { type: string; count: numbe
 }
 
 export function SeverityChart({ data }: { data: { name: string; value: number; fill: string }[] }) {
+  const { t } = useI18n()
   const hasData = data.some((d) => d.value > 0)
   return (
     <Card className="p-5">
-      <h3 className="mb-1 text-base font-semibold text-foreground">توزيع الخطورة</h3>
-      <p className="mb-4 text-xs text-muted-foreground">حسب مستوى الحادثة</p>
+      <h3 className="mb-1 text-base font-semibold text-foreground">{t("dashboardCharts.severityTitle")}</h3>
+      <p className="mb-4 text-xs text-muted-foreground">{t("dashboardCharts.severitySubtitle")}</p>
       {!hasData ? (
         <EmptyState />
       ) : (

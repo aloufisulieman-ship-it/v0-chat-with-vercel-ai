@@ -5,6 +5,8 @@ import useSWR from "swr"
 import { toast } from "sonner"
 import { Menu, Search, Bell } from "lucide-react"
 import { AppSidebar } from "@/components/app-sidebar"
+import { LanguageSwitcher } from "@/components/language-switcher"
+import { useI18n } from "@/lib/i18n/client"
 
 export function AppShell({
   title,
@@ -19,6 +21,7 @@ export function AppShell({
   user: { name: string; email: string; role?: string; permissions?: string }
   children: ReactNode
 }) {
+  const { t } = useI18n()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const previousCount = useRef(0)
   const { data: alertData, mutate: refreshAlerts } = useSWR<{ count: number; notifications: { message: string }[] }>(
@@ -28,9 +31,9 @@ export function AppShell({
   )
   const unreadCount = alertData?.count ?? 0
   useEffect(() => {
-    if (unreadCount > previousCount.current && previousCount.current > 0) toast.error("تنبيه سلامة جديد من المراقبة الذكية")
+    if (unreadCount > previousCount.current && previousCount.current > 0) toast.error(t("aiMonitoring.title"))
     previousCount.current = unreadCount
-  }, [unreadCount])
+  }, [unreadCount, t])
   async function clearAlerts() {
     if (!unreadCount) return
     await fetch("/api/ai-monitoring/notifications", { method: "POST" })
@@ -46,29 +49,30 @@ export function AppShell({
           <button
             onClick={() => setSidebarOpen(true)}
             className="rounded-md p-2 text-foreground hover:bg-muted lg:hidden"
-            aria-label="فتح القائمة"
+            aria-label={t("common.actions")}
           >
             <Menu className="size-5" />
           </button>
 
           <div className="relative hidden flex-1 max-w-md md:block">
-            <Search className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <input
               type="search"
-              placeholder="بحث في النظام..."
-              className="w-full rounded-lg border border-input bg-background py-2 pr-9 pl-3 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
+              placeholder={`${t("common.search")}...`}
+              className="w-full rounded-lg border border-input bg-background py-2 ps-9 pe-3 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
             />
           </div>
 
-          <div className="flex flex-1 items-center justify-end gap-2 md:flex-none">
+          <div className="flex flex-1 items-center justify-end gap-1 md:flex-none">
+            <LanguageSwitcher />
             <button
               onClick={clearAlerts}
               className="relative rounded-md p-2 text-foreground hover:bg-muted"
-              aria-label={`${unreadCount} تنبيهات غير مطّلع عليها`}
-              title="تمييز تنبيهات المراقبة كمطّلع عليها"
+              aria-label={`${unreadCount} ${t("aiMonitoring.title")}`}
+              title={t("toast.updated")}
             >
               <Bell className="size-5" />
-              {unreadCount > 0 && <span className="absolute -right-1 -top-1 flex min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-xs font-bold text-destructive-foreground">{unreadCount > 99 ? "99+" : unreadCount}</span>}
+              {unreadCount > 0 && <span className="absolute -end-1 -top-1 flex min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-xs font-bold text-destructive-foreground">{unreadCount > 99 ? "99+" : unreadCount}</span>}
             </button>
           </div>
         </header>

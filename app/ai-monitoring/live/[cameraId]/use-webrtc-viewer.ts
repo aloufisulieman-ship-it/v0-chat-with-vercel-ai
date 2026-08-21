@@ -49,7 +49,7 @@ export function useWebrtcViewer(opts: { cameraId: string; enabled: boolean }) {
   const [talkEnabled, setTalkEnabled] = useState(false)
   // هل المايكروفون يبثّ صوت المدير حالياً (غير مكتوم)؟ لعرض مؤشر "تتحدث الآن".
   const [talkActive, setTalkActive] = useState(false)
-  // رسالة خطأ المايكروفون بالعربية (رفض الصلاحية/عدم وجود جهاز…).
+  // مفتاح ترجمة خطأ المايكروفون (يُترجَم لدى المستهلك عبر aiMonitoring.cam.*).
   const [talkError, setTalkError] = useState<string | null>(null)
   // مسار وتدفّق المايكروفون المحلي — يُحفظ في refs ليبقى ثابتاً عبر إعادة التفاوض.
   const micStreamRef = useRef<MediaStream | null>(null)
@@ -270,7 +270,7 @@ export function useWebrtcViewer(opts: { cameraId: string; enabled: boolean }) {
 
     // أول تفعيل: اطلب صلاحية المايكروفون من المتصفح.
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-      setTalkError("المتصفح لا يدعم الوصول إلى المايكروفون.")
+      setTalkError("micUnsupported")
       return
     }
     try {
@@ -280,7 +280,7 @@ export function useWebrtcViewer(opts: { cameraId: string; enabled: boolean }) {
       const track = stream.getAudioTracks()[0]
       if (!track) {
         stream.getTracks().forEach((t) => t.stop())
-        setTalkError("تعذّر العثور على مايكروفون متاح.")
+        setTalkError("micNotFound")
         return
       }
       track.enabled = true
@@ -292,11 +292,11 @@ export function useWebrtcViewer(opts: { cameraId: string; enabled: boolean }) {
     } catch (e) {
       const err = e as DOMException
       if (err?.name === "NotAllowedError" || err?.name === "SecurityError") {
-        setTalkError("تم رفض إذن المايكروفون. فعّله من إعدادات المتصفح لتتمكّن من التحدّث.")
+        setTalkError("micDenied")
       } else if (err?.name === "NotFoundError" || err?.name === "OverconstrainedError") {
-        setTalkError("لا يوجد مايكروفون متاح على هذا الجهاز.")
+        setTalkError("micNoDevice")
       } else {
-        setTalkError("تعذّر تشغيل المايكروفون. حاول مرة أخرى.")
+        setTalkError("micGeneric")
       }
     }
   }, [talkEnabled])

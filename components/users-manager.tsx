@@ -32,8 +32,10 @@ import {
   updateUserPermissions,
 } from "@/app/actions/users"
 import { parsePermissions } from "@/lib/permissions"
-import { departmentOptions, departmentLabels, moduleLabels } from "@/lib/labels"
+import { departmentOptions } from "@/lib/labels"
 import { toast } from "@/hooks/use-toast"
+import { useI18n } from "@/lib/i18n/client"
+import { departmentLabel, moduleLabel } from "@/lib/i18n/labels"
 
 type UserRow = {
   id: string
@@ -46,22 +48,22 @@ type UserRow = {
   createdAt: Date
 }
 
-const roleLabels: Record<string, string> = {
-  admin: "مدير النظام",
-  manager: "مدير",
-  user: "مستخدم",
-}
-
 const statusStyles: Record<string, string> = {
   approved: "bg-primary/15 text-primary",
   pending: "bg-accent/15 text-accent",
   rejected: "bg-destructive/15 text-destructive",
 }
 
-const statusLabels: Record<string, string> = {
-  approved: "معتمد",
-  pending: "بانتظار الموافقة",
-  rejected: "مرفوض",
+const roleLabelKeys: Record<string, string> = {
+  admin: "usersManager.roleAdmin",
+  manager: "usersManager.roleManager",
+  user: "usersManager.roleUser",
+}
+
+const statusLabelKeys: Record<string, string> = {
+  approved: "usersManager.statusApproved",
+  pending: "usersManager.statusPending",
+  rejected: "usersManager.statusRejected",
 }
 
 function RoleSelect({
@@ -75,15 +77,16 @@ function RoleSelect({
   disabled: boolean
   onChange: (id: string, role: "admin" | "manager" | "user") => void
 }) {
+  const { t } = useI18n()
   return (
     <Select value={role} disabled={disabled} onValueChange={(v) => onChange(userId, v as "admin" | "manager" | "user")}>
       <SelectTrigger className="h-9 w-36">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="admin">مدير النظام</SelectItem>
-        <SelectItem value="manager">مدير</SelectItem>
-        <SelectItem value="user">مستخدم</SelectItem>
+        <SelectItem value="admin">{t("usersManager.roleAdmin")}</SelectItem>
+        <SelectItem value="manager">{t("usersManager.roleManager")}</SelectItem>
+        <SelectItem value="user">{t("usersManager.roleUser")}</SelectItem>
       </SelectContent>
     </Select>
   )
@@ -96,15 +99,16 @@ function DepartmentSelect({
   value: string
   onChange: (v: string) => void
 }) {
+  const { t } = useI18n()
   return (
     <Select value={value || undefined} onValueChange={onChange}>
       <SelectTrigger>
-        <SelectValue placeholder="اختر القسم" />
+        <SelectValue placeholder={t("usersManager.selectDepartment")} />
       </SelectTrigger>
       <SelectContent>
         {departmentOptions.map((d) => (
           <SelectItem key={d.value} value={d.value}>
-            {d.label}
+            {departmentLabel(t, d.value)}
           </SelectItem>
         ))}
       </SelectContent>
@@ -113,6 +117,7 @@ function DepartmentSelect({
 }
 
 function CreateUserDialog() {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
@@ -135,10 +140,10 @@ function CreateUserDialog() {
     startTransition(async () => {
       const res = await createUser({ name, email, password, role, department, permissions: perms })
       if (res.error) {
-        toast({ title: "تعذّر الإنشاء", description: res.error, variant: "destructive" })
+        toast({ title: t("usersManager.createFailed"), description: res.error, variant: "destructive" })
         return
       }
-      toast({ title: "تم إنشاء المستخدم", description: `${name} يمكنه الآن تسجيل الدخول.` })
+      toast({ title: t("usersManager.createdTitle"), description: t("usersManager.createdDesc").replace("{name}", name) })
       reset()
       setOpen(false)
     })
@@ -155,22 +160,22 @@ function CreateUserDialog() {
       <DialogTrigger asChild>
         <Button className="gap-2">
           <UserPlus className="size-4" />
-          إضافة مستخدم
+          {t("usersManager.addUser")}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>إضافة مستخدم جديد</DialogTitle>
-          <DialogDescription>أنشئ حساباً وحدّد قسمه والصفحات المسموح له بالوصول إليها.</DialogDescription>
+          <DialogTitle>{t("usersManager.addUserTitle")}</DialogTitle>
+          <DialogDescription>{t("usersManager.addUserDesc")}</DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="cu-name">الاسم</Label>
-            <Input id="cu-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="مثال: محمد أحمد" />
+            <Label htmlFor="cu-name">{t("usersManager.nameLabel")}</Label>
+            <Input id="cu-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("usersManager.namePlaceholder")} />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="cu-email">البريد الإلكتروني</Label>
+            <Label htmlFor="cu-email">{t("usersManager.emailLabel")}</Label>
             <Input
               id="cu-email"
               type="email"
@@ -181,40 +186,40 @@ function CreateUserDialog() {
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="cu-password">كلمة المرور</Label>
+            <Label htmlFor="cu-password">{t("usersManager.passwordLabel")}</Label>
             <Input
               id="cu-password"
               type="text"
               dir="ltr"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="8 أحرف على الأقل"
+              placeholder={t("usersManager.passwordPlaceholder")}
             />
           </div>
           <div className="grid gap-2">
-            <Label>القسم</Label>
+            <Label>{t("usersManager.departmentLabel")}</Label>
             <DepartmentSelect value={department} onChange={setDepartment} />
           </div>
           <div className="grid gap-2">
-            <Label>الدور</Label>
+            <Label>{t("usersManager.roleLabel")}</Label>
             <Select value={role} onValueChange={(v) => setRole(v as "admin" | "manager" | "user")}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="admin">مدير النظام</SelectItem>
-                <SelectItem value="manager">مدير</SelectItem>
-                <SelectItem value="user">مستخدم</SelectItem>
+                <SelectItem value="admin">{t("usersManager.roleAdmin")}</SelectItem>
+                <SelectItem value="manager">{t("usersManager.roleManager")}</SelectItem>
+                <SelectItem value="user">{t("usersManager.roleUser")}</SelectItem>
               </SelectContent>
             </Select>
             {role === "admin" && (
-              <p className="text-xs text-muted-foreground">مدير النظام يملك صلاحية كاملة على جميع الصفحات.</p>
+              <p className="text-xs text-muted-foreground">{t("usersManager.adminAllAccess")}</p>
             )}
           </div>
 
           {role !== "admin" && (
             <div className="grid gap-2">
-              <Label>الصفحات المسموح بها</Label>
+              <Label>{t("usersManager.allowedPages")}</Label>
               <PermissionsEditor value={perms} onChange={setPerms} />
             </div>
           )}
@@ -222,11 +227,11 @@ function CreateUserDialog() {
 
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)} disabled={isPending}>
-            إلغاء
+            {t("usersManager.cancel")}
           </Button>
           <Button onClick={submit} disabled={isPending} className="gap-2">
             {isPending && <Loader2 className="size-4 animate-spin" />}
-            إنشاء الحساب
+            {t("usersManager.createAccount")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -235,6 +240,7 @@ function CreateUserDialog() {
 }
 
 function PermissionsDialog({ user }: { user: UserRow }) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [department, setDepartment] = useState(user.department || "")
   const [perms, setPerms] = useState<string[]>(() => parsePermissions(user.permissions))
@@ -243,7 +249,7 @@ function PermissionsDialog({ user }: { user: UserRow }) {
   function save() {
     startTransition(async () => {
       await updateUserPermissions(user.id, department, perms)
-      toast({ title: "تم حفظ الصلاحيات", description: `تم تحديث صلاحيات ${user.name}.` })
+      toast({ title: t("usersManager.permsSaved"), description: t("usersManager.permsSavedDesc").replace("{name}", user.name) })
       setOpen(false)
     })
   }
@@ -262,31 +268,31 @@ function PermissionsDialog({ user }: { user: UserRow }) {
       <DialogTrigger asChild>
         <Button size="sm" variant="outline" className="gap-1.5 bg-transparent">
           <SlidersHorizontal className="size-4" />
-          الصلاحيات
+          {t("usersManager.permissions")}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>صلاحيات {user.name}</DialogTitle>
-          <DialogDescription>حدّد القسم والصفحات التي يمكن لهذا المستخدم الوصول إليها.</DialogDescription>
+          <DialogTitle>{t("usersManager.permsDialogTitle").replace("{name}", user.name)}</DialogTitle>
+          <DialogDescription>{t("usersManager.permsDialogDesc")}</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
           <div className="grid gap-2">
-            <Label>القسم</Label>
+            <Label>{t("usersManager.departmentLabel")}</Label>
             <DepartmentSelect value={department} onChange={setDepartment} />
           </div>
           <div className="grid gap-2">
-            <Label>الصفحات المسموح بها</Label>
+            <Label>{t("usersManager.allowedPages")}</Label>
             <PermissionsEditor value={perms} onChange={setPerms} />
           </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)} disabled={isPending}>
-            إلغاء
+            {t("usersManager.cancel")}
           </Button>
           <Button onClick={save} disabled={isPending} className="gap-2">
             {isPending && <Loader2 className="size-4 animate-spin" />}
-            حفظ
+            {t("usersManager.save")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -295,14 +301,15 @@ function PermissionsDialog({ user }: { user: UserRow }) {
 }
 
 function PermissionsSummary({ user }: { user: UserRow }) {
+  const { t } = useI18n()
   if (user.role === "admin") {
-    return <span className="text-xs font-medium text-primary">كل الصلاحيات</span>
+    return <span className="text-xs font-medium text-primary">{t("usersManager.allPermissions")}</span>
   }
   const mods = parsePermissions(user.permissions)
   if (mods.length === 0) {
-    return <span className="text-xs text-muted-foreground">لا توجد صلاحيات</span>
+    return <span className="text-xs text-muted-foreground">{t("usersManager.noPermissions")}</span>
   }
-  const shown = mods.slice(0, 3).map((m) => moduleLabels[m] ?? m)
+  const shown = mods.slice(0, 3).map((m) => moduleLabel(t, m))
   return (
     <div className="flex flex-wrap gap-1">
       {shown.map((label) => (
@@ -320,6 +327,7 @@ function PermissionsSummary({ user }: { user: UserRow }) {
 }
 
 export function UsersManager({ users, currentUserId }: { users: UserRow[]; currentUserId: string }) {
+  const { t } = useI18n()
   const [isPending, startTransition] = useTransition()
   const [busyId, setBusyId] = useState<string | null>(null)
 
@@ -337,7 +345,7 @@ export function UsersManager({ users, currentUserId }: { users: UserRow[]; curre
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          {users.length} {users.length === 1 ? "مستخدم" : "مستخدمين"} في النظام
+          {users.length} {users.length === 1 ? t("usersManager.userCountOne") : t("usersManager.userCountMany")} {t("usersManager.inSystem")}
         </p>
         <CreateUserDialog />
       </div>
@@ -346,8 +354,8 @@ export function UsersManager({ users, currentUserId }: { users: UserRow[]; curre
         <Card className="border-accent/40 bg-accent/5 p-4">
           <p className="text-sm font-medium text-foreground">
             {pending.length === 1
-              ? "يوجد طلب وصول واحد بانتظار موافقتك."
-              : `يوجد ${pending.length} طلبات وصول بانتظار موافقتك.`}
+              ? t("usersManager.onePending")
+              : t("usersManager.manyPending").replace("{count}", String(pending.length))}
           </p>
         </Card>
       )}
@@ -357,13 +365,13 @@ export function UsersManager({ users, currentUserId }: { users: UserRow[]; curre
           <table className="w-full text-right text-sm">
             <thead className="border-b border-border bg-muted/40 text-xs text-muted-foreground">
               <tr>
-                <th className="px-4 py-3 font-medium">الاسم</th>
-                <th className="px-4 py-3 font-medium">البريد</th>
-                <th className="px-4 py-3 font-medium">القسم</th>
-                <th className="px-4 py-3 font-medium">الصلاحيات</th>
-                <th className="px-4 py-3 font-medium">الحالة</th>
-                <th className="px-4 py-3 font-medium">الدور</th>
-                <th className="px-4 py-3 font-medium text-center">الإجراءات</th>
+                <th className="px-4 py-3 font-medium">{t("usersManager.colName")}</th>
+                <th className="px-4 py-3 font-medium">{t("usersManager.colEmail")}</th>
+                <th className="px-4 py-3 font-medium">{t("usersManager.colDepartment")}</th>
+                <th className="px-4 py-3 font-medium">{t("usersManager.colPermissions")}</th>
+                <th className="px-4 py-3 font-medium">{t("usersManager.colStatus")}</th>
+                <th className="px-4 py-3 font-medium">{t("usersManager.colRole")}</th>
+                <th className="px-4 py-3 font-medium text-center">{t("usersManager.colActions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -376,14 +384,14 @@ export function UsersManager({ users, currentUserId }: { users: UserRow[]; curre
                       <div className="flex items-center gap-2 font-medium text-foreground">
                         {u.role === "admin" && <ShieldCheck className="size-4 text-primary" />}
                         {u.name}
-                        {isSelf && <span className="text-xs text-muted-foreground">(أنت)</span>}
+                        {isSelf && <span className="text-xs text-muted-foreground">{t("usersManager.you")}</span>}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground" dir="ltr">
                       {u.email}
                     </td>
                     <td className="px-4 py-3 text-foreground">
-                      {u.department ? departmentLabels[u.department] ?? u.department : "—"}
+                      {u.department ? departmentLabel(t, u.department) : "—"}
                     </td>
                     <td className="px-4 py-3">
                       <PermissionsSummary user={u} />
@@ -392,14 +400,14 @@ export function UsersManager({ users, currentUserId }: { users: UserRow[]; curre
                       <span
                         className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusStyles[u.status] ?? ""}`}
                       >
-                        {statusLabels[u.status] ?? u.status}
+                        {statusLabelKeys[u.status] ? t(statusLabelKeys[u.status]) : u.status}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       {isSelf ? (
                         <span className="inline-flex items-center gap-1.5 text-sm text-foreground">
                           <UserCog className="size-4 text-muted-foreground" />
-                          {roleLabels[u.role] ?? u.role}
+                          {roleLabelKeys[u.role] ? t(roleLabelKeys[u.role]) : u.role}
                         </span>
                       ) : (
                         <RoleSelect
@@ -421,7 +429,7 @@ export function UsersManager({ users, currentUserId }: { users: UserRow[]; curre
                             className="gap-1"
                           >
                             <Check className="size-4" />
-                            موافقة
+                            {t("usersManager.approve")}
                           </Button>
                         )}
                         {!isSelf && u.status !== "rejected" && (
@@ -433,7 +441,7 @@ export function UsersManager({ users, currentUserId }: { users: UserRow[]; curre
                             className="gap-1"
                           >
                             <X className="size-4" />
-                            رفض
+                            {t("usersManager.reject")}
                           </Button>
                         )}
                         {!isSelf && (
@@ -442,7 +450,7 @@ export function UsersManager({ users, currentUserId }: { users: UserRow[]; curre
                             variant="ghost"
                             disabled={busy}
                             onClick={() => run(u.id, () => deleteUser(u.id))}
-                            aria-label="حذف المستخدم"
+                            aria-label={t("usersManager.deleteUser")}
                             className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                           >
                             <Trash2 className="size-4" />

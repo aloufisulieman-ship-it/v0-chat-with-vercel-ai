@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/hooks/use-toast"
 import { updatePermitStatus } from "@/app/actions/hse"
+import { useI18n } from "@/lib/i18n/client"
 
 export function PermitApprovalActions({
   permitId,
@@ -24,6 +25,7 @@ export function PermitApprovalActions({
   permitId: number
   approverName: string
 }) {
+  const { t, dir } = useI18n()
   const [mode, setMode] = useState<null | "approve" | "reject">(null)
   const [signature, setSignature] = useState("")
   const [notes, setNotes] = useState("")
@@ -39,7 +41,7 @@ export function PermitApprovalActions({
 
   function submit() {
     if (mode === "reject" && !reason.trim()) {
-      toast({ title: "سبب الرفض مطلوب", variant: "destructive" })
+      toast({ title: t("permitApproval.reasonRequired"), variant: "destructive" })
       return
     }
     startTransition(async () => {
@@ -51,14 +53,14 @@ export function PermitApprovalActions({
           mode === "approve" ? notes : reason,
         )
         toast({
-          title: mode === "approve" ? "تم اعتماد التصريح" : "تم رفض التصريح",
-          description: mode === "approve" ? "أصبح التصريح معتمداً." : "تم تسجيل سبب الرفض.",
+          title: mode === "approve" ? t("permitApproval.approvedTitle") : t("permitApproval.rejectedTitle"),
+          description: mode === "approve" ? t("permitApproval.approvedDesc") : t("permitApproval.rejectedDesc"),
         })
         close()
       } catch (err) {
         toast({
-          title: "تعذّر تنفيذ الإجراء",
-          description: err instanceof Error ? err.message : "حدث خطأ غير متوقع.",
+          title: t("permitApproval.actionFailedTitle"),
+          description: err instanceof Error ? err.message : t("permitApproval.actionFailedDesc"),
           variant: "destructive",
         })
       }
@@ -71,36 +73,34 @@ export function PermitApprovalActions({
         <button
           onClick={() => setMode("approve")}
           className="flex items-center gap-1 rounded-md border border-green-500/30 bg-green-500/10 px-2 py-1 text-xs font-medium text-green-600 transition-colors hover:bg-green-500/20 dark:text-green-400"
-          aria-label="موافقة"
+          aria-label={t("permitApproval.approve")}
         >
           <CheckCircle className="size-3.5" />
-          موافقة
+          {t("permitApproval.approve")}
         </button>
         <button
           onClick={() => setMode("reject")}
           className="flex items-center gap-1 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1 text-xs font-medium text-destructive transition-colors hover:bg-destructive/20"
-          aria-label="رفض"
+          aria-label={t("permitApproval.reject")}
         >
           <XCircle className="size-3.5" />
-          رفض
+          {t("permitApproval.reject")}
         </button>
       </div>
 
       <Dialog open={mode !== null} onOpenChange={(o) => (o ? null : close())}>
-        <DialogContent dir="rtl">
+        <DialogContent dir={dir}>
           <DialogHeader>
-            <DialogTitle>{mode === "approve" ? "اعتماد تصريح العمل" : "رفض تصريح العمل"}</DialogTitle>
+            <DialogTitle>{mode === "approve" ? t("permitApproval.approveTitle") : t("permitApproval.rejectTitle")}</DialogTitle>
             <DialogDescription>
-              {mode === "approve"
-                ? "أدخل توقيع المدير وملاحظة اختيارية لاعتماد التصريح."
-                : "يرجى إدخال سبب رفض التصريح (إجباري)."}
+              {mode === "approve" ? t("permitApproval.approveDesc") : t("permitApproval.rejectDesc")}
             </DialogDescription>
           </DialogHeader>
 
           {mode === "approve" ? (
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="signature">توقيع المدير</Label>
+                <Label htmlFor="signature">{t("permitApproval.managerSignature")}</Label>
                 <Input
                   id="signature"
                   value={signature}
@@ -109,24 +109,24 @@ export function PermitApprovalActions({
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="notes">ملاحظة (اختياري)</Label>
+                <Label htmlFor="notes">{t("permitApproval.noteOptional")}</Label>
                 <Textarea
                   id="notes"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="أي ملاحظات إضافية..."
+                  placeholder={t("permitApproval.notePlaceholder")}
                   rows={3}
                 />
               </div>
             </div>
           ) : (
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="reason">سبب الرفض *</Label>
+              <Label htmlFor="reason">{t("permitApproval.reasonLabel")}</Label>
               <Textarea
                 id="reason"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                placeholder="اذكر سبب رفض التصريح..."
+                placeholder={t("permitApproval.reasonPlaceholder")}
                 rows={4}
                 required
               />
@@ -135,7 +135,7 @@ export function PermitApprovalActions({
 
           <DialogFooter>
             <Button variant="outline" onClick={close} disabled={isPending}>
-              إلغاء
+              {t("permitApproval.cancel")}
             </Button>
             <Button
               onClick={submit}
@@ -146,7 +146,7 @@ export function PermitApprovalActions({
                   : "bg-destructive text-destructive-foreground hover:bg-destructive/90"
               }
             >
-              {mode === "approve" ? "اعتماد" : "تأكيد الرفض"}
+              {mode === "approve" ? t("permitApproval.confirmApprove") : t("permitApproval.confirmReject")}
             </Button>
           </DialogFooter>
         </DialogContent>

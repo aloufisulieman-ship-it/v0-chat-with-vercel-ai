@@ -8,7 +8,9 @@ import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { requireModule } from "@/lib/session"
 import { getInspections, createInspection, deleteInspection } from "@/app/actions/hse"
-import { inspectionStatusOptions, statusLabels } from "@/lib/labels"
+import { inspectionStatusOptions } from "@/lib/labels"
+import { getServerT } from "@/lib/i18n/server"
+import { statusLabel } from "@/lib/i18n/labels"
 import { cn } from "@/lib/utils"
 
 type Inspection = Awaited<ReturnType<typeof getInspections>>[number]
@@ -25,32 +27,33 @@ function ScoreBar({ score }: { score: number }) {
   )
 }
 
-const fields: FieldDef[] = [
-  { name: "title", label: "نوع التفتيش", required: true, full: true, placeholder: "مثال: تفتيش معدات مكافحة الحريق" },
-  { name: "area", label: "المنطقة", placeholder: "مثال: ورشة الإنتاج" },
-  { name: "inspector", label: "المفتش" },
-  { name: "compliance", label: "نسبة الالتزام %", type: "number", min: 0, max: 100, defaultValue: 100 },
-  { name: "findings", label: "عدد الملاحظات", type: "number", min: 0, defaultValue: 0 },
-  { name: "status", label: "الحالة", type: "select", options: inspectionStatusOptions },
-  { name: "inspectionDate", label: "تاريخ التفتيش", type: "date" },
-]
-
 export default async function InspectionsPage() {
   const user = await requireModule("inspections")
   const inspections = await getInspections()
+  const { t } = await getServerT()
+
+  const fields: FieldDef[] = [
+    { name: "title", label: t("inspectionsMod.fType"), required: true, full: true, placeholder: t("inspectionsMod.fTypePlaceholder") },
+    { name: "area", label: t("inspectionsMod.fArea"), placeholder: t("inspectionsMod.fAreaPlaceholder") },
+    { name: "inspector", label: t("inspectionsMod.fInspector") },
+    { name: "compliance", label: t("inspectionsMod.fCompliancePct"), type: "number", min: 0, max: 100, defaultValue: 100 },
+    { name: "findings", label: t("inspectionsMod.fFindings"), type: "number", min: 0, defaultValue: 0 },
+    { name: "status", label: t("inspectionsMod.fStatus"), type: "select", options: inspectionStatusOptions.map((o) => ({ value: o.value, label: statusLabel(t, o.value) })) },
+    { name: "inspectionDate", label: t("inspectionsMod.fDate"), type: "date" },
+  ]
 
   const avg = inspections.length ? Math.round(inspections.reduce((a, b) => a + (b.compliance ?? 0), 0) / inspections.length) : 0
   const findings = inspections.reduce((a, b) => a + (b.findings ?? 0), 0)
   const open = inspections.filter((i) => i.status !== "closed").length
 
   const columns: Column<Inspection>[] = [
-    { key: "title", header: "نوع التفتيش", render: (r) => <span className="font-medium text-foreground">{r.title}</span> },
-    { key: "area", header: "المنطقة", render: (r) => <span className="text-muted-foreground">{r.area || "-"}</span> },
-    { key: "inspector", header: "المفتش", render: (r) => <span className="text-muted-foreground">{r.inspector || "-"}</span> },
-    { key: "compliance", header: "الالتزام", render: (r) => <ScoreBar score={r.compliance ?? 0} /> },
-    { key: "findings", header: "ملاحظات", className: "text-center" },
-    { key: "status", header: "الحالة", render: (r) => <StatusBadge status={r.status ?? "scheduled"} /> },
-    { key: "inspectionDate", header: "التاريخ", render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.inspectionDate ?? "-"}</span> },
+    { key: "title", header: t("inspectionsMod.fType"), render: (r) => <span className="font-medium text-foreground">{r.title}</span> },
+    { key: "area", header: t("inspectionsMod.fArea"), render: (r) => <span className="text-muted-foreground">{r.area || "-"}</span> },
+    { key: "inspector", header: t("inspectionsMod.fInspector"), render: (r) => <span className="text-muted-foreground">{r.inspector || "-"}</span> },
+    { key: "compliance", header: t("inspectionsMod.fComplianceCol"), render: (r) => <ScoreBar score={r.compliance ?? 0} /> },
+    { key: "findings", header: t("inspectionsMod.fFindingsCol"), className: "text-center" },
+    { key: "status", header: t("inspectionsMod.fStatus"), render: (r) => <StatusBadge status={r.status ?? "scheduled"} /> },
+    { key: "inspectionDate", header: t("inspectionsMod.fDateCol"), render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.inspectionDate ?? "-"}</span> },
     {
       key: "actions",
       header: "",
@@ -61,15 +64,15 @@ export default async function InspectionsPage() {
             module="inspections"
             recordId={r.id}
             title={r.title}
-            subtitle="تقرير تفتيش"
+            subtitle={t("inspectionsMod.detailsSubtitle")}
             fields={[
-              { label: "نوع التفتيش", value: r.title },
-              { label: "المنطقة", value: r.area || "-" },
-              { label: "المفتش", value: r.inspector || "-" },
-              { label: "نسبة الالتزام", value: `${r.compliance ?? 0}%` },
-              { label: "عدد الملاحظات", value: String(r.findings ?? 0) },
-              { label: "الحالة", value: statusLabels[r.status ?? ""] ?? "-" },
-              { label: "تاريخ التفتيش", value: r.inspectionDate ?? "-" },
+              { label: t("inspectionsMod.fType"), value: r.title },
+              { label: t("inspectionsMod.fArea"), value: r.area || "-" },
+              { label: t("inspectionsMod.fInspector"), value: r.inspector || "-" },
+              { label: t("inspectionsMod.fCompliance"), value: `${r.compliance ?? 0}%` },
+              { label: t("inspectionsMod.fFindings"), value: String(r.findings ?? 0) },
+              { label: t("inspectionsMod.fStatus"), value: r.status ? statusLabel(t, r.status) : "-" },
+              { label: t("inspectionsMod.fDate"), value: r.inspectionDate ?? "-" },
             ]}
             initialAttachments={[]}
           />
@@ -81,21 +84,21 @@ export default async function InspectionsPage() {
 
   return (
     <AppShell
-      title="عمليات التفتيش"
-      subtitle="جدولة وتنفيذ عمليات التفتيش الميدانية ومتابعة الملاحظات"
+      title={t("pageHeaders.inspectionsTitle")}
+      subtitle={t("pageHeaders.inspectionsSubtitle")}
       user={user}
-      action={<RecordDialog title="تفتيش جديد" description="سجّل عملية تفتيش جديدة." triggerLabel="تفتيش جديد" fields={fields} action={createInspection} />}
+      action={<RecordDialog title={t("inspectionsMod.dialogTitle")} description={t("inspectionsMod.dialogDesc")} triggerLabel={t("inspectionsMod.trigger")} fields={fields} action={createInspection} />}
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="إجمالي عمليات التفتيش" value={inspections.length} icon={ClipboardCheck} tone="blue" />
-        <KpiCard label="متوسط الالتزام" value={avg} unit="%" icon={Gauge} tone="primary" />
-        <KpiCard label="إجمالي الملاحظات" value={findings} icon={AlertCircle} tone="accent" />
-        <KpiCard label="قيد المتابعة" value={open} icon={TrendingUp} tone="destructive" />
+        <KpiCard label={t("inspectionsMod.kpiTotal")} value={inspections.length} icon={ClipboardCheck} tone="blue" />
+        <KpiCard label={t("inspectionsMod.kpiAvg")} value={avg} unit="%" icon={Gauge} tone="primary" />
+        <KpiCard label={t("inspectionsMod.kpiFindings")} value={findings} icon={AlertCircle} tone="accent" />
+        <KpiCard label={t("inspectionsMod.kpiOpen")} value={open} icon={TrendingUp} tone="destructive" />
       </div>
 
       <div className="mt-6">
-        <h2 className="mb-3 text-lg font-semibold text-foreground">سجل عمليات التفتيش</h2>
-        <DataTable columns={columns} rows={inspections} emptyMessage="لا توجد عمليات تفتيش. أضف تفتيشاً جديداً للبدء." />
+        <h2 className="mb-3 text-lg font-semibold text-foreground">{t("inspectionsMod.registryTitle")}</h2>
+        <DataTable columns={columns} rows={inspections} emptyMessage={t("inspectionsMod.emptyMessage")} />
       </div>
     </AppShell>
   )

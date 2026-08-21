@@ -1,7 +1,11 @@
+"use client"
+
 import { Monitor, FileText } from "lucide-react"
+import { useI18n } from "@/lib/i18n/client"
 
 // شارة تميّز مصدر إدخال المخالفة: يدوية (نموذج ورقي) أو إلكترونية (عبر النظام).
 export function EntryModeBadge({ entryMode }: { entryMode: string | null | undefined }) {
+  const { t } = useI18n()
   const isManual = entryMode === "manual"
   return (
     <span
@@ -10,7 +14,7 @@ export function EntryModeBadge({ entryMode }: { entryMode: string | null | undef
       }`}
     >
       {isManual ? <FileText className="size-3" /> : <Monitor className="size-3" />}
-      {isManual ? "يدوية" : "إلكترونية"}
+      {isManual ? t("badges.entryManual") : t("badges.entryElectronic")}
     </span>
   )
 }

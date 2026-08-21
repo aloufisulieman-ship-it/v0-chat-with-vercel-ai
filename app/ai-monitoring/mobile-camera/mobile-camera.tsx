@@ -19,13 +19,22 @@ import {
   MicOff,
   Volume2,
   SwitchCamera,
+  Car,
+  IdCard,
+  Bike,
+  ShieldAlert,
+  ScanLine,
 } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
-import { detectionTypeLabels, severityLabels, severityStyles } from "@/lib/ai-monitoring"
+import { severityStyles } from "@/lib/ai-monitoring"
 import { upload } from "@vercel/blob/client"
 import { createRecording } from "@/app/actions/recordings"
+import { getRecentReads, type UnifiedRead } from "@/app/actions/ai-recognition"
+import { RECOGNITION_MODES, type RecognitionMode } from "@/lib/ai-recognition"
 import { useWebrtcBroadcaster } from "./use-webrtc-broadcaster"
+import { useI18n } from "@/lib/i18n/client"
+import { detectionTypeLabel, severityLabel } from "@/lib/i18n/labels"
 
 // البث الحي الفعلي يذهب الآن عبر WebRTC (ندّ لِند) مباشرةً، فلم تعد لقطات Blob
 // تحمل الفيديو الحي. دورها اقتصر على: (1) صورة مصغّرة للجدار/اللوحة عندما لا يكون
@@ -40,12 +49,36 @@ const CONNECTED_THRESHOLD_MS = 6000
 const MAX_WIDTH = 640
 const JPEG_QUALITY = 0.45
 
+type PlateResult = { value: string; confidence: number }
+type EmployeeResult = { value: string; confidence: number; matched: boolean; name: string; department: string }
+type TuktukResult = {
+  value: string
+  confidence: number
+  permitStatus: "valid" | "expired" | "not_found"
+  driverName: string
+  documentNo: string
+}
+type PrefillResult = {
+  source: "employee_id" | "tuktuk" | "plate"
+  employeeName?: string
+  employeeNo?: string
+  driverName?: string
+  vehicleNo?: string
+}
+
 type LastResult = {
   at: number
   count: number
   detections: { type: string; severity: string; confidence: number; description: string }[]
+  plate?: PlateResult
+  employee?: EmployeeResult
+  tuktuk?: TuktukResult
+  prefill?: PrefillResult
   error?: string
 }
+
+// أوضاع التعرّف الافتراضية عند فتح الصفحة (المخالفات مفعّلة كما في السابق).
+const DEFAULT_MODES: RecognitionMode[] = ["violations"]
 
 // اختيار أفضل صيغة تسجيل مدعومة في المتصفح (WebM أولاً ثم MP4).
 function pickRecordingMime(): { mimeType: string; ext: string } {
@@ -75,6 +108,7 @@ function formatDuration(totalSeconds: number): string {
 }
 
 export function MobileCamera() {
+  const { t, formatNumber, locale } = useI18n()
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -128,6 +162,18 @@ export function MobileCamera() {
   const [lastResult, setLastResult] = useState<LastResult | null>(null)
   const [now, setNow] = useState(() => Date.now())
 
+  // أوضاع التعرّف النشطة (قابلة للتعديل قبل بدء الجلسة). modesRef يُقرأ داخل حلقة
+  // التحليل دون إعادة إنشائها. نحتفظ بها في localStorage تسهيلاً على المفتش.
+  const [modes, setModes] = useState<RecognitionMode[]>(DEFAULT_MODES)
+  const modesRef = useRef<RecognitionMode[]>(DEFAULT_MODES)
+  useEffect(() => {
+    modesRef.current = modes
+  }, [modes])
+
+  // آخر القراءات (لوحات/أرقام وظيفية/توك توك) لعرضها أسفل الصفحة.
+  const [recentReads, setRecentReads] = useState<UnifiedRead[]>([])
+  const [loadingReads, setLoadingReads] = useState(false)
+
   // حالة التسجيل.
   const [recording, setRecording] = useState(false)
   const [recordSeconds, setRecordSeconds] = useState(0)
@@ -145,6 +191,15 @@ export function MobileCamera() {
   useEffect(() => {
     setInspectorName(localStorage.getItem("aiCam.inspector") ?? "")
     setLocation(localStorage.getItem("aiCam.location") ?? "")
+    try {
+      const saved = JSON.parse(localStorage.getItem("aiCam.modes") ?? "null")
+      if (Array.isArray(saved)) {
+        const valid = saved.filter((m): m is RecognitionMode => RECOGNITION_MODES.includes(m))
+        if (valid.length) setModes(valid)
+      }
+    } catch {
+      /* تجاهل تخزين تالف */
+    }
   }, [])
 
   useEffect(() => {
@@ -153,19 +208,33 @@ export function MobileCamera() {
   useEffect(() => {
     localStorage.setItem("aiCam.location", location)
   }, [location])
+  useEffect(() => {
+    localStorage.setItem("aiCam.modes", JSON.stringify(modes))
+  }, [modes])
+
+  // تبديل وضع تعرّف (لا يُسمح بإفراغ كل الأوضاع — يبقى وضع واحد على الأقل).
+  const toggleMode = useCallback((mode: RecognitionMode) => {
+    setModes((prev) => {
+      if (prev.includes(mode)) {
+        const next = prev.filter((m) => m !== mode)
+        return next.length ? next : prev
+      }
+      return [...prev, mode]
+    })
+  }, [])
 
   // بدء الجلسة: يتطلب تعبئة الحقلين الإلزاميين قبل تفعيل أزرار البث/التسجيل.
   const bothFilled = inspectorName.trim().length > 0 && location.trim().length > 0
   const startSession = useCallback(() => {
     if (!bothFilled) {
-      setSessionError("يرجى تعبئة اسم المفتش/الموظف والموقع قبل بدء الجلسة.")
+      setSessionError(t("aiMonitoring.cam.sessionMissing"))
       return
     }
     setSessionError(null)
     setSessionStarted(true)
   }, [bothFilled])
 
-  // تحديث الحالة المعروضة لاتجاه الكاميرا (أمامي/خلفي) مع مرجع متزامن للاستخدام داخل
+  // تحديث الحالة المعر��ضة لاتجاه الكاميرا (أمامي/خلفي) مع مرجع متزامن للاستخدام داخل
   // ردود النداء دون تبعيات.
   const applyFacing = useCallback((facing: string) => {
     currentFacingRef.current = facing
@@ -188,7 +257,7 @@ export function MobileCamera() {
   const ensureStream = useCallback(async (): Promise<MediaStream> => {
     if (streamRef.current) return streamRef.current
     if (!navigator.mediaDevices?.getUserMedia) {
-      throw new Error("متصفحك لا يدعم الوصول إلى الكاميرا.")
+      throw new Error(t("aiMonitoring.cam.camUnsupported"))
     }
     // قيود 720p @ 24fps: توازن بين الوضوح والتأخير المنخفض على شبكات الجوّال،
     // ويتيح للناشر ضبط معدل البت التكيّفي لاحقاً. القيم "ideal" تسمح للمتصفح
@@ -302,7 +371,7 @@ export function MobileCamera() {
       applyFacing((st.facingMode as string) ?? "")
       void refreshVideoDevices()
     } catch {
-      setError("تعذّر تبديل الكاميرا. حاول مرة أخرى.")
+      setError(t("aiMonitoring.cam.switchCamFailed"))
     } finally {
       setSwitching(false)
     }
@@ -345,7 +414,7 @@ export function MobileCamera() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           image,
-          inspectorName: inspectorName || "كاميرا الهاتف",
+          inspectorName: inspectorName || t("aiMonitoring.cam.defaultCamName"),
           cameraLocation: location,
         }),
       })
@@ -355,45 +424,95 @@ export function MobileCamera() {
         setUploadError(null)
       } else {
         const data = await res.json().catch(() => null)
-        setUploadError(data?.error || `فشل رفع الإطار (رمز ${res.status})`)
+        setUploadError(data?.error || t("aiMonitoring.cam.frameUploadFailed").replace("{code}", String(res.status)))
       }
     } catch {
-      setUploadError("تعذّر الاتصال بالخادم أثناء رفع الإطار")
+      setUploadError(t("aiMonitoring.cam.frameUploadConn"))
     } finally {
       uploadingRef.current = false
     }
-  }, [captureJpeg, inspectorName, location])
+  }, [captureJpeg, inspectorName, location, t])
 
-  // الحلقة البطيئة: إرسال الإطار للتحليل بالذكاء الاصطناعي (Claude Sonnet 4.6).
+  // تحديث قائمة آخر القراءات (لوحات/أرقام وظيفية/توك توك).
+  const refreshReads = useCallback(async () => {
+    setLoadingReads(true)
+    try {
+      const rows = await getRecentReads(20)
+      setRecentReads(rows)
+    } catch {
+      /* تجاهل فشل التحديث */
+    } finally {
+      setLoadingReads(false)
+    }
+  }, [])
+
+  // تحميل القراءات الأخيرة عند فتح الصفحة.
+  useEffect(() => {
+    void refreshReads()
+  }, [refreshReads])
+
+  // الحلقة البطيئة: إرسال الإطار للتعرّف بالذكاء الاصطناعي (Claude Sonnet 4.6) وفق
+  // الأوضاع النشطة — مخالفات و/أو لوحات و/أو رقم وظيفي و/أو توك توك في طلب واحد.
   const analyzeFrame = useCallback(async () => {
     if (analyzingRef.current) return
+    const activeModes = modesRef.current
+    if (!activeModes.length) return
     const image = captureJpeg()
     if (!image) return
     analyzingRef.current = true
     setAnalyzing(true)
     try {
-      const res = await fetch("/api/ai-monitoring/analyze", {
+      const res = await fetch("/api/ai-monitoring/recognize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           image,
-          inspectorName: inspectorName || "كاميرا الهاتف",
+          inspectorName: inspectorName || t("aiMonitoring.cam.defaultCamName"),
           cameraLocation: location,
+          modes: activeModes,
         }),
       })
       const data = await res.json()
       if (!res.ok) {
-        setLastResult({ at: Date.now(), count: 0, detections: [], error: data?.error || "خطأ في التحليل" })
+        setLastResult({ at: Date.now(), count: 0, detections: [], error: data?.error || t("aiMonitoring.cam.analysisError") })
       } else {
-        setLastResult({ at: Date.now(), count: data.count ?? 0, detections: data.detections ?? [] })
+        setLastResult({
+          at: Date.now(),
+          count: data.violations?.count ?? 0,
+          detections: data.violations?.detections ?? [],
+          plate: data.plate
+            ? { value: data.plate.value, confidence: data.plate.confidence }
+            : undefined,
+          employee: data.employee
+            ? {
+                value: data.employee.value,
+                confidence: data.employee.confidence,
+                matched: Boolean(data.employee.matched),
+                name: data.employee.name ?? "",
+                department: data.employee.department ?? "",
+              }
+            : undefined,
+          tuktuk: data.tuktuk
+            ? {
+                value: data.tuktuk.value,
+                confidence: data.tuktuk.confidence,
+                permitStatus: data.tuktuk.permitStatus ?? "not_found",
+                driverName: data.tuktuk.driverName ?? "",
+                documentNo: data.tuktuk.documentNo ?? "",
+              }
+            : undefined,
+          prefill: data.prefill,
+        })
+        // إن التقطنا قراءة هوية، حدّث قائمة القراءات الأخيرة.
+        if (data.plate || data.employee || data.tuktuk) void refreshReads()
       }
     } catch {
-      setLastResult({ at: Date.now(), count: 0, detections: [], error: "تعذّر الاتصال بالخادم" })
+      setLastResult({ at: Date.now(), count: 0, detections: [], error: t("aiMonitoring.cam.analysisConn") })
     } finally {
       analyzingRef.current = false
       setAnalyzing(false)
     }
-  }, [captureJpeg, inspectorName, location])
+  }, [captureJpeg, inspectorName, location, t, refreshReads])
 
   // بدء البث الحي (رفع الإطارات + التحليل).
   const startStreaming = useCallback(async () => {
@@ -408,11 +527,11 @@ export function MobileCamera() {
       analyzeIntervalRef.current = setInterval(analyzeFrame, ANALYZE_INTERVAL_MS)
     } catch (err) {
       const name = err instanceof Error ? err.name : ""
-      if (name === "NotAllowedError") setError("تم رفض إذن الكاميرا. فعّله من إعدادات المتصفح.")
-      else if (name === "NotFoundError") setError("لم يتم العثور على كاميرا في هذا الجهاز.")
-      else setError(err instanceof Error ? err.message : "تعذّر تشغيل الكاميرا.")
+      if (name === "NotAllowedError") setError(t("aiMonitoring.cam.camDenied"))
+      else if (name === "NotFoundError") setError(t("aiMonitoring.cam.camNotFound"))
+      else setError(err instanceof Error ? err.message : t("aiMonitoring.cam.camStartFailed"))
     }
-  }, [ensureStream, uploadFrame, analyzeFrame])
+  }, [ensureStream, uploadFrame, analyzeFrame, t])
 
   const stopStreaming = useCallback(() => {
     if (uploadIntervalRef.current) {
@@ -451,7 +570,7 @@ export function MobileCamera() {
   // رفع الفيديو المُسجّل (والمعاينة) إلى Blob مباشرةً من المتصفح ثم إنشاء سجل في القاعدة.
   const uploadRecording = useCallback(
     async (blob: Blob, durationSeconds: number, posterDataUrl: string | null) => {
-      const camId = inspectorName || "كاميرا الهاتف"
+      const camId = inspectorName || t("aiMonitoring.cam.defaultCamName")
       const ext = recordMimeRef.current.ext || "webm"
       const stamp = Date.now()
       const path = `recordings/${encodeURIComponent(camId)}/${stamp}.${ext}`
@@ -493,15 +612,15 @@ export function MobileCamera() {
           durationSeconds,
           fileSizeBytes: blob.size,
         })
-        setRecordMsg(`تم حفظ التسجيل (${formatDuration(durationSeconds)}) بنجاح.`)
+        setRecordMsg(t("aiMonitoring.cam.recordSaved").replace("{dur}", formatDuration(durationSeconds)))
       } catch (err) {
         console.log("[v0] recording upload failed:", err instanceof Error ? err.message : err)
-        setRecordError(err instanceof Error ? err.message : "تعذّر رفع التسجيل. حاول مجدداً.")
+        setRecordError(err instanceof Error ? err.message : t("aiMonitoring.cam.recordUploadFailed"))
       } finally {
         setSavingRecording(false)
       }
     },
-    [inspectorName],
+    [inspectorName, t],
   )
 
   // بدء تسجيل الفيديو من نفس بث الكاميرا (يعمل مع البث أو بمفرده).
@@ -510,7 +629,7 @@ export function MobileCamera() {
     setRecordError(null)
     setRecordMsg(null)
     if (typeof MediaRecorder === "undefined") {
-      setRecordError("متصفحك لا يدعم تسجيل الفيديو (MediaRecorder).")
+      setRecordError(t("aiMonitoring.cam.videoUnsupported"))
       return
     }
     try {
@@ -519,7 +638,7 @@ export function MobileCamera() {
       recordMimeRef.current = mime
 
       // نُسجّل من قناة canvas تُحاكي عنصر الفيديو الحالي (بدل التسجيل المباشر من مسار
-      // الكاميرا)، حت�� يستمر التسجيل بسلاسة عبر تبديل الكاميرا دون تجميد الفيديو.
+      // الكامي��ا)، حت�� يستمر التسجيل بسلاسة عبر تبديل الكاميرا دون تجميد الفيديو.
       // نضيف مسار الصوت نفسه (كائن المسار ذاته) فيتبع حالة كتم/تفعيل الميكروفون.
       const recCanvas = recCanvasRef.current ?? document.createElement("canvas")
       recCanvasRef.current = recCanvas
@@ -585,7 +704,7 @@ export function MobileCamera() {
         // التقط المعاينة من الفيديو الحي قبل تحرير الكاميرا.
         const poster = capturePosterDataUrl()
         if (blob.size > 0) void uploadRecording(blob, durationSeconds, poster)
-        else setRecordError("التسجيل فارغ — لم تُلتقط أي بيانات فيديو.")
+        else setRecordError(t("aiMonitoring.cam.recordEmpty"))
         // حرّر الكاميرا إن لم يكن البث الحي شغّالاً.
         releaseStreamIfIdle(uploadIntervalRef.current !== null, false)
       }
@@ -599,11 +718,11 @@ export function MobileCamera() {
       }, 500)
     } catch (err) {
       const name = err instanceof Error ? err.name : ""
-      if (name === "NotAllowedError") setError("تم رفض إذن الكاميرا. فعّله من إعدادات المتصفح.")
-      else if (name === "NotFoundError") setError("لم يتم العثور على كاميرا في هذا الجهاز.")
-      else setError(err instanceof Error ? err.message : "تعذّر بدء التسجيل.")
+      if (name === "NotAllowedError") setError(t("aiMonitoring.cam.camDenied"))
+      else if (name === "NotFoundError") setError(t("aiMonitoring.cam.camNotFound"))
+      else setError(err instanceof Error ? err.message : t("aiMonitoring.cam.recordStartFailed2"))
     }
-  }, [ensureStream, uploadRecording, releaseStreamIfIdle, capturePosterDataUrl])
+  }, [ensureStream, uploadRecording, releaseStreamIfIdle, capturePosterDataUrl, t])
 
   const stopRecording = useCallback(() => {
     if (recordTimerRef.current) {
@@ -690,46 +809,79 @@ export function MobileCamera() {
       <Card className="flex items-start gap-3 border-accent/30 bg-accent/10 p-4">
         <BatteryCharging className="mt-0.5 size-5 shrink-0 text-amber-700 dark:text-amber-400" />
         <p className="text-sm text-amber-800 dark:text-amber-300">
-          أبقِ الشاشة مفتوحة والهاتف بالشحن أثناء البث أو التسجيل لضمان استمرار العمل.
+          {t("aiMonitoring.cam.chargeHint")}
         </p>
       </Card>
 
-      {/* نموذج بدء الجلسة: اسم المفتش والموقع إلزاميان قبل تفعيل البث/التسجيل */}
+      {/* نموذج بدء الجلسة: اسم المفتش وال��وقع إلزاميان قبل تفعيل البث/التسجيل */}
       <Card className="flex flex-col gap-3 p-4">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-sm font-semibold text-foreground">بيانات الجلسة</span>
+          <span className="text-sm font-semibold text-foreground">{t("aiMonitoring.cam.sessionData")}</span>
           {sessionStarted && (
             <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
               <CheckCircle2 className="size-3.5" />
-              الجلسة جاهزة
+              {t("aiMonitoring.cam.sessionReady")}
             </span>
           )}
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-foreground">
-              اسم المفتش/الموظف <span className="text-destructive">*</span>
+              {t("aiMonitoring.cam.inspectorLabel")} <span className="text-destructive">*</span>
             </span>
             <input
               value={inspectorName}
               onChange={(e) => setInspectorName(e.target.value)}
-              placeholder="مثال: خالد العتيبي"
+              placeholder={t("aiMonitoring.cam.inspectorPlaceholder")}
               disabled={sessionStarted}
               className="rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-60"
             />
           </label>
           <label className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-foreground">
-              الموقع <span className="text-destructive">*</span>
+              {t("aiMonitoring.cam.locationLabel")} <span className="text-destructive">*</span>
             </span>
             <input
               value={location}
               onChange={(e) => setLocation(e.target.value)}
-              placeholder="مثال: بوابة رقم 3 أو منطقة التحميل"
+              placeholder={t("aiMonitoring.cam.locationPlaceholder")}
               disabled={sessionStarted}
               className="rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-60"
             />
           </label>
+        </div>
+        {/* اختيار أوضاع التعرّف: يمكن تفعيل أكثر من وضع معاً (الوضع المدمج) */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-1.5">
+            <ScanLine className="size-4 text-muted-foreground" />
+            <span className="text-sm font-medium text-foreground">{t("aiMonitoring.cam.modesTitle")}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {RECOGNITION_MODES.map((mode) => {
+              const active = modes.includes(mode)
+              const Icon =
+                mode === "violations" ? ShieldAlert : mode === "plate" ? Car : mode === "employee_id" ? IdCard : Bike
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => toggleMode(mode)}
+                  disabled={sessionStarted}
+                  aria-pressed={active}
+                  className={cn(
+                    "flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+                    active
+                      ? "border-primary/40 bg-primary/10 text-primary"
+                      : "border-input bg-background text-muted-foreground hover:bg-muted",
+                  )}
+                >
+                  <Icon className="size-4 shrink-0" />
+                  <span className="truncate">{t(`aiMonitoring.cam.mode_${mode}`)}</span>
+                </button>
+              )
+            })}
+          </div>
+          <p className="text-xs text-muted-foreground">{t("aiMonitoring.cam.modesHint")}</p>
         </div>
         {sessionError && <p className="text-sm text-destructive">{sessionError}</p>}
         {!sessionStarted ? (
@@ -739,7 +891,7 @@ export function MobileCamera() {
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <CheckCircle2 className="size-4" />
-            بدء الجلسة
+            {t("aiMonitoring.cam.startSession")}
           </button>
         ) : (
           <button
@@ -747,12 +899,12 @@ export function MobileCamera() {
             disabled={cameraOn}
             className="inline-flex items-center justify-center gap-2 rounded-lg border border-input bg-background px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
           >
-            تعديل بيانات الجلسة
+            {t("aiMonitoring.cam.editSession")}
           </button>
         )}
         {sessionStarted && cameraOn && (
           <p className="text-xs text-muted-foreground">
-            لا يمكن تعديل بيانات الجلسة أثناء البث أو التسجيل — أوقفهما أولاً.
+            {t("aiMonitoring.cam.cannotEditWhileLive")}
           </p>
         )}
       </Card>
@@ -768,7 +920,7 @@ export function MobileCamera() {
         {!cameraOn && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center text-white/70">
             <Camera className="size-10" />
-            <span className="text-sm">اضغط «بدء البث» أو «بدء التسجيل» لتشغيل الكاميرا الخلفية</span>
+            <span className="text-sm">{t("aiMonitoring.cam.tapToStart")}</span>
           </div>
         )}
         {streaming && (
@@ -784,19 +936,19 @@ export function MobileCamera() {
                 connected ? "animate-pulse bg-destructive" : "bg-white/70",
               )}
             />
-            {connected ? "بث مباشر" : "إعادة الاتصال…"}
+            {connected ? t("aiMonitoring.cam.broadcastingLive") : t("aiMonitoring.cam.reconnecting")}
           </div>
         )}
         {recording && (
           <div className="absolute left-3 bottom-3 flex items-center gap-1.5 rounded-full bg-red-600/90 px-2.5 py-1 text-xs font-semibold text-white">
             <span className="size-2 animate-pulse rounded-full bg-white" />
-            تسجيل {formatDuration(recordSeconds)}
+            {t("aiMonitoring.cam.recordingBadge").replace("{dur}", formatDuration(recordSeconds))}
           </div>
         )}
         {cameraOn && viewerCount > 0 && !managerTalking && (
           <div className="absolute right-3 bottom-3 flex items-center gap-1.5 rounded-full bg-primary/90 px-2.5 py-1 text-xs font-semibold text-primary-foreground">
             <Eye className="size-3.5" />
-            المدير يشاهد مباشرة
+            {t("aiMonitoring.cam.managerWatching")}
           </div>
         )}
         {/* مؤشر تحدّث المدير عبر الصوت (talk-back) — نابض ليجذب انتباه المفتش للاستماع */}
@@ -804,7 +956,7 @@ export function MobileCamera() {
           <div className="absolute right-3 bottom-3 flex items-center gap-1.5 rounded-full bg-destructive px-2.5 py-1 text-xs font-semibold text-white">
             <span className="size-2 animate-pulse rounded-full bg-white" aria-hidden="true" />
             <Volume2 className="size-3.5" />
-            المدير يتحدّث إليك
+            {t("aiMonitoring.cam.managerTalking")}
           </div>
         )}
         {/* عنصر صوت مخفي لتشغيل صوت المدير الوارد على مكبّر صوت الجهاز */}
@@ -812,7 +964,7 @@ export function MobileCamera() {
         {analyzing && (
           <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white">
             <Loader2 className="size-3.5 animate-spin" />
-            جارٍ التحليل
+            {t("aiMonitoring.cam.analyzingBadge")}
           </div>
         )}
         <canvas ref={canvasRef} className="hidden" />
@@ -824,14 +976,18 @@ export function MobileCamera() {
           <button
             onClick={switchCamera}
             disabled={switching || videoDeviceCount < 2}
-            title={videoDeviceCount < 2 ? "لا توجد كاميرا أخرى للتبديل إليها" : "التبديل بين الأمامية والخلفية"}
+            title={videoDeviceCount < 2 ? t("aiMonitoring.cam.noOtherCamera") : t("aiMonitoring.cam.switchCamera")}
             className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-input bg-background px-4 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
           >
             {switching ? <Loader2 className="size-4 animate-spin" /> : <SwitchCamera className="size-4" />}
             {switching
-              ? "جارٍ التبديل…"
-              : `تبديل الكاميرا${
-                  currentFacing === "user" ? " · الأمامية" : currentFacing === "environment" ? " · الخلفية" : ""
+              ? t("aiMonitoring.cam.switching")
+              : `${t("aiMonitoring.cam.switchCameraBtn")}${
+                  currentFacing === "user"
+                    ? ` · ${t("aiMonitoring.cam.facingFront")}`
+                    : currentFacing === "environment"
+                      ? ` · ${t("aiMonitoring.cam.facingBack")}`
+                      : ""
                 }`}
           </button>
           <button
@@ -845,7 +1001,7 @@ export function MobileCamera() {
             )}
           >
             {micEnabled ? <Mic className="size-4" /> : <MicOff className="size-4" />}
-            {micEnabled ? "الصوت مفعّل — يُبثّ للمدير" : "الصوت مكتوم"}
+            {micEnabled ? t("aiMonitoring.cam.micOnBroadcast") : t("aiMonitoring.cam.micMuted")}
           </button>
         </div>
       )}
@@ -867,7 +1023,9 @@ export function MobileCamera() {
       {cameraOn && broadcastError && (
         <Card className="flex items-start gap-3 border-destructive/30 bg-destructive/10 p-4">
           <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
-          <p className="text-sm text-destructive">تعذّر بثّ الفيديو الحي المباشر للمدير: {broadcastError}</p>
+          <p className="text-sm text-destructive">
+            {t("aiMonitoring.cam.liveBroadcastError").replace("{err}", broadcastError ?? "")}
+          </p>
         </Card>
       )}
 
@@ -875,7 +1033,7 @@ export function MobileCamera() {
       {savingRecording && (
         <Card className="flex items-center gap-3 border-primary/30 bg-primary/10 p-4">
           <UploadCloud className="size-5 shrink-0 animate-pulse text-primary" />
-          <p className="text-sm font-medium text-primary">جارٍ رفع التسجيل إلى الخادم… لا تغلق الصفحة.</p>
+          <p className="text-sm font-medium text-primary">{t("aiMonitoring.cam.uploadingRecording")}</p>
         </Card>
       )}
       {recordMsg && !savingRecording && (
@@ -894,7 +1052,7 @@ export function MobileCamera() {
       {/* أزرار التحكم: البث والتسجيل مستقلان — مقفلة حتى بدء الجلسة */}
       {!sessionStarted && (
         <p className="text-sm text-muted-foreground">
-          ابدأ الجلسة أعلاه (اسم المفتش + الموقع) لتفعيل زر البث والتسجيل.
+          {t("aiMonitoring.cam.enableToStart")}
         </p>
       )}
       <div className="flex flex-col gap-3 sm:flex-row">
@@ -905,7 +1063,7 @@ export function MobileCamera() {
             className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Play className="size-4" />
-            بدء البث
+            {t("aiMonitoring.cam.startBroadcast")}
           </button>
         ) : (
           <button
@@ -913,7 +1071,7 @@ export function MobileCamera() {
             className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-destructive px-4 py-3 text-sm font-semibold text-destructive-foreground transition-colors hover:bg-destructive/90"
           >
             <Square className="size-4" />
-            إيقاف البث
+            {t("aiMonitoring.cam.stopBroadcast")}
           </button>
         )}
 
@@ -924,7 +1082,7 @@ export function MobileCamera() {
             className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-red-600 bg-red-600/10 px-4 py-3 text-sm font-semibold text-red-700 transition-colors hover:bg-red-600/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400"
           >
             <Video className="size-4" />
-            بدء التسجيل
+            {t("aiMonitoring.cam.startRecordingBtn")}
           </button>
         ) : (
           <button
@@ -932,7 +1090,7 @@ export function MobileCamera() {
             className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-red-700"
           >
             <CircleStop className="size-4" />
-            إيقاف التسجيل · {formatDuration(recordSeconds)}
+            {t("aiMonitoring.cam.stopRecordingBtn").replace("{dur}", formatDuration(recordSeconds))}
           </button>
         )}
       </div>
@@ -941,7 +1099,7 @@ export function MobileCamera() {
       {/* حالة الاتصال والعدادات */}
       <div className="grid grid-cols-3 gap-3">
         <Card className="flex flex-col gap-1 p-4">
-          <span className="text-xs text-muted-foreground">حالة الاتصال</span>
+          <span className="text-xs text-muted-foreground">{t("aiMonitoring.cam.connState")}</span>
           <span
             className={cn(
               "flex items-center gap-1.5 text-sm font-semibold",
@@ -952,28 +1110,28 @@ export function MobileCamera() {
               connected ? (
                 <>
                   <Wifi className="size-4" />
-                  متصل
+                  {t("aiMonitoring.cam.connected")}
                 </>
               ) : (
                 <>
                   <WifiOff className="size-4" />
-                  منقطع
+                  {t("aiMonitoring.cam.disconnected")}
                 </>
               )
             ) : (
               <>
                 <WifiOff className="size-4" />
-                متوقف
+                {t("aiMonitoring.cam.stopped")}
               </>
             )}
           </span>
         </Card>
         <Card className="flex flex-col gap-1 p-4">
-          <span className="text-xs text-muted-foreground">الإطارات المرفوعة</span>
-          <span className="text-2xl font-bold text-foreground">{sentCount}</span>
+          <span className="text-xs text-muted-foreground">{t("aiMonitoring.cam.framesUploaded")}</span>
+          <span className="text-2xl font-bold text-foreground">{formatNumber(sentCount)}</span>
         </Card>
         <Card className="flex flex-col gap-1 p-4">
-          <span className="text-xs text-muted-foreground">مدة التسجيل</span>
+          <span className="text-xs text-muted-foreground">{t("aiMonitoring.cam.recDuration")}</span>
           <span className="text-2xl font-bold text-foreground" dir="ltr">
             {formatDuration(recordSeconds)}
           </span>
@@ -983,21 +1141,118 @@ export function MobileCamera() {
       {/* آخر نتيجة تحليل */}
       <Card className="flex flex-col gap-3 p-4">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold text-foreground">آخر نتيجة تحليل</span>
-          {lastResult && !lastResult.error && lastResult.count === 0 && (
+          <span className="text-sm font-semibold text-foreground">{t("aiMonitoring.cam.lastAnalysis")}</span>
+          {lastResult && !lastResult.error && lastResult.count === 0 && modes.includes("violations") && (
             <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
               <CheckCircle2 className="size-3.5" />
-              لا مخالفات
+              {t("aiMonitoring.cam.noViolationsBadge")}
             </span>
           )}
         </div>
+
+        {/* تنبيه الوضع المدمج: هوية مطابقة رُبطت تلقائياً بالمخالفة */}
+        {lastResult?.prefill && (
+          <div className="flex items-start gap-2 rounded-lg border border-primary/30 bg-primary/10 p-3 text-sm text-primary">
+            <IdCard className="mt-0.5 size-4 shrink-0" />
+            <span>
+              {lastResult.prefill.source === "employee_id"
+                ? t("aiMonitoring.cam.prefillEmployee")
+                    .replace("{name}", lastResult.prefill.employeeName ?? "")
+                    .replace("{no}", lastResult.prefill.employeeNo ?? "")
+                : lastResult.prefill.source === "tuktuk"
+                  ? t("aiMonitoring.cam.prefillTuktuk")
+                      .replace("{name}", lastResult.prefill.driverName ?? "")
+                      .replace("{no}", lastResult.prefill.vehicleNo ?? "")
+                  : t("aiMonitoring.cam.prefillPlate").replace("{no}", lastResult.prefill.vehicleNo ?? "")}
+            </span>
+          </div>
+        )}
+
+        {/* قراءات الهوية الفورية من الإطار الأخير */}
+        {lastResult && !lastResult.error && (lastResult.plate || lastResult.employee || lastResult.tuktuk) && (
+          <div className="flex flex-col gap-2">
+            {lastResult.plate && (
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <Car className="size-4 text-muted-foreground" />
+                  {t("aiMonitoring.cam.mode_plate")}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-sm font-semibold text-foreground" dir="ltr">
+                    {lastResult.plate.value}
+                  </span>
+                  <span className="font-mono text-xs text-muted-foreground" dir="ltr">
+                    {lastResult.plate.confidence}%
+                  </span>
+                </div>
+              </div>
+            )}
+            {lastResult.employee && (
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <IdCard className="size-4 text-muted-foreground" />
+                    <span className="font-mono" dir="ltr">
+                      {lastResult.employee.value}
+                    </span>
+                  </div>
+                  <div className={cn("text-xs", lastResult.employee.matched ? "text-primary" : "text-muted-foreground")}>
+                    {lastResult.employee.matched
+                      ? `${lastResult.employee.name}${lastResult.employee.department ? ` · ${lastResult.employee.department}` : ""}`
+                      : t("aiMonitoring.cam.noEmployeeMatch")}
+                  </div>
+                </div>
+                <span className="font-mono text-xs text-muted-foreground" dir="ltr">
+                  {lastResult.employee.confidence}%
+                </span>
+              </div>
+            )}
+            {lastResult.tuktuk && (
+              <div
+                className={cn(
+                  "flex items-center justify-between gap-3 rounded-lg border p-3",
+                  lastResult.tuktuk.permitStatus === "valid"
+                    ? "border-border"
+                    : "border-destructive/40 bg-destructive/10",
+                )}
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <Bike className="size-4 text-muted-foreground" />
+                    <span className="font-mono" dir="ltr">
+                      {lastResult.tuktuk.value}
+                    </span>
+                  </div>
+                  <div
+                    className={cn(
+                      "flex items-center gap-1 text-xs",
+                      lastResult.tuktuk.permitStatus === "valid" ? "text-primary" : "text-destructive",
+                    )}
+                  >
+                    {lastResult.tuktuk.permitStatus !== "valid" && <ShieldAlert className="size-3.5" />}
+                    {lastResult.tuktuk.permitStatus === "valid"
+                      ? `${t("aiMonitoring.cam.permitValid")}${lastResult.tuktuk.driverName ? ` · ${lastResult.tuktuk.driverName}` : ""}`
+                      : lastResult.tuktuk.permitStatus === "expired"
+                        ? t("aiMonitoring.cam.permitExpired")
+                        : t("aiMonitoring.cam.permitNotFound")}
+                  </div>
+                </div>
+                <span className="font-mono text-xs text-muted-foreground" dir="ltr">
+                  {lastResult.tuktuk.confidence}%
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* المخالفات (وضع المخالفات فقط) */}
         {!lastResult ? (
-          <p className="text-sm text-muted-foreground">لم يتم إرسال أي إطار للتحليل بعد.</p>
+          <p className="text-sm text-muted-foreground">{t("aiMonitoring.cam.noFrameSent")}</p>
         ) : lastResult.error ? (
           <p className="text-sm text-destructive">{lastResult.error}</p>
-        ) : lastResult.count === 0 ? (
-          <p className="text-sm text-muted-foreground">لم تُرصد أي مخالفة في آخر إطار.</p>
-        ) : (
+        ) : modes.includes("violations") && lastResult.count === 0 ? (
+          <p className="text-sm text-muted-foreground">{t("aiMonitoring.cam.noViolationLastFrame")}</p>
+        ) : lastResult.count > 0 ? (
           <ul className="flex flex-col gap-2">
             {lastResult.detections.map((d, i) => (
               <li
@@ -1006,7 +1261,7 @@ export function MobileCamera() {
               >
                 <div className="min-w-0">
                   <div className="font-medium text-foreground">
-                    {detectionTypeLabels[d.type] ?? d.type}
+                    {detectionTypeLabel(t, d.type)}
                   </div>
                   {d.description && (
                     <div className="text-xs text-muted-foreground">{d.description}</div>
@@ -1019,7 +1274,7 @@ export function MobileCamera() {
                       severityStyles[d.severity] ?? "",
                     )}
                   >
-                    {severityLabels[d.severity] ?? d.severity}
+                    {severityLabel(t, d.severity)}
                   </span>
                   <span className="font-mono text-xs text-muted-foreground" dir="ltr">
                     {d.confidence}%
@@ -1027,6 +1282,88 @@ export function MobileCamera() {
                 </div>
               </li>
             ))}
+          </ul>
+        ) : null}
+      </Card>
+
+      {/* آخر القراءات (لوحات/أرقام وظيفية/توك توك) */}
+      <Card className="flex flex-col gap-3 p-4">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-semibold text-foreground">{t("aiMonitoring.cam.recentReadsTitle")}</span>
+          <button
+            type="button"
+            onClick={refreshReads}
+            disabled={loadingReads}
+            className="inline-flex items-center gap-1 text-xs font-medium text-primary transition-colors hover:text-primary/80 disabled:opacity-50"
+          >
+            {loadingReads ? <Loader2 className="size-3.5 animate-spin" /> : <ScanLine className="size-3.5" />}
+            {t("aiMonitoring.cam.refresh")}
+          </button>
+        </div>
+        {recentReads.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t("aiMonitoring.cam.noReads")}</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {recentReads.map((r) => {
+              const Icon = r.mode === "plate" ? Car : r.mode === "employee_id" ? IdCard : Bike
+              const alert = r.matchStatus === "expired" || r.matchStatus === "not_found"
+              return (
+                <li
+                  key={r.key}
+                  className={cn(
+                    "flex items-center justify-between gap-3 rounded-lg border p-3",
+                    alert && r.mode === "tuktuk" ? "border-destructive/40 bg-destructive/10" : "border-border",
+                  )}
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <Icon className="size-5 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm font-semibold text-foreground" dir="ltr">
+                          {r.value || "—"}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">{t(`aiMonitoring.cam.mode_${r.mode}`)}</span>
+                      </div>
+                      {(r.matchLabel || r.matchStatus !== "na") && (
+                        <div
+                          className={cn(
+                            "truncate text-xs",
+                            r.matchStatus === "valid" || r.matchStatus === "found"
+                              ? "text-primary"
+                              : r.matchStatus === "expired" || r.matchStatus === "not_found"
+                                ? "text-destructive"
+                                : "text-muted-foreground",
+                          )}
+                        >
+                          {r.matchLabel
+                            ? r.matchLabel
+                            : r.matchStatus === "not_found"
+                              ? r.mode === "tuktuk"
+                                ? t("aiMonitoring.cam.permitNotFound")
+                                : t("aiMonitoring.cam.noEmployeeMatch")
+                              : r.matchStatus === "expired"
+                                ? t("aiMonitoring.cam.permitExpired")
+                                : r.matchStatus === "valid"
+                                  ? t("aiMonitoring.cam.permitValid")
+                                  : ""}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <span className="font-mono text-xs text-muted-foreground" dir="ltr">
+                      {r.confidence}%
+                    </span>
+                    <span className="text-[11px] text-muted-foreground" dir="ltr">
+                      {new Date(r.capturedAt).toLocaleTimeString(locale === "ar" ? "ar-SA" : "en-GB", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </div>
+                </li>
+              )
+            })}
           </ul>
         )}
       </Card>

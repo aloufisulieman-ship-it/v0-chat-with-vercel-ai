@@ -1,8 +1,8 @@
+"use client"
+
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
-
-const likelihoodLabels = ["نادر", "غير محتمل", "ممكن", "محتمل", "شبه مؤكد"]
-const consequenceLabels = ["طفيف", "بسيط", "متوسط", "كبير", "كارثي"]
+import { useI18n } from "@/lib/i18n/client"
 
 function cellColor(score: number) {
   if (score >= 15) return "bg-destructive/80 text-white"
@@ -12,6 +12,23 @@ function cellColor(score: number) {
 }
 
 export function RiskMatrix({ risks }: { risks: { likelihood: number | null; consequence: number | null }[] }) {
+  const { t } = useI18n()
+
+  const likelihoodLabels = [
+    t("riskMatrix.likelihood1"),
+    t("riskMatrix.likelihood2"),
+    t("riskMatrix.likelihood3"),
+    t("riskMatrix.likelihood4"),
+    t("riskMatrix.likelihood5"),
+  ]
+  const consequenceLabels = [
+    t("riskMatrix.consequence1"),
+    t("riskMatrix.consequence2"),
+    t("riskMatrix.consequence3"),
+    t("riskMatrix.consequence4"),
+    t("riskMatrix.consequence5"),
+  ]
+
   // عدد المخاطر في كل خلية
   const counts: Record<string, number> = {}
   for (const r of risks) {
@@ -21,13 +38,13 @@ export function RiskMatrix({ risks }: { risks: { likelihood: number | null; cons
 
   return (
     <Card className="p-5">
-      <h3 className="mb-1 text-base font-semibold text-foreground">مصفوفة تقييم المخاطر 5×5</h3>
-      <p className="mb-4 text-xs text-muted-foreground">الاحتمالية (أفقي) × الشدة (رأسي)</p>
+      <h3 className="mb-1 text-base font-semibold text-foreground">{t("riskMatrix.title")}</h3>
+      <p className="mb-4 text-xs text-muted-foreground">{t("riskMatrix.subtitle")}</p>
       <div className="overflow-x-auto">
         <div className="flex items-stretch gap-1">
           <div className="flex items-center">
             <span className="rotate-180 whitespace-nowrap text-xs font-medium text-muted-foreground [writing-mode:vertical-rl]">
-              الشدة ←
+              {t("riskMatrix.severityAxis")}
             </span>
           </div>
           <div className="flex-1">
@@ -65,10 +82,10 @@ export function RiskMatrix({ risks }: { risks: { likelihood: number | null; cons
         </div>
       </div>
       <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
-        <Legend className="bg-primary/70" label="منخفض" />
-        <Legend className="bg-accent/80" label="متوسط" />
-        <Legend className="bg-orange-500/80" label="عالٍ" />
-        <Legend className="bg-destructive/80" label="حرج" />
+        <Legend className="bg-primary/70" label={t("riskMatrix.legendLow")} />
+        <Legend className="bg-accent/80" label={t("riskMatrix.legendMedium")} />
+        <Legend className="bg-orange-500/80" label={t("riskMatrix.legendHigh")} />
+        <Legend className="bg-destructive/80" label={t("riskMatrix.legendCritical")} />
       </div>
     </Card>
   )

@@ -12,6 +12,7 @@ import {
 } from "@/app/actions/attachments"
 import { type SignatureRole } from "@/lib/signature-roles"
 import { toast } from "@/hooks/use-toast"
+import { useI18n } from "@/lib/i18n/client"
 
 export function fileUrl(pathname: string) {
   return `/api/file?pathname=${encodeURIComponent(pathname)}`
@@ -30,6 +31,7 @@ export function AttachmentsManager({
   signatureRoles?: SignatureRole[]
   hideSignatures?: boolean
 }) {
+  const { t } = useI18n()
   const [items, setItems] = useState<AttachmentRow[]>(initial)
   const [isPending, startTransition] = useTransition()
   const [uploadingCount, setUploadingCount] = useState(0)
@@ -55,7 +57,7 @@ export function AttachmentsManager({
     if (!files || files.length === 0) return
     const list = Array.from(files).filter((f) => f.type.startsWith("image/"))
     if (list.length === 0) {
-      toast({ title: "ملفات غير مدعومة", description: "يُسمح برفع الصور فقط.", variant: "destructive" })
+      toast({ title: t("attachments.unsupportedTitle"), description: t("attachments.unsupportedDesc"), variant: "destructive" })
       return
     }
     setUploadingCount(list.length)
@@ -65,11 +67,11 @@ export function AttachmentsManager({
         uploaded.push(await uploadOne(file, "photo"))
       }
       setItems((prev) => [...prev, ...uploaded])
-      toast({ title: "تم رفع الصور", description: `تم رفع ${uploaded.length} صورة بنجاح.` })
+      toast({ title: t("attachments.photosUploadedTitle"), description: t("attachments.photosUploadedDesc").replace("{count}", String(uploaded.length)) })
     } catch (err) {
       toast({
-        title: "تعذّر الرفع",
-        description: err instanceof Error ? err.message : "حدث خطأ أثناء الرفع.",
+        title: t("attachments.uploadFailedTitle"),
+        description: err instanceof Error ? err.message : t("attachments.uploadFailedDesc"),
         variant: "destructive",
       })
     } finally {
@@ -83,11 +85,11 @@ export function AttachmentsManager({
     try {
       const row = await uploadOne(file, "signature")
       setItems((prev) => [...prev, row])
-      toast({ title: "تم حفظ التوقيع" })
+      toast({ title: t("attachments.sigSavedTitle") })
     } catch (err) {
       toast({
-        title: "تعذّر حفظ التوقيع",
-        description: err instanceof Error ? err.message : "حدث خطأ.",
+        title: t("attachments.sigSaveFailedTitle"),
+        description: err instanceof Error ? err.message : t("attachments.sigSaveFailedDesc"),
         variant: "destructive",
       })
     } finally {
@@ -100,9 +102,9 @@ export function AttachmentsManager({
       try {
         await deleteAttachment(id)
         setItems((prev) => prev.filter((i) => i.id !== id))
-        toast({ title: "تم الحذف" })
+        toast({ title: t("attachments.deletedTitle") })
       } catch {
-        toast({ title: "تعذّر الحذف", variant: "destructive" })
+        toast({ title: t("attachments.deleteFailedTitle"), variant: "destructive" })
       }
     })
   }
@@ -114,7 +116,7 @@ export function AttachmentsManager({
         <div className="flex items-center justify-between gap-2">
           <h4 className="flex items-center gap-2 text-sm font-semibold text-foreground">
             <FileImage className="size-4 text-muted-foreground" />
-            الصور المرفقة
+            {t("attachments.photosHeading")}
             <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
               {photos.length}
             </span>
@@ -132,7 +134,7 @@ export function AttachmentsManager({
             ) : (
               <ImagePlus className="size-3.5" />
             )}
-            {uploadingCount > 0 ? `جارٍ رفع ${uploadingCount}...` : "إضافة صور"}
+            {uploadingCount > 0 ? t("attachments.uploadingCount").replace("{count}", String(uploadingCount)) : t("attachments.addPhotos")}
           </Button>
           <input
             ref={inputRef}
@@ -146,7 +148,7 @@ export function AttachmentsManager({
 
         {photos.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border bg-muted/30 p-6 text-center text-xs text-muted-foreground">
-            لا توجد صور. يمكنك رفع عدد غير محدود من الصور.
+            {t("attachments.noPhotos")}
           </p>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -164,7 +166,7 @@ export function AttachmentsManager({
                   onClick={() => remove(p.id)}
                   disabled={isPending}
                   className="absolute left-1.5 top-1.5 rounded-md bg-destructive/90 p-1.5 text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100"
-                  aria-label="حذف الصورة"
+                  aria-label={t("attachments.deletePhoto")}
                 >
                   <Trash2 className="size-3.5" />
                 </button>
@@ -179,7 +181,7 @@ export function AttachmentsManager({
         <section className="flex flex-col gap-3">
           <h4 className="flex items-center gap-2 text-sm font-semibold text-foreground">
             <FileText className="size-4 text-muted-foreground" />
-            النموذج الورقي (يدوي)
+            {t("attachments.manualDocHeading")}
             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
               {manualDocs.length}
             </span>
@@ -209,14 +211,14 @@ export function AttachmentsManager({
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
                   >
-                    <Download className="size-3.5" /> فتح
+                    <Download className="size-3.5" /> {t("attachments.open")}
                   </a>
                   <button
                     type="button"
                     onClick={() => remove(d.id)}
                     disabled={isPending}
                     className="rounded-md p-1.5 text-destructive hover:bg-destructive/10"
-                    aria-label="حذف الملف"
+                    aria-label={t("attachments.deleteFile")}
                   >
                     <Trash2 className="size-3.5" />
                   </button>
@@ -243,7 +245,7 @@ export function AttachmentsManager({
       <section className="flex flex-col gap-3">
         <h4 className="flex items-center gap-2 text-sm font-semibold text-foreground">
           <PenLine className="size-4 text-muted-foreground" />
-          التواقيع
+          {t("attachments.signaturesHeading")}
           <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
             {signatures.length}
           </span>
@@ -256,7 +258,7 @@ export function AttachmentsManager({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={fileUrl(s.pathname) || "/placeholder.svg"}
-                  alt="توقيع"
+                  alt={t("attachments.signatureAlt")}
                   className="h-24 w-full object-contain p-2"
                   crossOrigin="anonymous"
                 />
@@ -265,7 +267,7 @@ export function AttachmentsManager({
                   onClick={() => remove(s.id)}
                   disabled={isPending}
                   className="absolute left-1.5 top-1.5 rounded-md bg-destructive/90 p-1.5 text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100"
-                  aria-label="حذف التوقيع"
+                  aria-label={t("attachments.deleteSignature")}
                 >
                   <Trash2 className="size-3.5" />
                 </button>

@@ -5,6 +5,7 @@ import { Cctv, MapPin, Radio, UserRound, Wifi, WifiOff } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useWebrtcViewer } from "../live/[cameraId]/use-webrtc-viewer"
 import type { CameraStreamDto } from "../connected-cameras"
+import { useI18n } from "@/lib/i18n/client"
 
 // كسر كاش إطار Blob بحيث تُحدَّث الصورة مع كل جلب.
 function frameSrc(url: string, version: string) {
@@ -18,12 +19,6 @@ function qualityTier(kbps: number, rttMs: number): "good" | "medium" | "weak" {
   if (kbps >= 350 && (rttMs === 0 || rttMs < 200)) return "good"
   if (kbps >= 120) return "medium"
   return "weak"
-}
-
-const TIER_LABEL: Record<"good" | "medium" | "weak", string> = {
-  good: "ممتاز",
-  medium: "متوسط",
-  weak: "ضعيف",
 }
 
 const TIER_CLASS: Record<"good" | "medium" | "weak", string> = {
@@ -45,6 +40,7 @@ export function GridTile({
   // نفتح WebRTC فقط للبطاقات التي يُتوقّع أنها حية لتقليل عدد الاتصالات المتزامنة.
   enableWebrtc: boolean
 }) {
+  const { t } = useI18n()
   const title = cam.inspectorName || cam.cameraId
   const { videoRef, status, stats } = useWebrtcViewer({
     cameraId: cam.cameraId,
@@ -53,6 +49,11 @@ export function GridTile({
 
   const connected = status === "live"
   const tier = stats ? qualityTier(stats.kbps, stats.rttMs) : null
+  const tierLabel: Record<"good" | "medium" | "weak", string> = {
+    good: t("aiMonitoring.cam.qualGood"),
+    medium: t("aiMonitoring.cam.qualMedium"),
+    weak: t("aiMonitoring.cam.qualWeak"),
+  }
 
   return (
     <Link
@@ -61,7 +62,7 @@ export function GridTile({
         "group relative aspect-video overflow-hidden rounded-xl border bg-black transition-all focus:outline-none focus:ring-2 focus:ring-ring/40",
         isLive ? "border-destructive/50" : "border-border opacity-70 hover:opacity-100",
       )}
-      aria-label={`فتح البث المباشر — ${title}`}
+      aria-label={t("aiMonitoring.cam.tileOpenLive").replace("{title}", title)}
     >
       {/* الفيديو الحي (يظهر فور اتصال WebRTC) */}
       <video
@@ -81,7 +82,7 @@ export function GridTile({
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
             src={frameSrc(cam.lastFrameUrl, cam.lastSeenAt) || "/placeholder.svg"}
-            alt={`آخر إطار من بث ${title}`}
+            alt={t("aiMonitoring.cam.tileLastFrame").replace("{title}", title)}
             className="absolute inset-0 size-full object-cover"
           />
         ) : (
@@ -101,7 +102,7 @@ export function GridTile({
           className={cn("size-2 rounded-full", isLive ? "animate-pulse bg-white" : "bg-white/50")}
           aria-hidden="true"
         />
-        {isLive ? "بث حي" : "غير متصل"}
+        {isLive ? t("aiMonitoring.cam.live") : t("aiMonitoring.cam.offline")}
       </div>
 
       {/* مؤشر جودة الاتصال الحي (RTT + kbps) — يظهر فقط عند اتصال WebRTC */}
@@ -114,7 +115,7 @@ export function GridTile({
             )}
           >
             <Wifi className="size-3" />
-            {TIER_LABEL[tier]}
+            {tierLabel[tier]}
           </span>
           <span className="rounded bg-black/70 px-1.5 py-0.5 font-mono text-[10px] text-white/90 tabular-nums">
             {stats.kbps}kbps · {stats.rttMs}ms · {stats.fps}fps
@@ -126,7 +127,7 @@ export function GridTile({
       {isLive && !connected && enableWebrtc && (
         <div className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-black/70 px-2 py-0.5 text-[10px] text-white/80">
           <WifiOff className="size-3 animate-pulse" />
-          جارٍ الاتصال…
+          {t("aiMonitoring.cam.connecting")}
         </div>
       )}
 
@@ -138,7 +139,7 @@ export function GridTile({
         </span>
         <span className="flex items-center gap-1.5 truncate text-xs text-white/70">
           <MapPin className="size-3 shrink-0" />
-          <span className="truncate">{cam.cameraLocation || "موقع غير محدد"}</span>
+          <span className="truncate">{cam.cameraLocation || t("aiMonitoring.cam.noLocation")}</span>
         </span>
       </div>
 
@@ -146,7 +147,7 @@ export function GridTile({
       <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/25">
         <span className="flex items-center gap-1.5 rounded-full bg-primary/90 px-3 py-1.5 text-xs font-semibold text-primary-foreground opacity-0 transition-opacity group-hover:opacity-100">
           <Radio className="size-3.5" />
-          مشاهدة مباشرة
+          {t("aiMonitoring.cam.watchLive")}
         </span>
       </span>
     </Link>

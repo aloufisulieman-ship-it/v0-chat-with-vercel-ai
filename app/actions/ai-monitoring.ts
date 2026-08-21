@@ -5,20 +5,11 @@ import { aiDetection, activeCameraStream, aiMonitoringNotification, user } from 
 import { and, desc, eq, gte, isNull, inArray, or } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { requireUser, requireHseReviewerId } from "@/lib/session"
-import type { DetectionType, DetectionStatus } from "@/lib/ai-monitoring"
-import { severityByType } from "@/lib/ai-monitoring"
+import type { DetectionStatus, FrameViolation } from "@/lib/ai-monitoring"
+import { mergeFrameViolations } from "@/lib/ai-monitoring"
 import { sessionCameraId } from "@/lib/camera-session"
 
-const VALID_TYPES: DetectionType[] = [
-  "no_ppe",
-  "traffic_congestion",
-  "unsafe_stacking",
-  "overspeed",
-  "restricted_area",
-  "pedestrian_near_forklift",
-]
 const VALID_STATUS: DetectionStatus[] = ["new", "acknowledged", "resolved", "false_positive"]
-const VALID_SEVERITY = ["low", "medium", "high", "critical"] as const
 
 // المراجع (admin/manager) يرى كل الاكتشافات، وغيره يرى ما سجّلته أجهزته فقط.
 async function isManager(userId: string) {
@@ -33,17 +24,66 @@ async function isManager(userId: string) {
 
 export type AiDetection = typeof aiDetection.$inferSelect
 
-// قائمة الاكتشافات مرتبة بالأحدث.
-export async function getDetections(): Promise<AiDetection[]> {
-  const userId = await requireHseReviewerId()
-  if (await isManager(userId)) {
-    return db.select().from(aiDetection).orderBy(desc(aiDetection.detectedAt))
+// شكل صف الاكتشاف كما يُرسَل للوحة: بلا حقل base64 الثقيل، مع علامة توفّر لقطة،
+// وقائمة أنواع المخالفات المرصودة في نفس اللقطة (مُحلّلة من JSON إلى مصفوفة).
+// (اللقطة نفسها تُجلب عند الطلب من مسار .../snapshot لتخفيف حمولة التحديث الدوري.)
+export type AiDetectionListItem = Omit<AiDetection, "snapshotUrl" | "detectionTypes"> & {
+  snapshotUrl: string
+  hasSnapshot: boolean
+  detectionTypes: string[]
+}
+
+// تحليل عمود detection_types (سلسلة JSON) إلى مصفوفة أنواع، مع تعويض السجلات
+// القديمة التي لا تملك القيمة بالنوع الأساسي المفرد.
+function parseDetectionTypes(raw: string, primary: string): string[] {
+  try {
+    const arr = raw ? (JSON.parse(raw) as unknown) : []
+    if (Array.isArray(arr) && arr.length > 0) return arr.map((t) => String(t))
+  } catch {
+    /* تجاهل JSON التالف ونعوّض بالنوع الأساسي */
   }
-  return db
-    .select()
+  return primary ? [primary] : []
+}
+
+// تحويل صف قاعدة البيانات إلى عنصر قائمة خفيف: نُفرّغ base64 الضخم ونضع علامة
+// hasSnapshot فقط. هذا يقلّص حمولة التحديث كل 10 ثوانٍ من عدة ميغابايت إلى كيلوبايتات.
+function toListItem(row: AiDetection): AiDetectionListItem {
+  const { snapshotUrl, detectionTypes, ...rest } = row
+  return {
+    ...rest,
+    snapshotUrl: "",
+    hasSnapshot: Boolean(snapshotUrl && snapshotUrl.length > 0),
+    detectionTypes: parseDetectionTypes(detectionTypes, rest.detectionType),
+  }
+}
+
+// قائمة الاكتشافات مرتبة بالأحدث (بدون base64 الثقيل — انظر toListItem).
+export async function getDetections(): Promise<AiDetectionListItem[]> {
+  const userId = await requireHseReviewerId()
+  const rows = (await isManager(userId))
+    ? await db.select().from(aiDetection).orderBy(desc(aiDetection.detectedAt))
+    : await db
+        .select()
+        .from(aiDetection)
+        .where(eq(aiDetection.userId, userId))
+        .orderBy(desc(aiDetection.detectedAt))
+  return rows.map(toListItem)
+}
+
+// لقطة إثبات اكتشاف واحد عند الطلب (base64 كامل). تحترم نطاق الرؤية نفسه:
+// المدير يرى كل اللقطات، وغيره يرى لقطات اكتشافات أجهزته فقط.
+export async function getDetectionSnapshot(id: number): Promise<string> {
+  const userId = await requireHseReviewerId()
+  const manager = await isManager(userId)
+  const where = manager
+    ? eq(aiDetection.id, id)
+    : and(eq(aiDetection.id, id), eq(aiDetection.userId, userId))
+  const rows = await db
+    .select({ snapshotUrl: aiDetection.snapshotUrl })
     .from(aiDetection)
-    .where(eq(aiDetection.userId, userId))
-    .orderBy(desc(aiDetection.detectedAt))
+    .where(where)
+    .limit(1)
+  return rows[0]?.snapshotUrl ?? ""
 }
 
 export type ActiveCameraStream = typeof activeCameraStream.$inferSelect
@@ -185,32 +225,26 @@ async function nextDetectionId(): Promise<string> {
   return `${prefix}${String(maxSeq + 1).padStart(3, "0")}`
 }
 
-// حفظ اكتشاف جديد قادم من تحليل الكاميرا. يُستدعى من مسار /api/ai-monitoring/analyze.
-export async function saveDetection(input: {
+// حفظ كل مخالفات الإطار الواحد في سجل واحد فقط. يُستدعى مرة واحدة لكل لقطة من
+// مسار /api/ai-monitoring/analyze: إن رُصدت عدة مخالفات في نفس الإطار (مثل
+// عامل بلا خوذة وبلا سترة عاكسة) تُدمج جميعها في بند واحد بنفس اللقطة بدل تكرار
+// صفوف بنفس الصورة. يُرجع السجل المُنشأ أو null إن لم تُرصد أي مخالفة.
+// منطق الدمج نفسه في mergeFrameViolations (دالة نقية قابلة للاختبار في lib).
+export async function saveFrameDetection(input: {
   inspectorName: string
   cameraLocation: string
-  detectionType: string
-  severity?: string
-  confidenceScore: number
   snapshotUrl?: string
-  notes?: string
-}): Promise<AiDetection> {
-  // يُستدعى من مسار التحليل نيابةً عن الموظف المصوّر (أي مستخدم مسجّل دخول).
+  detections: FrameViolation[]
+}): Promise<AiDetection | null> {
+  const merged = mergeFrameViolations(input.detections)
+  if (!merged) return null
+
+  // يُستدعى نيابةً عن الموظف المصوّر (أي مستخدم مسجّل دخول).
   const userId = (await requireUser()).id
-  // نفس معرّف جلسة الكاميرا المستخدم في البث المباشر (مشتقّ من اسم المفتش)
-  // لربط الاكتشافات بجلسة/كاميرا المفتش الصحيحة.
+  // نفس معرّف جلسة الكاميرا المستخدم في البث المباشر (مشتقّ من اسم المفتش).
   const cameraId = sessionCameraId(userId, input.inspectorName || "")
 
-  const detectionType = (VALID_TYPES as string[]).includes(input.detectionType)
-    ? (input.detectionType as DetectionType)
-    : "no_ppe"
-  const severity =
-    input.severity && (VALID_SEVERITY as readonly string[]).includes(input.severity)
-      ? input.severity
-      : severityByType[detectionType]
-  const confidence = Math.max(0, Math.min(100, Math.round(input.confidenceScore || 0)))
   const detectionId = await nextDetectionId()
-
   const [row] = await db
     .insert(aiDetection)
     .values({
@@ -219,20 +253,21 @@ export async function saveDetection(input: {
       cameraId,
       inspectorName: input.inspectorName?.slice(0, 160) || "كاميرا الهاتف",
       cameraLocation: input.cameraLocation?.slice(0, 200) || "",
-      detectionType,
-      severity,
-      confidenceScore: confidence,
+      detectionType: merged.primaryType,
+      detectionTypes: JSON.stringify(merged.types),
+      severity: merged.primarySeverity,
+      confidenceScore: merged.primaryConfidence,
       snapshotUrl: input.snapshotUrl || "",
-      notes: input.notes?.slice(0, 1000) || "",
+      notes: merged.notes,
       status: "new",
     })
     .returning()
 
   // إشعار المسؤولين والمفتشين عند الاكتشافات عالية الخطورة/الحرجة (سلوك مدموج من
   // فرع ai-smart-monitoring). لا يوقف فشلُ الإشعار حفظَ الاكتشاف.
-  if (severity === "high" || severity === "critical") {
+  if (merged.primarySeverity === "high" || merged.primarySeverity === "critical") {
     try {
-      await createDetectionNotifications(row, severity)
+      await createDetectionNotifications(row, merged.primarySeverity)
     } catch {
       /* تجاهل أخطاء الإشعار حتى لا يفشل حفظ الاكتشاف */
     }

@@ -4,6 +4,7 @@ import { useRef, useState } from "react"
 import { Camera, ImagePlus, X, Loader2 } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import { compressImage } from "@/lib/image-compress"
+import { useI18n } from "@/lib/i18n/client"
 
 // Course-wide photo uploader: supports camera capture and file selection,
 // compresses each image, and shows deletable thumbnails. Stores base64 strings.
@@ -14,6 +15,7 @@ export function TrainingPhotosUploader({
   photos: string[]
   onChange: (next: string[]) => void
 }) {
+  const { t } = useI18n()
   const cameraRef = useRef<HTMLInputElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
@@ -41,7 +43,7 @@ export function TrainingPhotosUploader({
 
   return (
     <div className="flex flex-col gap-2">
-      <Label className="text-sm font-medium">صور الدورة (اختياري)</Label>
+      <Label className="text-sm font-medium">{t("trainingExtras.coursePhotos")}</Label>
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
@@ -49,7 +51,8 @@ export function TrainingPhotosUploader({
           disabled={busy}
           className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-foreground hover:bg-muted disabled:opacity-50"
         >
-          {busy ? <Loader2 className="size-4 animate-spin" /> : <Camera className="size-4" />} التقاط صورة
+          {busy ? <Loader2 className="size-4 animate-spin" /> : <Camera className="size-4" />}{" "}
+          {t("trainingExtras.capturePhoto")}
         </button>
         <button
           type="button"
@@ -57,7 +60,7 @@ export function TrainingPhotosUploader({
           disabled={busy}
           className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-foreground hover:bg-muted disabled:opacity-50"
         >
-          <ImagePlus className="size-4" /> رفع من الجهاز
+          <ImagePlus className="size-4" /> {t("trainingExtras.uploadFromDevice")}
         </button>
       </div>
 
@@ -85,14 +88,14 @@ export function TrainingPhotosUploader({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={p || "/placeholder.svg"}
-                alt={`صورة الدورة ${i + 1}`}
+                alt={t("trainingExtras.coursePhotoAlt").replace("{n}", String(i + 1))}
                 className="h-20 w-20 rounded-md border border-border object-cover"
               />
               <button
                 type="button"
                 onClick={() => removeAt(i)}
                 className="absolute -right-1.5 -top-1.5 rounded-full bg-destructive p-0.5 text-destructive-foreground shadow"
-                aria-label="حذف الصورة"
+                aria-label={t("trainingExtras.deletePhoto")}
               >
                 <X className="size-3.5" />
               </button>

@@ -35,6 +35,8 @@ import {
   type RecordingsPage,
 } from "@/app/actions/recordings"
 import { AudioRecorder } from "./audio-recorder"
+import { useI18n } from "@/lib/i18n/client"
+import type { TFunction } from "@/lib/i18n/translate"
 
 function fmtDuration(sec: number) {
   const m = Math.floor(sec / 60)
@@ -42,16 +44,16 @@ function fmtDuration(sec: number) {
   return `${m}:${String(s).padStart(2, "0")}`
 }
 
-function fmtBytes(bytes: number) {
-  if (bytes <= 0) return "-"
+function fmtBytes(bytes: number, t: TFunction, fmt: (n: number) => string) {
+  if (bytes <= 0) return t("aiMonitoring.cam.recBytesEmpty")
   const mb = bytes / (1024 * 1024)
-  if (mb >= 1) return `${mb.toFixed(1)} م.ب`
-  return `${Math.round(bytes / 1024)} ك.ب`
+  if (mb >= 1) return t("aiMonitoring.cam.recMB").replace("{n}", fmt(Number(mb.toFixed(1))))
+  return t("aiMonitoring.cam.recKB").replace("{n}", fmt(Math.round(bytes / 1024)))
 }
 
-function fmtDate(iso: string) {
+function fmtDate(iso: string, locale: string) {
   // تثبيت المنطقة الزمنية على توقيت الرياض لمنع عدم تطابق الترطيب وعرض التوقيت السعودي.
-  return new Date(iso).toLocaleString("ar", {
+  return new Date(iso).toLocaleString(locale === "ar" ? "ar-SA" : "en-GB", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -62,6 +64,7 @@ function fmtDate(iso: string) {
 }
 
 export function RecordingsReview({ initialPage }: { initialPage: RecordingsPage }) {
+  const { t, locale, formatNumber } = useI18n()
   const [camera, setCamera] = useState<string>("all")
   const [from, setFrom] = useState<string>("")
   const [to, setTo] = useState<string>("")
@@ -92,10 +95,10 @@ export function RecordingsReview({ initialPage }: { initialPage: RecordingsPage 
       <Card className="flex flex-wrap items-end gap-3 p-4">
         <div className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
           <Filter className="size-4" />
-          تصفية
+          {t("common.filter")}
         </div>
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">الكاميرا</span>
+          <span className="text-xs text-muted-foreground">{t("aiMonitoring.cam.recCamera")}</span>
           <select
             value={camera}
             onChange={(e) => {
@@ -104,7 +107,7 @@ export function RecordingsReview({ initialPage }: { initialPage: RecordingsPage 
             }}
             className="min-w-40 rounded-lg border border-input bg-background px-3 py-1.5 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
           >
-            <option value="all">كل الكاميرات</option>
+            <option value="all">{t("aiMonitoring.cam.recAllCameras")}</option>
             {data.cameras.map((c) => (
               <option key={c} value={c}>
                 {c}
@@ -113,7 +116,7 @@ export function RecordingsReview({ initialPage }: { initialPage: RecordingsPage 
           </select>
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">من تاريخ</span>
+          <span className="text-xs text-muted-foreground">{t("aiMonitoring.cam.recFromDate")}</span>
           <input
             type="date"
             value={from}
@@ -125,7 +128,7 @@ export function RecordingsReview({ initialPage }: { initialPage: RecordingsPage 
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">إلى تاريخ</span>
+          <span className="text-xs text-muted-foreground">{t("aiMonitoring.cam.recToDate")}</span>
           <input
             type="date"
             value={to}
@@ -139,11 +142,11 @@ export function RecordingsReview({ initialPage }: { initialPage: RecordingsPage 
         {hasFilters && (
           <Button variant="ghost" size="sm" onClick={resetFilters} className="gap-1">
             <X className="size-3.5" />
-            مسح
+            {t("aiMonitoring.cam.recClear")}
           </Button>
         )}
         <span className="ms-auto self-center text-xs text-muted-foreground">
-          {data.total} تسجيل
+          {t("aiMonitoring.cam.recCount").replace("{n}", formatNumber(data.total))}
         </span>
       </Card>
 
@@ -153,19 +156,17 @@ export function RecordingsReview({ initialPage }: { initialPage: RecordingsPage 
             <Film className="size-6" />
           </div>
           <p className="text-sm font-medium text-foreground">
-            {hasFilters ? "لا توجد تسجيلات مطابقة للتصفية" : "لا توجد تسجيلات بعد"}
+            {hasFilters ? t("aiMonitoring.cam.recNoMatch") : t("aiMonitoring.cam.recNoneYet")}
           </p>
           <p className="max-w-sm text-xs text-muted-foreground text-pretty">
-            {hasFilters
-              ? "جرّب تغيير الكاميرا أو نطاق التاريخ."
-              : "سجّل فيديو من صفحة بث كاميرا الهاتف وسيظهر هنا للمراجعة والتقاط اللقطات."}
+            {hasFilters ? t("aiMonitoring.cam.recNoMatchHint") : t("aiMonitoring.cam.recNoneHint")}
           </p>
           {!hasFilters && (
             <Link
               href="/ai-monitoring/mobile-camera"
               className="mt-2 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
             >
-              فتح كاميرا الهاتف
+              {t("aiMonitoring.cam.recOpenPhone")}
             </Link>
           )}
         </Card>
@@ -193,10 +194,10 @@ export function RecordingsReview({ initialPage }: { initialPage: RecordingsPage 
             className="gap-1"
           >
             <ChevronRight className="size-4" />
-            السابق
+            {t("aiMonitoring.cam.recPrev")}
           </Button>
           <span className="text-sm text-muted-foreground">
-            صفحة {page} من {totalPages}
+            {t("aiMonitoring.cam.recPageOf").replace("{page}", formatNumber(page)).replace("{total}", formatNumber(totalPages))}
           </span>
           <Button
             variant="outline"
@@ -205,7 +206,7 @@ export function RecordingsReview({ initialPage }: { initialPage: RecordingsPage 
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             className="gap-1"
           >
-            التالي
+            {t("aiMonitoring.cam.recNext")}
             <ChevronLeft className="size-4" />
           </Button>
         </div>
@@ -229,18 +230,19 @@ function RecordingCard({
   onOpen: () => void
   onDeleted: () => void
 }) {
+  const { t, locale, formatNumber } = useI18n()
   const [deleting, setDeleting] = useState(false)
 
   async function handleDelete(e: React.MouseEvent) {
     e.stopPropagation()
-    if (!confirm("حذف هذا التسجيل وكل لقطاته نهائياً؟")) return
+    if (!confirm(t("aiMonitoring.cam.recDeleteConfirm"))) return
     setDeleting(true)
     try {
       await deleteRecording(rec.id)
-      toast({ title: "تم حذف التسجيل" })
+      toast({ title: t("aiMonitoring.cam.recDeleted") })
       onDeleted()
     } catch (err) {
-      toast({ title: err instanceof Error ? err.message : "تعذّر الحذف", variant: "destructive" })
+      toast({ title: err instanceof Error ? err.message : t("aiMonitoring.cam.recDeleteFailed"), variant: "destructive" })
       setDeleting(false)
     }
   }
@@ -254,7 +256,7 @@ function RecordingCard({
         {rec.posterUrl ? (
           <Image
             src={rec.posterUrl || "/placeholder.svg"}
-            alt={`معاينة ${rec.cameraName}`}
+            alt={t("aiMonitoring.cam.recPreviewAlt").replace("{name}", rec.cameraName)}
             fill
             sizes="(max-width: 640px) 100vw, 33vw"
             className="object-cover"
@@ -291,7 +293,7 @@ function RecordingCard({
             onClick={handleDelete}
             disabled={deleting}
             className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
-            aria-label="حذف التسجيل"
+            aria-label={t("aiMonitoring.cam.recDeleteAria")}
           >
             {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
           </button>
@@ -303,11 +305,11 @@ function RecordingCard({
           </span>
           <span className="flex items-center gap-1">
             <HardDrive className="size-3" />
-            {fmtBytes(rec.fileSizeBytes)}
+            {fmtBytes(rec.fileSizeBytes, t, formatNumber)}
           </span>
           <span className="flex items-center gap-1">
             <Clock className="size-3" />
-            {fmtDate(rec.recordedAt)}
+            {fmtDate(rec.recordedAt, locale)}
           </span>
         </div>
       </div>
@@ -324,6 +326,7 @@ function ReviewDialog({
   onClose: () => void
   onScreenshotChange: () => void
 }) {
+  const { t } = useI18n()
   const videoRef = useRef<HTMLVideoElement>(null)
   const [capturing, setCapturing] = useState(false)
 
@@ -339,7 +342,7 @@ function ReviewDialog({
     const video = videoRef.current
     if (!video || !recording) return
     if (video.readyState < 2) {
-      toast({ title: "انتظر تحميل الفيديو ثم حاول", variant: "destructive" })
+      toast({ title: t("aiMonitoring.cam.recWaitVideo"), variant: "destructive" })
       return
     }
     setCapturing(true)
@@ -358,10 +361,10 @@ function ReviewDialog({
       })
       await mutate()
       onScreenshotChange()
-      toast({ title: "تم التقاط اللقطة" })
+      toast({ title: t("aiMonitoring.cam.recSnapTaken") })
     } catch (err) {
       toast({
-        title: err instanceof Error && err.message !== "canvas" ? err.message : "تعذّر التقاط اللقطة",
+        title: err instanceof Error && err.message !== "canvas" ? err.message : t("aiMonitoring.cam.recSnapFailed"),
         variant: "destructive",
       })
     } finally {
@@ -375,7 +378,7 @@ function ReviewDialog({
       await mutate()
       onScreenshotChange()
     } catch {
-      toast({ title: "تعذّر حذف اللقطة", variant: "destructive" })
+      toast({ title: t("aiMonitoring.cam.recSnapDeleteFailed"), variant: "destructive" })
     }
   }
 
@@ -405,11 +408,11 @@ function ReviewDialog({
 
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-xs text-muted-foreground text-pretty">
-                  شغّل الفيديو وأوقفه عند اللحظة المطلوبة ثم التقط لقطة لإنشاء مخالفة منها.
+                  {t("aiMonitoring.cam.recCapturePrompt")}
                 </p>
                 <Button onClick={captureFrame} disabled={capturing} className="gap-2">
                   {capturing ? <Loader2 className="size-4 animate-spin" /> : <Camera className="size-4" />}
-                  التقاط لقطة من اللحظة الحالية
+                  {t("aiMonitoring.cam.recCaptureFromMoment")}
                 </Button>
               </div>
 
@@ -419,12 +422,12 @@ function ReviewDialog({
               <div>
                 <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
                   <Camera className="size-4" />
-                  اللقطات المستخرجة
+                  {t("aiMonitoring.cam.recExtractedShots")}
                   <span className="text-xs font-normal text-muted-foreground">({screenshots.length})</span>
                 </h3>
                 {screenshots.length === 0 ? (
                   <p className="rounded-lg border border-dashed border-border py-6 text-center text-xs text-muted-foreground">
-                    لم يتم التقاط أي لقطات من هذا التسجيل بعد.
+                    {t("aiMonitoring.cam.recNoShotsYet")}
                   </p>
                 ) : (
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -467,6 +470,7 @@ function ScreenshotCard({
   onDelete: () => void
   onLink: () => void
 }) {
+  const { t } = useI18n()
   const violationHref = useMemo(() => {
     const params = new URLSearchParams({ from: "recording", evidence: shot.imageUrl })
     if (detectedBy) params.set("detectedBy", detectedBy)
@@ -478,7 +482,7 @@ function ScreenshotCard({
       <div className="relative aspect-video bg-muted">
         <Image
           src={shot.imageUrl || "/placeholder.svg"}
-          alt={`لقطة عند ${fmtDuration(shot.atSeconds)}`}
+          alt={t("aiMonitoring.cam.recSnapAtAlt").replace("{time}", fmtDuration(shot.atSeconds))}
           fill
           sizes="200px"
           className="object-cover"
@@ -490,7 +494,7 @@ function ScreenshotCard({
         <button
           onClick={onDelete}
           className="absolute right-1 top-1 rounded bg-black/60 p-1 text-white opacity-0 transition-opacity hover:bg-destructive group-hover:opacity-100"
-          aria-label="حذف اللقطة"
+          aria-label={t("aiMonitoring.cam.recSnapDeleteAria")}
         >
           <X className="size-3.5" />
         </button>
@@ -499,7 +503,7 @@ function ScreenshotCard({
         {shot.linkedViolationId != null ? (
           <span className="flex items-center justify-center gap-1 rounded-md bg-primary/10 py-1.5 text-xs font-medium text-primary">
             <FileWarning className="size-3.5" />
-            تم إنشاء مخالفة
+            {t("aiMonitoring.cam.recViolationCreatedShort")}
           </span>
         ) : (
           <Link
@@ -508,7 +512,7 @@ function ScreenshotCard({
             className="flex items-center justify-center gap-1 rounded-md border border-border py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
           >
             <FileWarning className="size-3.5" />
-            إنشاء مخالفة من اللقطة
+            {t("aiMonitoring.cam.recCreateFromShot")}
           </Link>
         )}
       </div>

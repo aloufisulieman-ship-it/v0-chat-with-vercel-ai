@@ -1,6 +1,9 @@
+"use client"
+
 import { FileText } from "lucide-react"
 import { FinanceStatusBadge } from "@/components/finance-status-badge"
 import { normalizeFinanceStatus } from "@/lib/finance-status"
+import { useI18n } from "@/lib/i18n/client"
 
 /**
  * كتلة تفاصيل معالجة المالية داخل نافذة تفاصيل السجل — تظهر لجميع المستخدمين.
@@ -19,16 +22,17 @@ export function FinanceClosureBlock({
   closedAt: Date | string | null | undefined
   receiptUrl: string | null | undefined
 }) {
+  const { t, locale } = useI18n()
   const status = normalizeFinanceStatus(financeStatus)
   const isClosed = status === "closed"
-  const closedAtStr = closedAt ? new Date(closedAt).toLocaleString("ar") : ""
+  const closedAtStr = closedAt ? new Date(closedAt).toLocaleString(locale === "en" ? "en-US" : "ar") : ""
   const hasReceipt = !!receiptUrl && receiptUrl.length > 0
   const isImage = hasReceipt && receiptUrl!.startsWith("data:image")
 
   return (
     <section className="flex flex-col gap-3 rounded-lg border border-border p-4">
       <div className="flex items-center justify-between gap-2">
-        <h4 className="text-sm font-semibold text-foreground">حالة المالية</h4>
+        <h4 className="text-sm font-semibold text-foreground">{t("closureBlock.financeTitle")}</h4>
         <FinanceStatusBadge financeStatus={financeStatus} />
       </div>
 
@@ -36,33 +40,33 @@ export function FinanceClosureBlock({
         <dl className="flex flex-col gap-1.5 text-sm">
           {closedAtStr && (
             <div className="flex gap-2">
-              <dt className="text-muted-foreground">تاريخ الإغلاق:</dt>
+              <dt className="text-muted-foreground">{t("closureBlock.closedDate")}</dt>
               <dd className="text-foreground">{closedAtStr}</dd>
             </div>
           )}
           {closedBy && (
             <div className="flex gap-2">
-              <dt className="text-muted-foreground">أُغلقت بواسطة:</dt>
+              <dt className="text-muted-foreground">{t("closureBlock.closedBy")}</dt>
               <dd className="text-foreground">{closedBy}</dd>
             </div>
           )}
           <div className="flex gap-2">
-            <dt className="text-muted-foreground">رقم الستلمنت:</dt>
+            <dt className="text-muted-foreground">{t("closureBlock.settlementNumber")}</dt>
             <dd className="text-foreground" dir="ltr">{settlementNumber || "-"}</dd>
           </div>
         </dl>
       ) : (
         <p className="text-sm text-muted-foreground">
-          هذه المخالفة خارجية ومحوّلة إلى المالية، ولا تزال قيد المعالجة.
+          {t("closureBlock.financePendingNote")}
         </p>
       )}
 
       {hasReceipt && (
         <div className="flex flex-col gap-2">
-          <span className="text-xs font-medium text-muted-foreground">إيصال الدفع</span>
+          <span className="text-xs font-medium text-muted-foreground">{t("closureBlock.paymentReceipt")}</span>
           {isImage ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={receiptUrl! || "/placeholder.svg"} alt="إيصال الدفع" className="size-24 rounded border border-border object-cover" />
+            <img src={receiptUrl! || "/placeholder.svg"} alt={t("closureBlock.paymentReceipt")} className="size-24 rounded border border-border object-cover" />
           ) : (
             <a
               href={receiptUrl!}
@@ -70,7 +74,7 @@ export function FinanceClosureBlock({
               className="flex size-24 flex-col items-center justify-center gap-1 rounded border border-border bg-muted/40 text-[10px] text-muted-foreground hover:bg-muted"
             >
               <FileText className="size-6" />
-              تنزيل الإيصال
+              {t("closureBlock.downloadReceipt")}
             </a>
           )}
         </div>

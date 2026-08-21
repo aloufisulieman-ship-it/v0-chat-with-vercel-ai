@@ -32,6 +32,12 @@ import {
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
 import { ToastAction } from "@/components/ui/toast"
+import { useI18n } from "@/lib/i18n/client"
+
+// استبدال بسيط لعناصر النائبة {name}/{time}/{saved}... في نصوص الترجمة.
+function fill(template: string, vars: Record<string, string | number>): string {
+  return template.replace(/\{(\w+)\}/g, (_, k) => (k in vars ? String(vars[k]) : `{${k}}`))
+}
 
 // حقل التوقيع يعتمد على DOM، لذا يُحمّل ديناميكياً بدون SSR.
 const SignaturePad = dynamic(() => import("./signature-field"), {
@@ -45,7 +51,7 @@ type ViolationCategory = "forklift" | "tuktuk" | "loading" | "vest" | "crossing"
 interface ViolationTemplate {
   id: string
   category: ViolationCategory
-  text: string
+  textKey: string
   severity: "minor" | "moderate" | "serious"
 }
 
@@ -84,110 +90,126 @@ interface PatrolSession {
   notes: string
 }
 
+// الفئات تحمل مفتاح ترجمة (labelKey) بدل النص المباشر ليُترجَم لحظة العرض.
 const VIOLATION_CATEGORIES: {
   value: ViolationCategory
-  label: string
+  labelKey: string
   icon: typeof Truck
   color: string
   bg: string
 }[] = [
-  { value: "forklift", label: "رافعة شوكية", icon: Truck, color: "#dc2626", bg: "#fef2f2" },
-  { value: "tuktuk", label: "توك توك", icon: Truck, color: "#7c3aed", bg: "#f5f3ff" },
-  { value: "loading", label: "شحن وتفريغ", icon: Users, color: "#d97706", bg: "#fffbeb" },
-  { value: "vest", label: "سترة عاكسة", icon: PersonStanding, color: "#0284c7", bg: "#f0f9ff" },
-  { value: "crossing", label: "ممرات المشاة", icon: Footprints, color: "#059669", bg: "#f0fdf4" },
-  { value: "shoes", label: "جوتي السلامة", icon: HardHat, color: "#b45309", bg: "#fefce8" },
-  { value: "other", label: "أخرى", icon: ShieldAlert, color: "#6b7280", bg: "#f9fafb" },
+  { value: "forklift", labelKey: "patrol.categories.forklift", icon: Truck, color: "#dc2626", bg: "#fef2f2" },
+  { value: "tuktuk", labelKey: "patrol.categories.tuktuk", icon: Truck, color: "#7c3aed", bg: "#f5f3ff" },
+  { value: "loading", labelKey: "patrol.categories.loading", icon: Users, color: "#d97706", bg: "#fffbeb" },
+  { value: "vest", labelKey: "patrol.categories.vest", icon: PersonStanding, color: "#0284c7", bg: "#f0f9ff" },
+  { value: "crossing", labelKey: "patrol.categories.crossing", icon: Footprints, color: "#059669", bg: "#f0fdf4" },
+  { value: "shoes", labelKey: "patrol.categories.shoes", icon: HardHat, color: "#b45309", bg: "#fefce8" },
+  { value: "other", labelKey: "patrol.categories.other", icon: ShieldAlert, color: "#6b7280", bg: "#f9fafb" },
 ]
 
+// كل قالب يحمل textKey (مفتاح الترجمة). النص المخزَّن في الحالة/قاعدة البيانات
+// يُشتق بترجمة textKey لحظة الإضافة (بلغة العرض الحالية) لضمان قيمة نصية ثابتة.
 const VIOLATION_TEMPLATES: ViolationTemplate[] = [
-  { id: "F1", category: "forklift", severity: "serious", text: "قيادة الرافعة بسرعة زائدة داخل السوق" },
-  { id: "F2", category: "forklift", severity: "serious", text: "رافعة شوكية في منطقة مشاة بدون تحذير" },
-  { id: "F3", category: "forklift", severity: "moderate", text: "عدم ارتداء حزام الأمان أثناء قيادة الرافعة" },
-  { id: "F4", category: "forklift", severity: "moderate", text: "قيادة الرافعة بحمل مرفوع بشكل خاطئ" },
-  { id: "F5", category: "forklift", severity: "serious", text: "قيادة الرافعة بدون رخصة HSE سارية" },
-  { id: "F6", category: "forklift", severity: "moderate", text: "ترك الرافعة تعمل بدون مراقبة" },
-  { id: "F7", category: "forklift", severity: "minor", text: "عدم استخدام بوق التحذير عند الاقتراب من التقاطعات" },
-  { id: "F8", category: "forklift", severity: "serious", text: "حمل أشخاص على الرافعة الشوكية" },
-  { id: "T1", category: "tuktuk", severity: "serious", text: "قيادة التوك توك بسرعة زائدة داخل السوق" },
-  { id: "T2", category: "tuktuk", severity: "moderate", text: "عدم ارتداء حزام الأمان في التوك توك" },
-  { id: "T3", category: "tuktuk", severity: "serious", text: "قيادة التوك توك بدون رخصة HSE سارية" },
-  { id: "T4", category: "tuktuk", severity: "moderate", text: "تجاوز الحمولة المسموحة في التوك توك" },
-  { id: "T5", category: "tuktuk", severity: "minor", text: "التوك توك في مسار مخصص للرافعات الشوكية" },
-  { id: "T6", category: "tuktuk", severity: "moderate", text: "حمل أكثر من الطاقة الاستيعابية من الأشخاص" },
-  { id: "L1", category: "loading", severity: "serious", text: "رفع أحمال يدوياً بطريقة خاطئة" },
-  { id: "L2", category: "loading", severity: "moderate", text: "عمال في منطقة تشغيل الرافعة بدون تنسيق" },
-  { id: "L3", category: "loading", severity: "serious", text: "الوقوف تحت حمل مرفوع بالرافعة" },
-  { id: "L4", category: "loading", severity: "moderate", text: "بضائع غير مؤمّنة على البليت قبل الرفع" },
-  { id: "L5", category: "loading", severity: "minor", text: "عمال التفريغ بدون قفازات حماية" },
-  { id: "L6", category: "loading", severity: "moderate", text: "إعاقة ممر الطوارئ بالبضائع أثناء التفريغ" },
-  { id: "L7", category: "loading", severity: "serious", text: "عمال على سطح الشاحنة بدون حماية من السقوط" },
-  { id: "V1", category: "vest", severity: "moderate", text: "عامل في ساحة التحميل بدون سترة عاكسة" },
-  { id: "V2", category: "vest", severity: "moderate", text: "عامل مستودع في مسار المركبات بدون سترة عاكسة" },
-  { id: "V3", category: "vest", severity: "minor", text: "سترة عاكسة مرتداة بشكل غير صحيح" },
-  { id: "V4", category: "vest", severity: "moderate", text: "زائر في منطقة العمليات بدون سترة عاكسة" },
-  { id: "V5", category: "vest", severity: "moderate", text: "سائق مركبة نزل بدون سترة عاكسة" },
-  { id: "C1", category: "crossing", severity: "serious", text: "عبور المشاة من خارج الممر المخصص" },
-  { id: "C2", category: "crossing", severity: "serious", text: "مشاة يسيرون في مسار الرافعات الشوكية" },
-  { id: "C3", category: "crossing", severity: "moderate", text: "تجاهل إشارات التوقف عند الممر" },
-  { id: "C4", category: "crossing", severity: "moderate", text: "ممر مشاة محجوب ببضائع أو مركبات" },
-  { id: "C5", category: "crossing", severity: "minor", text: "مشاة يستخدمون هواتفهم عند العبور" },
-  { id: "S1", category: "shoes", severity: "moderate", text: "عامل في منطقة التحميل بدون حذاء سلامة" },
-  { id: "S2", category: "shoes", severity: "moderate", text: "عامل مستودع يرتدي أحذية عادية أثناء التشغيل" },
-  { id: "S3", category: "shoes", severity: "minor", text: "عامل يرتدي أحذية سلامة تالفة" },
-  { id: "S4", category: "shoes", severity: "moderate", text: "عامل فرز بدون حذاء واق من الثقل" },
-  { id: "O1", category: "other", severity: "moderate", text: "التدخين في منطقة ممنوعة" },
-  { id: "O2", category: "other", severity: "minor", text: "إلقاء النفايات خارج الحاويات المخصصة" },
-  { id: "O3", category: "other", severity: "moderate", text: "العمل بدون تصريح عمل ساري" },
-  { id: "O4", category: "other", severity: "serious", text: "تجاهل تعليمات مسؤول السلامة" },
+  { id: "F1", category: "forklift", severity: "serious", textKey: "patrol.tpl.F1" },
+  { id: "F2", category: "forklift", severity: "serious", textKey: "patrol.tpl.F2" },
+  { id: "F3", category: "forklift", severity: "moderate", textKey: "patrol.tpl.F3" },
+  { id: "F4", category: "forklift", severity: "moderate", textKey: "patrol.tpl.F4" },
+  { id: "F5", category: "forklift", severity: "serious", textKey: "patrol.tpl.F5" },
+  { id: "F6", category: "forklift", severity: "moderate", textKey: "patrol.tpl.F6" },
+  { id: "F7", category: "forklift", severity: "minor", textKey: "patrol.tpl.F7" },
+  { id: "F8", category: "forklift", severity: "serious", textKey: "patrol.tpl.F8" },
+  { id: "T1", category: "tuktuk", severity: "serious", textKey: "patrol.tpl.T1" },
+  { id: "T2", category: "tuktuk", severity: "moderate", textKey: "patrol.tpl.T2" },
+  { id: "T3", category: "tuktuk", severity: "serious", textKey: "patrol.tpl.T3" },
+  { id: "T4", category: "tuktuk", severity: "moderate", textKey: "patrol.tpl.T4" },
+  { id: "T5", category: "tuktuk", severity: "minor", textKey: "patrol.tpl.T5" },
+  { id: "T6", category: "tuktuk", severity: "moderate", textKey: "patrol.tpl.T6" },
+  { id: "L1", category: "loading", severity: "serious", textKey: "patrol.tpl.L1" },
+  { id: "L2", category: "loading", severity: "moderate", textKey: "patrol.tpl.L2" },
+  { id: "L3", category: "loading", severity: "serious", textKey: "patrol.tpl.L3" },
+  { id: "L4", category: "loading", severity: "moderate", textKey: "patrol.tpl.L4" },
+  { id: "L5", category: "loading", severity: "minor", textKey: "patrol.tpl.L5" },
+  { id: "L6", category: "loading", severity: "moderate", textKey: "patrol.tpl.L6" },
+  { id: "L7", category: "loading", severity: "serious", textKey: "patrol.tpl.L7" },
+  { id: "V1", category: "vest", severity: "moderate", textKey: "patrol.tpl.V1" },
+  { id: "V2", category: "vest", severity: "moderate", textKey: "patrol.tpl.V2" },
+  { id: "V3", category: "vest", severity: "minor", textKey: "patrol.tpl.V3" },
+  { id: "V4", category: "vest", severity: "moderate", textKey: "patrol.tpl.V4" },
+  { id: "V5", category: "vest", severity: "moderate", textKey: "patrol.tpl.V5" },
+  { id: "C1", category: "crossing", severity: "serious", textKey: "patrol.tpl.C1" },
+  { id: "C2", category: "crossing", severity: "serious", textKey: "patrol.tpl.C2" },
+  { id: "C3", category: "crossing", severity: "moderate", textKey: "patrol.tpl.C3" },
+  { id: "C4", category: "crossing", severity: "moderate", textKey: "patrol.tpl.C4" },
+  { id: "C5", category: "crossing", severity: "minor", textKey: "patrol.tpl.C5" },
+  { id: "S1", category: "shoes", severity: "moderate", textKey: "patrol.tpl.S1" },
+  { id: "S2", category: "shoes", severity: "moderate", textKey: "patrol.tpl.S2" },
+  { id: "S3", category: "shoes", severity: "minor", textKey: "patrol.tpl.S3" },
+  { id: "S4", category: "shoes", severity: "moderate", textKey: "patrol.tpl.S4" },
+  { id: "O1", category: "other", severity: "moderate", textKey: "patrol.tpl.O1" },
+  { id: "O2", category: "other", severity: "minor", textKey: "patrol.tpl.O2" },
+  { id: "O3", category: "other", severity: "moderate", textKey: "patrol.tpl.O3" },
+  { id: "O4", category: "other", severity: "serious", textKey: "patrol.tpl.O4" },
 ]
 
-const OBSERVATION_TEMPLATES = [
-  "إضاءة غير كافية في المنطقة",
-  "أرضية زلقة أو متشققة",
-  "علامات تحذيرية مفقودة أو تالفة",
-  "ممر مشاة يحتاج تجديد الدهان",
-  "تسرب زيت من رافعة شوكية",
-  "طفاية حريق تحتاج فحص دوري",
-  "مرايا التقاطعات تحتاج تعديل",
-  "معدات مكسورة تحتاج صيانة",
+const OBSERVATION_TEMPLATE_KEYS = [
+  "patrol.obs.obs1",
+  "patrol.obs.obs2",
+  "patrol.obs.obs3",
+  "patrol.obs.obs4",
+  "patrol.obs.obs5",
+  "patrol.obs.obs6",
+  "patrol.obs.obs7",
+  "patrol.obs.obs8",
 ]
 
-const POSITIVE_TEMPLATES = [
-  "التزام كامل بمعدات الحماية الشخصية",
-  "سلوك قيادة ممتاز وآمن",
-  "استجابة فورية لتعليمات السلامة",
-  "ترتيب ومنظومة ممتازة في المنطقة",
-  "تعاون إيجابي مع فريق HSE",
+const POSITIVE_TEMPLATE_KEYS = [
+  "patrol.pos.pos1",
+  "patrol.pos.pos2",
+  "patrol.pos.pos3",
+  "patrol.pos.pos4",
+  "patrol.pos.pos5",
 ]
 
-const LOCATIONS = [
-  "البوابة الرئيسية",
-  "البوابة الخلفية",
-  "ساحة التحميل أ",
-  "ساحة التحميل ب",
-  "ساحة التحميل ج",
-  "ممر الرافعات الرئيسي",
-  "منطقة تقاطع المركبات",
-  "مستودع A",
-  "مستودع B",
-  "مستودع C",
-  "مستودع D",
-  "منطقة الفرز",
-  "منطقة التغليف",
-  "منطقة التخزين البارد",
-  "ممر المشاة الرئيسي",
-  "ممر المشاة الجانبي",
-  "موقف السيارات",
-  "مكاتب الإدارة",
-  "المطعم والاستراحة",
-  "منطقة النفايات",
+const LOCATION_KEYS = [
+  "patrol.loc.loc1",
+  "patrol.loc.loc2",
+  "patrol.loc.loc3",
+  "patrol.loc.loc4",
+  "patrol.loc.loc5",
+  "patrol.loc.loc6",
+  "patrol.loc.loc7",
+  "patrol.loc.loc8",
+  "patrol.loc.loc9",
+  "patrol.loc.loc10",
+  "patrol.loc.loc11",
+  "patrol.loc.loc12",
+  "patrol.loc.loc13",
+  "patrol.loc.loc14",
+  "patrol.loc.loc15",
+  "patrol.loc.loc16",
+  "patrol.loc.loc17",
+  "patrol.loc.loc18",
+  "patrol.loc.loc19",
+  "patrol.loc.loc20",
 ]
 
-const SEVERITY_LABELS = {
-  minor: { label: "بسيطة", color: "#16a34a", bg: "#f0fdf4" },
-  moderate: { label: "متوسطة", color: "#d97706", bg: "#fffbeb" },
-  serious: { label: "جسيمة", color: "#dc2626", bg: "#fef2f2" },
+const ROUTE_KEYS = ["patrol.routes.r1", "patrol.routes.r2", "patrol.routes.r3", "patrol.routes.r4", "patrol.routes.r5"]
+
+const FORKLIFT_EQUIP_KEYS = [
+  "patrol.equipForklift.ef1",
+  "patrol.equipForklift.ef2",
+  "patrol.equipForklift.ef3",
+  "patrol.equipForklift.ef4",
+  "patrol.equipForklift.ef5",
+]
+
+const TUKTUK_EQUIP_KEYS = ["patrol.equipTuktuk.et1", "patrol.equipTuktuk.et2", "patrol.equipTuktuk.et3"]
+
+// ألوان الخطورة فقط؛ التسمية تُترجَم عبر مفتاح patrol.severity.<level>.
+const SEVERITY_STYLES = {
+  minor: { color: "#16a34a", bg: "#f0fdf4" },
+  moderate: { color: "#d97706", bg: "#fffbeb" },
+  serious: { color: "#dc2626", bg: "#fef2f2" },
 }
 
 function generateId(prefix: string) {
@@ -203,15 +225,18 @@ function nowTime() {
 // تُرسل بيانات المخالفة إلى /api/patrol-violation الذي يستدعي نفس دالة
 // createViolationFull المستخدمة في نموذج المخالفات. تُطابَق أسماء الحقول مع عقد
 // المسار (place / violationDate / violationTime / images) ليُحفظ السجل ويظهر في /violations.
-async function saveViolationToDB(entry: PatrolEntry): Promise<{ documentNo: string }> {
+async function saveViolationToDB(
+  entry: PatrolEntry,
+  t: (k: string) => string,
+): Promise<{ documentNo: string }> {
   const description = entry.equipmentNo
-    ? `${entry.description} — رقم المعدة: ${entry.equipmentNo}${entry.equipmentType ? ` (${entry.equipmentType})` : ""}`
+    ? `${entry.description} — ${t("patrol.equipmentNo")}: ${entry.equipmentNo}${entry.equipmentType ? ` (${entry.equipmentType})` : ""}`
     : entry.description
   const res = await fetch("/api/patrol-violation", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      employeeName: entry.employeeName || "غير محدد",
+      employeeName: entry.employeeName || t("violations.notInSource"),
       employeeNo: entry.employeeNo || "",
       companyName: entry.companyName || "MHS",
       violationType: entry.description,
@@ -227,7 +252,7 @@ async function saveViolationToDB(entry: PatrolEntry): Promise<{ documentNo: stri
   })
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
-    throw new Error(data?.error || "فشل الحفظ")
+    throw new Error(data?.error || t("patrol.badgeError"))
   }
   return res.json()
 }
@@ -235,7 +260,10 @@ async function saveViolationToDB(entry: PatrolEntry): Promise<{ documentNo: stri
 // ── حفظ الملاحظة/الإيجابية في قاعدة البيانات ────────────────────────────────────
 // تُرسل بيانات الملاحظة (observation) أو الإيجابية (positive) إلى
 // /api/patrol-observation ليُحفظ السجل ويظهر في لوحة التحكم والتقارير.
-async function saveObservationToDB(entry: PatrolEntry): Promise<{ documentNo: string }> {
+async function saveObservationToDB(
+  entry: PatrolEntry,
+  t: (k: string) => string,
+): Promise<{ documentNo: string }> {
   const res = await fetch("/api/patrol-observation", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -251,7 +279,7 @@ async function saveObservationToDB(entry: PatrolEntry): Promise<{ documentNo: st
   })
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
-    throw new Error(data?.error || "فشل الحفظ")
+    throw new Error(data?.error || t("patrol.badgeError"))
   }
   return res.json()
 }
@@ -259,6 +287,7 @@ async function saveObservationToDB(entry: PatrolEntry): Promise<{ documentNo: st
 // ── Photo Capture ──────────────────────────────────────────────────────────────
 
 function PhotoCapture({ onCapture }: { onCapture: (b: string) => void }) {
+  const { t } = useI18n()
   const ref = useRef<HTMLInputElement>(null)
   return (
     <>
@@ -282,7 +311,7 @@ function PhotoCapture({ onCapture }: { onCapture: (b: string) => void }) {
         className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold"
         style={{ background: "#1e3a5f", color: "#fff" }}
       >
-        <Camera size={15} /> صورة
+        <Camera size={15} /> {t("patrol.photo")}
       </button>
     </>
   )
@@ -299,10 +328,11 @@ function SaveBadge({
   documentNo?: string
   errorMsg?: string
 }) {
+  const { t } = useI18n()
   if (status === "saving")
     return (
       <span className="text-xs flex items-center gap-1 text-blue-400">
-        <CloudUpload size={12} className="animate-pulse" /> جاري الحفظ...
+        <CloudUpload size={12} className="animate-pulse" /> {t("patrol.badgeSaving")}
       </span>
     )
   if (status === "saved")
@@ -314,13 +344,13 @@ function SaveBadge({
   if (status === "error")
     return (
       <span className="text-xs flex items-center gap-1 text-red-400">
-        <AlertCircle size={12} /> {errorMsg || "فشل الحفظ"}
+        <AlertCircle size={12} /> {errorMsg || t("patrol.badgeError")}
       </span>
     )
-  return <span className="text-xs text-gray-300">مسودة</span>
+  return <span className="text-xs text-gray-300">{t("patrol.badgeDraft")}</span>
 }
 
-// ── Entry Card ───────────────────────────────────────────────────────────────�����
+// ── Entry Card ───────────────────────────────────────────────────────────────������
 
 function EntryCard({
   entry,
@@ -331,9 +361,10 @@ function EntryCard({
   onDelete: () => void
   onRetry?: () => void
 }) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const catInfo = VIOLATION_CATEGORIES.find((c) => c.value === entry.category)
-  const sevInfo = entry.severity ? SEVERITY_LABELS[entry.severity] : null
+  const sevInfo = entry.severity ? SEVERITY_STYLES[entry.severity] : null
   const borderColor =
     entry.type === "violation" ? "#ef4444" : entry.type === "observation" ? "#f59e0b" : "#22c55e"
 
@@ -367,15 +398,15 @@ function EntryCard({
                 className="text-xs font-bold px-2 py-0.5 rounded-full"
                 style={{ background: catInfo.bg, color: catInfo.color }}
               >
-                {catInfo.label}
+                {t(catInfo.labelKey)}
               </span>
             )}
-            {sevInfo && (
+            {sevInfo && entry.severity && (
               <span
                 className="text-xs font-bold px-2 py-0.5 rounded-full"
                 style={{ background: sevInfo.bg, color: sevInfo.color }}
               >
-                {sevInfo.label}
+                {t(`patrol.severity.${entry.severity}`)}
               </span>
             )}
             <span className="text-xs text-gray-400 flex items-center gap-0.5">
@@ -386,7 +417,9 @@ function EntryCard({
           <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
             <MapPin size={10} /> {entry.location}
             {entry.workerCount && entry.workerCount > 1 && (
-              <span className="text-blue-500 font-bold">· {entry.workerCount} عمال</span>
+              <span className="text-blue-500 font-bold">
+                · {entry.workerCount} {t("patrol.workers")}
+              </span>
             )}
           </p>
           <div className="mt-1 flex items-center gap-2">
@@ -399,7 +432,7 @@ function EntryCard({
                 }}
                 className="text-xs font-bold text-blue-500 flex items-center gap-1"
               >
-                <RefreshCw size={11} /> إعادة المحاولة
+                <RefreshCw size={11} /> {t("patrol.retry")}
               </button>
             )}
           </div>
@@ -420,19 +453,19 @@ function EntryCard({
             <div className="mt-2 rounded-xl p-2.5 space-y-1.5" style={{ background: "#f8fafc" }}>
               {entry.employeeName && (
                 <div className="flex justify-between text-xs">
-                  <span className="text-gray-400">الاسم</span>
+                  <span className="text-gray-400">{t("patrol.name")}</span>
                   <span className="font-bold text-gray-700">{entry.employeeName}</span>
                 </div>
               )}
               {entry.companyName && (
                 <div className="flex justify-between text-xs">
-                  <span className="text-gray-400">الشركة</span>
+                  <span className="text-gray-400">{t("patrol.company")}</span>
                   <span className="font-bold text-gray-700">{entry.companyName}</span>
                 </div>
               )}
               {entry.employeeNo && (
                 <div className="flex justify-between text-xs">
-                  <span className="text-gray-400">رقم الهوية / الوظيفي</span>
+                  <span className="text-gray-400">{t("patrol.idNo")}</span>
                   <span className="font-bold text-gray-700 font-mono" dir="ltr">
                     {entry.employeeNo}
                   </span>
@@ -440,7 +473,7 @@ function EntryCard({
               )}
               {entry.equipmentNo && (
                 <div className="flex justify-between text-xs">
-                  <span className="text-gray-400">رقم المعدة</span>
+                  <span className="text-gray-400">{t("patrol.equipmentNo")}</span>
                   <span className="font-bold text-gray-700 font-mono" dir="ltr">
                     {entry.equipmentNo}
                   </span>
@@ -448,7 +481,7 @@ function EntryCard({
               )}
               {entry.equipmentType && (
                 <div className="flex justify-between text-xs">
-                  <span className="text-gray-400">نوع المعدة</span>
+                  <span className="text-gray-400">{t("patrol.equipmentType")}</span>
                   <span className="font-bold text-gray-700">{entry.equipmentType}</span>
                 </div>
               )}
@@ -468,7 +501,7 @@ function EntryCard({
           )}
           <div className="flex justify-end mt-2">
             <button onClick={onDelete} className="text-xs text-red-400 flex items-center gap-1">
-              <Trash2 size={12} /> حذف
+              <Trash2 size={12} /> {t("patrol.delete")}
             </button>
           </div>
         </div>
@@ -488,12 +521,13 @@ function AddEntryModal({
   onAdd: (e: PatrolEntry) => void
   officerName: string
 }) {
+  const { t } = useI18n()
   const [step, setStep] = useState<"type" | "category" | "template" | "details">("type")
   const [entryType, setEntryType] = useState<EntryType>("violation")
   const [category, setCategory] = useState<ViolationCategory>("forklift")
   const [template, setTemplate] = useState<ViolationTemplate | null>(null)
   const [customText, setCustomText] = useState("")
-  const [location, setLocation] = useState(LOCATIONS[0])
+  const [location, setLocation] = useState(() => t(LOCATION_KEYS[0]))
   const [photos, setPhotos] = useState<string[]>([])
   const [workerCount, setWorkerCount] = useState(1)
   const [employeeName, setEmployeeName] = useState("")
@@ -507,13 +541,13 @@ function AddEntryModal({
   const [inspectorSignature, setInspectorSignature] = useState("")
   const [violatorRefused, setViolatorRefused] = useState(false)
 
-  const filteredTemplates = VIOLATION_TEMPLATES.filter((t) => t.category === category)
+  const filteredTemplates = VIOLATION_TEMPLATES.filter((tpl) => tpl.category === category)
 
   const handleSave = () => {
     const desc =
       entryType === "violation"
         ? template
-          ? template.text
+          ? t(template.textKey)
           : customText
         : entryType === "observation"
           ? obsText
@@ -571,12 +605,12 @@ function AddEntryModal({
             )}
             <h2 className="text-white font-bold">
               {step === "type"
-                ? "نوع التسجيل"
+                ? t("patrol.stepType")
                 : step === "category"
-                  ? "فئة المخالفة"
+                  ? t("patrol.stepCategory")
                   : step === "template"
-                    ? "اختر المخالفة"
-                    : "تفاصيل إضافية"}
+                    ? t("patrol.stepTemplate")
+                    : t("patrol.stepDetails")}
             </h2>
           </div>
           <button onClick={onClose}>
@@ -590,44 +624,44 @@ function AddEntryModal({
               {[
                 {
                   v: "violation" as EntryType,
-                  label: "مخالفة سلامة",
-                  sub: "تُحفظ فوراً في قاعدة البيانات",
+                  label: t("patrol.typeViolation"),
+                  sub: t("patrol.typeViolationSub"),
                   color: "#ef4444",
                   icon: AlertTriangle,
                 },
                 {
                   v: "observation" as EntryType,
-                  label: "ملاحظة ميدانية",
-                  sub: "خطر محتمل يحتاج متابعة",
+                  label: t("patrol.typeObservation"),
+                  sub: t("patrol.typeObservationSub"),
                   color: "#f59e0b",
                   icon: Eye,
                 },
                 {
                   v: "positive" as EntryType,
-                  label: "سلوك إيجابي",
-                  sub: "التزام يستحق التقدير",
+                  label: t("patrol.typePositive"),
+                  sub: t("patrol.typePositiveSub"),
                   color: "#22c55e",
                   icon: CheckCircle,
                 },
-              ].map((t) => (
+              ].map((opt) => (
                 <button
-                  key={t.v}
+                  key={opt.v}
                   onClick={() => {
-                    setEntryType(t.v)
-                    setStep(t.v === "violation" ? "category" : "details")
+                    setEntryType(opt.v)
+                    setStep(opt.v === "violation" ? "category" : "details")
                   }}
                   className="w-full flex items-center gap-4 p-4 rounded-2xl text-right"
-                  style={{ background: "#fff", border: `1.5px solid ${t.color}20`, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}
+                  style={{ background: "#fff", border: `1.5px solid ${opt.color}20`, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}
                 >
                   <div
                     className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
-                    style={{ background: `${t.color}15` }}
+                    style={{ background: `${opt.color}15` }}
                   >
-                    <t.icon size={22} style={{ color: t.color }} />
+                    <opt.icon size={22} style={{ color: opt.color }} />
                   </div>
                   <div>
-                    <p className="font-bold text-gray-800">{t.label}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{t.sub}</p>
+                    <p className="font-bold text-gray-800">{opt.label}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{opt.sub}</p>
                   </div>
                 </button>
               ))}
@@ -649,7 +683,7 @@ function AddEntryModal({
                 >
                   <cat.icon size={26} style={{ color: cat.color }} />
                   <span className="text-sm font-bold" style={{ color: cat.color }}>
-                    {cat.label}
+                    {t(cat.labelKey)}
                   </span>
                 </button>
               ))}
@@ -658,38 +692,38 @@ function AddEntryModal({
 
           {step === "template" && (
             <div className="space-y-2">
-              {filteredTemplates.map((t) => {
-                const sev = SEVERITY_LABELS[t.severity]
+              {filteredTemplates.map((tpl) => {
+                const sev = SEVERITY_STYLES[tpl.severity]
                 return (
                   <button
-                    key={t.id}
+                    key={tpl.id}
                     onClick={() => {
-                      setTemplate(t)
+                      setTemplate(tpl)
                       setCustomText("")
                       setStep("details")
                     }}
                     className="w-full text-right p-3.5 rounded-2xl flex items-start gap-3"
                     style={{
-                      background: template?.id === t.id ? "#1e3a5f" : "#fff",
-                      border: `1.5px solid ${template?.id === t.id ? "#1e3a5f" : "#e5e7eb"}`,
+                      background: template?.id === tpl.id ? "#1e3a5f" : "#fff",
+                      border: `1.5px solid ${template?.id === tpl.id ? "#1e3a5f" : "#e5e7eb"}`,
                     }}
                   >
                     <span
                       className="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5"
                       style={{ background: sev.bg, color: sev.color }}
                     >
-                      {sev.label}
+                      {t(`patrol.severity.${tpl.severity}`)}
                     </span>
                     <span
-                      className={`text-sm font-medium leading-snug ${template?.id === t.id ? "text-white" : "text-gray-700"}`}
+                      className={`text-sm font-medium leading-snug ${template?.id === tpl.id ? "text-white" : "text-gray-700"}`}
                     >
-                      {t.text}
+                      {t(tpl.textKey)}
                     </span>
                   </button>
                 )
               })}
               <div className="mt-3 pt-3 border-t border-gray-100">
-                <p className="text-xs font-bold text-gray-500 mb-2">أو اكتب وصفاً مخصصاً</p>
+                <p className="text-xs font-bold text-gray-500 mb-2">{t("patrol.customPrompt")}</p>
                 <textarea
                   value={customText}
                   onChange={(e) => {
@@ -697,7 +731,7 @@ function AddEntryModal({
                     setTemplate(null)
                   }}
                   rows={2}
-                  placeholder="اكتب المخالفة..."
+                  placeholder={t("patrol.customPlaceholder")}
                   className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none"
                   dir="rtl"
                 />
@@ -707,7 +741,7 @@ function AddEntryModal({
                     className="w-full mt-2 py-2.5 rounded-xl font-bold text-sm text-white"
                     style={{ background: "#1e3a5f" }}
                   >
-                    متابعة ←
+                    {t("patrol.continue")} ←
                   </button>
                 )}
               </div>
@@ -718,17 +752,19 @@ function AddEntryModal({
             <div className="space-y-4">
               {entryType === "violation" && (template || customText) && (
                 <div className="p-3 rounded-xl" style={{ background: "#fef2f2", border: "1px solid #fecaca" }}>
-                  <p className="text-xs font-bold text-red-500 mb-1">المخالفة</p>
-                  <p className="text-sm font-semibold text-gray-800">{template ? template.text : customText}</p>
+                  <p className="text-xs font-bold text-red-500 mb-1">{t("patrol.violationLabel")}</p>
+                  <p className="text-sm font-semibold text-gray-800">
+                    {template ? t(template.textKey) : customText}
+                  </p>
                   {template && (
                     <span
                       className="text-xs font-bold mt-1 inline-block px-2 py-0.5 rounded-full"
                       style={{
-                        background: SEVERITY_LABELS[template.severity].bg,
-                        color: SEVERITY_LABELS[template.severity].color,
+                        background: SEVERITY_STYLES[template.severity].bg,
+                        color: SEVERITY_STYLES[template.severity].color,
                       }}
                     >
-                      {SEVERITY_LABELS[template.severity].label}
+                      {t(`patrol.severity.${template.severity}`)}
                     </span>
                   )}
                 </div>
@@ -736,29 +772,32 @@ function AddEntryModal({
 
               {entryType === "observation" && (
                 <div>
-                  <label className="text-xs font-bold text-gray-600 block mb-2">الملاحظة</label>
+                  <label className="text-xs font-bold text-gray-600 block mb-2">{t("patrol.observationLabel")}</label>
                   <div className="flex flex-wrap gap-2 mb-2">
-                    {OBSERVATION_TEMPLATES.map((o) => (
-                      <button
-                        key={o}
-                        onClick={() => setObsText(o)}
-                        className="text-xs px-3 py-1.5 rounded-full border"
-                        style={{
-                          borderColor: obsText === o ? "#f59e0b" : "#e5e7eb",
-                          background: obsText === o ? "#fffbeb" : "#fff",
-                          color: obsText === o ? "#d97706" : "#374151",
-                          fontWeight: obsText === o ? "700" : "400",
-                        }}
-                      >
-                        {o}
-                      </button>
-                    ))}
+                    {OBSERVATION_TEMPLATE_KEYS.map((key) => {
+                      const label = t(key)
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => setObsText(label)}
+                          className="text-xs px-3 py-1.5 rounded-full border"
+                          style={{
+                            borderColor: obsText === label ? "#f59e0b" : "#e5e7eb",
+                            background: obsText === label ? "#fffbeb" : "#fff",
+                            color: obsText === label ? "#d97706" : "#374151",
+                            fontWeight: obsText === label ? "700" : "400",
+                          }}
+                        >
+                          {label}
+                        </button>
+                      )
+                    })}
                   </div>
                   <textarea
                     value={obsText}
                     onChange={(e) => setObsText(e.target.value)}
                     rows={2}
-                    placeholder="أو اكتب الملاحظة..."
+                    placeholder={t("patrol.obsPlaceholder")}
                     className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none"
                     dir="rtl"
                   />
@@ -767,23 +806,26 @@ function AddEntryModal({
 
               {entryType === "positive" && (
                 <div>
-                  <label className="text-xs font-bold text-gray-600 block mb-2">السلوك الإيجابي</label>
+                  <label className="text-xs font-bold text-gray-600 block mb-2">{t("patrol.positiveLabel")}</label>
                   <div className="flex flex-wrap gap-2">
-                    {POSITIVE_TEMPLATES.map((p) => (
-                      <button
-                        key={p}
-                        onClick={() => setPosText(p)}
-                        className="text-xs px-3 py-1.5 rounded-full border"
-                        style={{
-                          borderColor: posText === p ? "#22c55e" : "#e5e7eb",
-                          background: posText === p ? "#f0fdf4" : "#fff",
-                          color: posText === p ? "#16a34a" : "#374151",
-                          fontWeight: posText === p ? "700" : "400",
-                        }}
-                      >
-                        {p}
-                      </button>
-                    ))}
+                    {POSITIVE_TEMPLATE_KEYS.map((key) => {
+                      const label = t(key)
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => setPosText(label)}
+                          className="text-xs px-3 py-1.5 rounded-full border"
+                          style={{
+                            borderColor: posText === label ? "#22c55e" : "#e5e7eb",
+                            background: posText === label ? "#f0fdf4" : "#fff",
+                            color: posText === label ? "#16a34a" : "#374151",
+                            fontWeight: posText === label ? "700" : "400",
+                          }}
+                        >
+                          {label}
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
               )}
@@ -792,23 +834,23 @@ function AddEntryModal({
               {entryType === "violation" && (
                 <div className="rounded-2xl overflow-hidden" style={{ border: "1.5px solid #fecaca" }}>
                   <div className="px-3 py-2" style={{ background: "#fef2f2" }}>
-                    <p className="text-xs font-black text-red-500">بيانات المخالف</p>
+                    <p className="text-xs font-black text-red-500">{t("patrol.violatorData")}</p>
                   </div>
                   <div className="p-3 space-y-3" style={{ background: "#fff" }}>
                     {/* الاسم والشركة */}
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="text-xs font-bold text-gray-500 block mb-1">الاسم</label>
+                        <label className="text-xs font-bold text-gray-500 block mb-1">{t("patrol.name")}</label>
                         <input
                           value={employeeName}
                           onChange={(e) => setEmployeeName(e.target.value)}
-                          placeholder="اسم المخالف"
+                          placeholder={t("patrol.namePlaceholder")}
                           className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"
                           dir="rtl"
                         />
                       </div>
                       <div>
-                        <label className="text-xs font-bold text-gray-500 block mb-1">الشركة</label>
+                        <label className="text-xs font-bold text-gray-500 block mb-1">{t("patrol.company")}</label>
                         <input
                           value={companyName}
                           onChange={(e) => setCompanyName(e.target.value)}
@@ -820,11 +862,11 @@ function AddEntryModal({
                     </div>
                     {/* رقم الهوية / الوظيفي */}
                     <div>
-                      <label className="text-xs font-bold text-gray-500 block mb-1">رقم الهوية / الرقم الوظيفي</label>
+                      <label className="text-xs font-bold text-gray-500 block mb-1">{t("patrol.idNo")}</label>
                       <input
                         value={employeeNo}
                         onChange={(e) => setEmployeeNo(e.target.value)}
-                        placeholder="مثال: 12345678"
+                        placeholder={t("patrol.idPlaceholder")}
                         className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"
                         dir="ltr"
                       />
@@ -833,40 +875,32 @@ function AddEntryModal({
                     {(category === "forklift" || category === "tuktuk") && (
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="text-xs font-bold text-gray-500 block mb-1">رقم المعدة</label>
+                          <label className="text-xs font-bold text-gray-500 block mb-1">
+                            {t("patrol.equipmentNo")}
+                          </label>
                           <input
                             value={equipmentNo}
                             onChange={(e) => setEquipmentNo(e.target.value)}
-                            placeholder="مثال: FL-07"
+                            placeholder={t("patrol.equipmentNoPlaceholder")}
                             className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"
                             dir="ltr"
                           />
                         </div>
                         <div>
-                          <label className="text-xs font-bold text-gray-500 block mb-1">نوع المعدة</label>
+                          <label className="text-xs font-bold text-gray-500 block mb-1">
+                            {t("patrol.equipmentType")}
+                          </label>
                           <select
                             value={equipmentType}
                             onChange={(e) => setEquipmentType(e.target.value)}
                             className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white"
                             dir="rtl"
                           >
-                            <option value="">اختر...</option>
-                            {category === "forklift" && (
-                              <>
-                                <option>رافعة شوكية كهربائية</option>
-                                <option>رافعة شوكية ديزل</option>
-                                <option>رافعة شوكية غاز</option>
-                                <option>ريتش تراك</option>
-                                <option>باليت تراك كهربائي</option>
-                              </>
-                            )}
-                            {category === "tuktuk" && (
-                              <>
-                                <option>توك توك كهربائي</option>
-                                <option>توك توك بنزين</option>
-                                <option>عربة نقل صغيرة</option>
-                              </>
-                            )}
+                            <option value="">{t("patrol.choose")}</option>
+                            {category === "forklift" &&
+                              FORKLIFT_EQUIP_KEYS.map((key) => <option key={key}>{t(key)}</option>)}
+                            {category === "tuktuk" &&
+                              TUKTUK_EQUIP_KEYS.map((key) => <option key={key}>{t(key)}</option>)}
                           </select>
                         </div>
                       </div>
@@ -876,22 +910,23 @@ function AddEntryModal({
               )}
 
               <div>
-                <label className="text-xs font-bold text-gray-600 block mb-1">الموقع</label>
+                <label className="text-xs font-bold text-gray-600 block mb-1">{t("patrol.location")}</label>
                 <select
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white"
                   dir="rtl"
                 >
-                  {LOCATIONS.map((l) => (
-                    <option key={l}>{l}</option>
-                  ))}
+                  {LOCATION_KEYS.map((key) => {
+                    const label = t(key)
+                    return <option key={key}>{label}</option>
+                  })}
                 </select>
               </div>
 
               {entryType === "violation" && (
                 <div>
-                  <label className="text-xs font-bold text-gray-600 block mb-1">عدد المخالفين</label>
+                  <label className="text-xs font-bold text-gray-600 block mb-1">{t("patrol.violatorCount")}</label>
                   <div className="flex items-center gap-3">
                     <button
                       onClick={() => setWorkerCount((n) => Math.max(1, n - 1))}
@@ -913,7 +948,9 @@ function AddEntryModal({
               )}
 
               <div>
-                <label className="text-xs font-bold text-gray-600 block mb-2">صور الدليل ({photos.length})</label>
+                <label className="text-xs font-bold text-gray-600 block mb-2">
+                  {t("patrol.evidencePhotos")} ({photos.length})
+                </label>
                 <div className="flex items-center gap-2 flex-wrap">
                   <PhotoCapture onCapture={(b) => setPhotos((p) => [...p, b])} />
                   {photos.map((p, i) => (
@@ -935,17 +972,17 @@ function AddEntryModal({
               {entryType === "violation" && (
                 <div className="rounded-2xl overflow-hidden" style={{ border: "1.5px solid #e5e7eb" }}>
                   <div className="px-3 py-2" style={{ background: "#f8fafc" }}>
-                    <p className="text-xs font-black text-gray-600">التوقيعات</p>
+                    <p className="text-xs font-black text-gray-600">{t("patrol.signatures")}</p>
                   </div>
                   <div className="p-3 space-y-4" style={{ background: "#fff" }}>
                     {/* توقيع المخالف — اختياري مع خيار رفض التوقيع */}
                     <div className="space-y-2">
                       <SignaturePad
-                        label="توقيع المخالف (اختياري)"
+                        label={t("patrol.violatorSigOptional")}
                         value={violatorSignature}
                         onChange={setViolatorSignature}
                         disabled={violatorRefused}
-                        disabledText="رفض المخالف التوقيع"
+                        disabledText={t("patrol.violatorRefused")}
                       />
                       <label className="flex items-center gap-2 text-xs font-bold text-gray-600">
                         <input
@@ -957,17 +994,17 @@ function AddEntryModal({
                           }}
                           className="size-4 accent-red-500"
                         />
-                        رفض المخالف التوقيع
+                        {t("patrol.violatorRefused")}
                       </label>
                     </div>
                     {/* توقيع مفتش السلامة — إلزامي، يظهر اسم الضابط كعنوان */}
                     <SignaturePad
-                      label={`توقيع مفتش السلامة — ${officerName}`}
+                      label={fill(t("patrol.inspectorSig"), { name: officerName })}
                       value={inspectorSignature}
                       onChange={setInspectorSignature}
                     />
                     {!inspectorSignature && (
-                      <p className="text-xs font-bold text-red-500">توقيع المفتش إلزامي قبل الحفظ</p>
+                      <p className="text-xs font-bold text-red-500">{t("patrol.inspectorSigRequired")}</p>
                     )}
                   </div>
                 </div>
@@ -985,7 +1022,7 @@ function AddEntryModal({
                 className="w-full py-3.5 rounded-2xl font-black text-white text-base disabled:opacity-30"
                 style={{ background: "#1e3a5f" }}
               >
-                {entryType === "violation" ? "حفظ في قاعدة البيانات" : "حفظ التسجيل"}
+                {entryType === "violation" ? t("patrol.saveToDB") : t("patrol.saveEntry")}
               </button>
             </div>
           )}
@@ -1008,6 +1045,7 @@ function SummarySheet({
   onRetry?: (id: string) => void
   onFinish: () => void
 }) {
+  const { t } = useI18n()
   const [saving, setSaving] = useState(false)
   const violations = session.entries.filter((e) => e.type === "violation")
   const observations = session.entries.filter((e) => e.type === "observation")
@@ -1054,7 +1092,7 @@ function SummarySheet({
       <div className="w-full max-w-sm rounded-2xl overflow-hidden" style={{ background: "#fff", maxHeight: "85vh", overflowY: "auto" }}>
         <div className="p-4" style={{ background: "#1e3a5f" }}>
           <div className="flex items-center justify-between">
-            <h2 className="text-white font-black">ملخص الجولة الميدانية</h2>
+            <h2 className="text-white font-black">{t("patrol.summaryTitle")}</h2>
             <button onClick={handleClose}>
               <X size={20} className="text-white" />
             </button>
@@ -1066,9 +1104,9 @@ function SummarySheet({
         <div className="p-4 space-y-4">
           <div className="grid grid-cols-3 gap-2 text-center">
             {[
-              { label: "مخالفات", value: violations.length, color: "#ef4444" },
-              { label: "ملاحظات", value: observations.length, color: "#f59e0b" },
-              { label: "إيجابيات", value: positives.length, color: "#22c55e" },
+              { label: t("patrol.statViolations"), value: violations.length, color: "#ef4444" },
+              { label: t("patrol.statObservations"), value: observations.length, color: "#f59e0b" },
+              { label: t("patrol.statPositives"), value: positives.length, color: "#22c55e" },
             ].map((s) => (
               <div key={s.label} className="rounded-2xl py-3" style={{ background: `${s.color}10` }}>
                 <p className="text-3xl font-black" style={{ color: s.color }}>
@@ -1093,8 +1131,8 @@ function SummarySheet({
                 className="text-sm font-bold"
                 style={{ color: saved === session.entries.length ? "#16a34a" : "#d97706" }}
               >
-                {saved} من {session.entries.length} بند محفوظ في النظام
-                {failed > 0 ? ` · ${failed} فشل الحفظ` : ""}
+                {fill(t("patrol.savedCount"), { saved, total: session.entries.length })}
+                {failed > 0 ? fill(t("patrol.failSuffix"), { n: failed }) : ""}
               </p>
             </div>
           )}
@@ -1102,7 +1140,7 @@ function SummarySheet({
           {/* حالة الحفظ الفعلية لكل بند (مخالفات + ملاحظات + إيجابيات) */}
           {session.entries.length > 0 && (
             <div className="rounded-2xl p-3 space-y-2" style={{ background: "#f8fafc" }}>
-              <p className="text-xs font-black text-gray-500 mb-1">حالة الحفظ في النظام</p>
+              <p className="text-xs font-black text-gray-500 mb-1">{t("patrol.saveStatusHeading")}</p>
               {session.entries.map((v) => (
                 <div key={v.id} className="flex items-center gap-2">
                   <span
@@ -1120,20 +1158,20 @@ function SummarySheet({
                   )}
                   {v.status === "saving" && (
                     <span className="text-xs text-blue-400 flex items-center gap-1">
-                      <CloudUpload size={12} className="animate-pulse" /> جاري الحفظ
+                      <CloudUpload size={12} className="animate-pulse" /> {t("patrol.savingShort")}
                     </span>
                   )}
                   {v.status === "error" && (
                     <span className="flex items-center gap-2">
                       <span className="text-xs font-bold text-red-500 flex items-center gap-1">
-                        <AlertCircle size={12} /> فشل الحفظ
+                        <AlertCircle size={12} /> {t("patrol.failShort")}
                       </span>
                       {onRetry && (
                         <button
                           onClick={() => onRetry(v.id)}
                           className="text-xs font-bold text-blue-500 flex items-center gap-1"
                         >
-                          <RefreshCw size={11} /> إعادة
+                          <RefreshCw size={11} /> {t("patrol.retryShort")}
                         </button>
                       )}
                     </span>
@@ -1145,11 +1183,11 @@ function SummarySheet({
 
           {catStats.length > 0 && (
             <div className="rounded-2xl p-3 space-y-2" style={{ background: "#f8fafc" }}>
-              <p className="text-xs font-black text-gray-500 mb-2">توزيع المخالفات</p>
+              <p className="text-xs font-black text-gray-500 mb-2">{t("patrol.distribution")}</p>
               {catStats.map((c) => (
                 <div key={c.value} className="flex items-center gap-2">
                   <c.icon size={13} style={{ color: c.color }} />
-                  <span className="text-sm text-gray-700 flex-1">{c.label}</span>
+                  <span className="text-sm text-gray-700 flex-1">{t(c.labelKey)}</span>
                   <div className="flex-1 bg-gray-200 rounded-full h-1.5">
                     <div
                       className="h-1.5 rounded-full"
@@ -1167,11 +1205,11 @@ function SummarySheet({
           <div className="rounded-2xl p-3 space-y-1.5" style={{ background: "#f1f5f9" }}>
             {(
               [
-                ["الضابط", session.officerName],
-                ["المركبة", session.vehicleId],
-                ["المسار", session.route],
-                ["البداية", session.startTime],
-                ["النهاية", session.endTime || "—"],
+                [t("patrol.officer"), session.officerName],
+                [t("patrol.vehicle"), session.vehicleId],
+                [t("patrol.routeLabel"), session.route],
+                [t("patrol.start"), session.startTime],
+                [t("patrol.end"), session.endTime || "—"],
               ] as [string, string][]
             ).map(([k, v]) => (
               <div key={k} className="flex justify-between text-sm">
@@ -1187,7 +1225,7 @@ function SummarySheet({
               className="flex-1 py-3.5 rounded-2xl font-black text-white flex items-center justify-center gap-2"
               style={{ background: "#1e3a5f" }}
             >
-              <FileText size={16} /> طباعة تقرير الجولة
+              <FileText size={16} /> {t("patrol.printReport")}
             </button>
             <button
               onClick={handleSave}
@@ -1195,7 +1233,7 @@ function SummarySheet({
               className="flex-1 py-3.5 rounded-2xl font-black text-white flex items-center justify-center gap-2 disabled:opacity-60"
               style={{ background: "#16a34a" }}
             >
-              <CheckCircle2 size={16} /> {saving ? "جاري الإنهاء..." : "إنهاء الجولة"}
+              <CheckCircle2 size={16} /> {saving ? t("patrol.finishing") : t("patrol.finishRound")}
             </button>
           </div>
         </div>
@@ -1209,13 +1247,14 @@ function SummarySheet({
 export function PatrolClient() {
   const router = useRouter()
   const { toast } = useToast()
+  const { t } = useI18n()
   const [session, setSession] = useState<PatrolSession | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [showSummary, setShowSummary] = useState(false)
   const [notes, setNotes] = useState("")
   const [officerName, setOfficerName] = useState("سليمان العوفي")
   const [vehicleId, setVehicleId] = useState("HSE-01")
-  const [route, setRoute] = useState("الجولة الكاملة")
+  const [route, setRoute] = useState(() => t(ROUTE_KEYS[0]))
 
   useEffect(() => {
     const saved = localStorage.getItem("hse_patrol_v3")
@@ -1250,21 +1289,21 @@ export function PatrolClient() {
   const runSave = async (entry: PatrolEntry) => {
     patchEntry(entry.id, { status: "saving", errorMsg: undefined })
     const isViolation = entry.type === "violation"
-    const failTitle = isViolation ? "فشل حفظ المخالفة" : "فشل حفظ الملاحظة"
+    const failTitle = isViolation ? t("patrol.failSaveViolation") : t("patrol.failSaveObservation")
     try {
       // المخالفات تُحفظ في سجل المخالفات؛ الملاحظات والإيجابيات في سجل الملاحظات.
-      const result = isViolation ? await saveViolationToDB(entry) : await saveObservationToDB(entry)
+      const result = isViolation ? await saveViolationToDB(entry, t) : await saveObservationToDB(entry, t)
       patchEntry(entry.id, { status: "saved", documentNo: result.documentNo })
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "فشل الحفظ"
+      const msg = err instanceof Error ? err.message : t("patrol.badgeError")
       patchEntry(entry.id, { status: "error", errorMsg: msg })
       toast({
         variant: "destructive",
         title: failTitle,
         description: `${entry.description} — ${msg}`,
         action: (
-          <ToastAction altText="إعادة المحاولة" onClick={() => runSave(entry)}>
-            إعادة المحاولة
+          <ToastAction altText={t("patrol.retry")} onClick={() => runSave(entry)}>
+            {t("patrol.retry")}
           </ToastAction>
         ),
       })
@@ -1317,21 +1356,21 @@ export function PatrolClient() {
               onClick={() => router.push("/")}
               className="gap-1 text-gray-600 hover:text-gray-900"
             >
-              <ArrowRight size={16} /> رجوع للرئيسية
+              <ArrowRight size={16} /> {t("patrol.backHome")}
             </Button>
           </div>
           <div className="text-center">
             <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-3" style={{ background: "#1e3a5f" }}>
               <ShieldAlert size={30} className="text-white" />
             </div>
-            <h1 className="text-2xl font-black text-gray-900">جولة HSE الميدانية</h1>
-            <p className="text-gray-400 text-sm mt-1">السوق المركزي · المخالفات تُحفظ تلقائياً</p>
+            <h1 className="text-2xl font-black text-gray-900">{t("patrol.appTitle")}</h1>
+            <p className="text-gray-400 text-sm mt-1">{t("patrol.appSubtitle")}</p>
           </div>
 
           <div className="rounded-2xl p-4 space-y-3" style={{ background: "#fff", boxShadow: "0 2px 12px rgba(0,0,0,0.07)" }}>
             {[
-              { label: "ضابط السلامة", val: officerName, set: setOfficerName },
-              { label: "رقم جولة التفتيش", val: vehicleId, set: setVehicleId },
+              { label: t("patrol.officerField"), val: officerName, set: setOfficerName },
+              { label: t("patrol.roundNoField"), val: vehicleId, set: setVehicleId },
             ].map(({ label, val, set }) => (
               <div key={label}>
                 <label className="text-xs font-bold text-gray-500 block mb-1">{label}</label>
@@ -1344,18 +1383,17 @@ export function PatrolClient() {
               </div>
             ))}
             <div>
-              <label className="text-xs font-bold text-gray-500 block mb-1">مسار الجولة</label>
+              <label className="text-xs font-bold text-gray-500 block mb-1">{t("patrol.routeField")}</label>
               <select
                 value={route}
                 onChange={(e) => setRoute(e.target.value)}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white"
                 dir="rtl"
               >
-                {["الجولة الكاملة", "ساحة التحميل والرافعات", "المستودعات", "البوابات والمداخل", "الممرات والمشاة"].map(
-                  (r) => (
-                    <option key={r}>{r}</option>
-                  ),
-                )}
+                {ROUTE_KEYS.map((key) => {
+                  const label = t(key)
+                  return <option key={key}>{label}</option>
+                })}
               </select>
             </div>
           </div>
@@ -1365,7 +1403,7 @@ export function PatrolClient() {
             className="w-full py-4 rounded-2xl font-black text-white text-lg flex items-center justify-center gap-2"
             style={{ background: "#1e3a5f" }}
           >
-            <MapPin size={20} /> بدء الجولة الميدانية
+            <MapPin size={20} /> {t("patrol.startRound")}
           </button>
         </div>
       </div>
@@ -1377,9 +1415,9 @@ export function PatrolClient() {
         <div className="flex items-start justify-between mb-3">
           <div>
             <p className="text-blue-300 text-xs font-mono">{session.id}</p>
-            <h1 className="text-white font-black text-lg">الجولة الميدانية</h1>
+            <h1 className="text-white font-black text-lg">{t("patrol.headerTitle")}</h1>
             <p className="text-blue-300 text-xs mt-0.5">
-              {session.officerName} · {session.vehicleId} · بدأت {session.startTime}
+              {session.officerName} · {session.vehicleId} · {fill(t("patrol.startedAt"), { time: session.startTime })}
             </p>
           </div>
           <div className="flex gap-2">
@@ -1388,22 +1426,22 @@ export function PatrolClient() {
               className="px-3 py-2 rounded-xl text-xs font-bold"
               style={{ background: "rgba(255,255,255,0.15)", color: "#fff" }}
             >
-              ملخص
+              {t("patrol.summaryBtn")}
             </button>
             <button
               onClick={endSession}
               className="px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1"
               style={{ background: "#ef4444", color: "#fff" }}
             >
-              <Send size={12} /> إنهاء
+              <Send size={12} /> {t("patrol.finishBtn")}
             </button>
           </div>
         </div>
         <div className="grid grid-cols-3 gap-2">
           {[
-            { label: "مخالفة", value: violations, color: "#f87171" },
-            { label: "ملاحظة", value: observations, color: "#fbbf24" },
-            { label: "إيجابية", value: positives, color: "#4ade80" },
+            { label: t("patrol.statViolation"), value: violations, color: "#f87171" },
+            { label: t("patrol.statObservation"), value: observations, color: "#fbbf24" },
+            { label: t("patrol.statPositive"), value: positives, color: "#4ade80" },
           ].map((s) => (
             <div key={s.label} className="rounded-xl py-2 text-center" style={{ background: "rgba(255,255,255,0.1)" }}>
               <p className="text-2xl font-black" style={{ color: s.color }}>
@@ -1421,8 +1459,8 @@ export function PatrolClient() {
         {session.entries.length === 0 ? (
           <div className="text-center py-16 text-gray-300">
             <ShieldAlert size={44} className="mx-auto mb-3 opacity-20" />
-            <p className="font-bold text-gray-400">لا توجد تسجيلات بعد</p>
-            <p className="text-sm mt-1 text-gray-400">المخالفات تُحفظ تلقائياً في النظام</p>
+            <p className="font-bold text-gray-400">{t("patrol.emptyTitle")}</p>
+            <p className="text-sm mt-1 text-gray-400">{t("patrol.emptySub")}</p>
           </div>
         ) : (
             session.entries.map((e) => (
@@ -1430,12 +1468,12 @@ export function PatrolClient() {
             ))
         )}
         <div className="mt-4">
-          <label className="text-sm font-bold text-gray-500 block mb-2">ملاحظات الجولة العامة</label>
+          <label className="text-sm font-bold text-gray-500 block mb-2">{t("patrol.generalNotes")}</label>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={3}
-            placeholder="أي ملاحظات عامة..."
+            placeholder={t("patrol.notesPlaceholder")}
             className="w-full border border-gray-100 rounded-2xl px-4 py-3 text-sm resize-none"
             style={{ background: "#fff" }}
             dir="rtl"

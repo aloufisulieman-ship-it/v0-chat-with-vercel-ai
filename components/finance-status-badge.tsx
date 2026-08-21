@@ -1,6 +1,9 @@
+"use client"
+
 import { cn } from "@/lib/utils"
 import { normalizeFinanceStatus } from "@/lib/finance-status"
 import { CheckCircle2, Clock } from "lucide-react"
+import { useI18n } from "@/lib/i18n/client"
 
 /**
  * شارة حالة المالية للمخالفات الخارجية — تظهر لجميع المستخدمين (عرض فقط).
@@ -8,6 +11,7 @@ import { CheckCircle2, Clock } from "lucide-react"
  * - pending/in_review: "قيد المعالجة لدى المالية" (كهرماني)
  */
 export function FinanceStatusBadge({ financeStatus, className }: { financeStatus: string | null | undefined; className?: string }) {
+  const { t } = useI18n()
   const status = normalizeFinanceStatus(financeStatus)
   const isClosed = status === "closed"
   return (
@@ -21,7 +25,7 @@ export function FinanceStatusBadge({ financeStatus, className }: { financeStatus
       )}
     >
       {isClosed ? <CheckCircle2 className="size-3" /> : <Clock className="size-3" />}
-      {isClosed ? "تم الإغلاق من المالية" : "قيد المعالجة لدى المالية"}
+      {isClosed ? t("badges.financeClosed") : t("badges.financePending")}
     </span>
   )
 }

@@ -3,6 +3,8 @@
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import { moduleOptions } from "@/lib/labels"
+import { useI18n } from "@/lib/i18n/client"
+import { moduleLabel } from "@/lib/i18n/labels"
 
 export function PermissionsEditor({
   value,
@@ -11,6 +13,7 @@ export function PermissionsEditor({
   value: string[]
   onChange: (next: string[]) => void
 }) {
+  const { t } = useI18n()
   const allValues = moduleOptions.map((m) => m.value as string)
   const allChecked = allValues.every((v) => value.includes(v))
 
@@ -25,7 +28,7 @@ export function PermissionsEditor({
   return (
     <div className="rounded-lg border border-border">
       <div className="flex items-center justify-between border-b border-border bg-muted/50 px-3 py-2">
-        <span className="text-xs font-medium text-muted-foreground">اختر الصفحات المسموح بها</span>
+        <span className="text-xs font-medium text-muted-foreground">{t("usersManager.choosePages")}</span>
         <Button
           type="button"
           size="sm"
@@ -33,7 +36,7 @@ export function PermissionsEditor({
           className="h-7 text-xs"
           onClick={() => onChange(allChecked ? [] : [...allValues])}
         >
-          {allChecked ? "إلغاء تحديد الكل" : "تحديد الكل"}
+          {allChecked ? t("usersManager.deselectAll") : t("usersManager.selectAll")}
         </Button>
       </div>
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 p-3 sm:grid-cols-3">
@@ -45,9 +48,9 @@ export function PermissionsEditor({
             <Checkbox
               checked={value.includes(m.value)}
               onCheckedChange={(c) => toggle(m.value, !!c)}
-              aria-label={m.label}
+              aria-label={moduleLabel(t, m.value)}
             />
-            <span className="text-foreground">{m.label}</span>
+            <span className="text-foreground">{moduleLabel(t, m.value)}</span>
           </label>
         ))}
       </div>

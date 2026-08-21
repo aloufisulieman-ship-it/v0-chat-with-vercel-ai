@@ -1,6 +1,9 @@
+"use client"
+
 import { cn } from "@/lib/utils"
 import { normalizeHrStatus } from "@/lib/hr-status"
 import { CheckCircle2, Clock } from "lucide-react"
+import { useI18n } from "@/lib/i18n/client"
 
 /**
  * شارة حالة الموارد البشرية للبنود الداخلية — تظهر لجميع المستخدمين (عرض فقط).
@@ -8,6 +11,7 @@ import { CheckCircle2, Clock } from "lucide-react"
  * - pending/in_review: "قيد المعالجة لدى الموارد البشرية" (كهرماني)
  */
 export function HrStatusBadge({ hrStatus, className }: { hrStatus: string | null | undefined; className?: string }) {
+  const { t } = useI18n()
   const status = normalizeHrStatus(hrStatus)
   const isClosed = status === "closed"
   return (
@@ -21,7 +25,7 @@ export function HrStatusBadge({ hrStatus, className }: { hrStatus: string | null
       )}
     >
       {isClosed ? <CheckCircle2 className="size-3" /> : <Clock className="size-3" />}
-      {isClosed ? "تم الإغلاق من الموارد البشرية" : "قيد المعالجة لدى الموارد البشرية"}
+      {isClosed ? t("badges.hrClosed") : t("badges.hrPending")}
     </span>
   )
 }

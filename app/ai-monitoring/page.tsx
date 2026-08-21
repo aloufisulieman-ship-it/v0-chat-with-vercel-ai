@@ -2,6 +2,7 @@ import { AppShell } from "@/components/app-shell"
 import { requireHseReviewer } from "@/lib/session"
 import { getDetections } from "@/app/actions/ai-monitoring"
 import { MonitoringDashboard, type DetectionDto } from "./monitoring-dashboard"
+import { getServerT } from "@/lib/i18n/server"
 import Link from "next/link"
 import { Smartphone, Video, LayoutGrid } from "lucide-react"
 
@@ -10,6 +11,7 @@ export const dynamic = "force-dynamic"
 export default async function AiMonitoringPage() {
   const user = await requireHseReviewer()
   const rows = await getDetections()
+  const { t } = await getServerT()
 
   // تحويل التواريخ إلى نصوص لتتوافق مع بيانات الـ API أثناء التحديث الحي.
   const initial: DetectionDto[] = rows.map((r) => ({
@@ -19,9 +21,12 @@ export default async function AiMonitoringPage() {
     inspectorName: r.inspectorName ?? "",
     cameraLocation: r.cameraLocation,
     detectionType: r.detectionType,
+    // كل أنواع المخالفات المرصودة في نفس اللقطة (تُعرض كقائمة داخل البند الواحد).
+    detectionTypes: r.detectionTypes,
     severity: r.severity,
     confidenceScore: r.confidenceScore,
-    snapshotUrl: r.snapshotUrl,
+    // اللقطة تُجلب عند الطلب؛ نمرّر فقط علامة التوفّر لعرض زر «لقطة».
+    hasSnapshot: r.hasSnapshot,
     detectedAt: (r.detectedAt as unknown as Date)?.toISOString?.() ?? String(r.detectedAt),
     status: r.status,
     acknowledgedBy: r.acknowledgedBy ?? "",
@@ -32,8 +37,8 @@ export default async function AiMonitoringPage() {
 
   return (
     <AppShell
-      title="المراقبة الذكية بالذكاء الاصطناعي"
-      subtitle="رصد مخالفات السلامة لحظياً في ساحات الرافعات الشوكية عبر تحليل بث الكاميرات"
+      title={t("pageHeaders.aiMonitoringTitle")}
+      subtitle={t("pageHeaders.aiMonitoringSubtitle")}
       user={user}
       action={
         <div className="flex flex-wrap items-center gap-2">
@@ -42,21 +47,21 @@ export default async function AiMonitoringPage() {
             className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
           >
             <LayoutGrid className="size-4" />
-            جدار العرض
+            {t("aiMonitoring.displayWall")}
           </Link>
           <Link
             href="/ai-monitoring/recordings"
             className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
           >
             <Video className="size-4" />
-            التسجيلات
+            {t("aiMonitoring.recordings")}
           </Link>
           <Link
             href="/ai-monitoring/mobile-camera"
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
           >
             <Smartphone className="size-4" />
-            بث كاميرا الهاتف
+            {t("aiMonitoring.phoneStream")}
           </Link>
         </div>
       }

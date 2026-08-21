@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useI18n } from "@/lib/i18n/client"
 
 export type EmployeeRecord = {
   id: number
@@ -28,6 +29,7 @@ export type EmployeeRecord = {
 type EmployeeAction = (formData: FormData) => Promise<void>
 
 function EmployeeDialog({ employee }: { employee?: EmployeeRecord }) {
+  const { t, dir } = useI18n()
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(employee?.active ?? true)
   const action: EmployeeAction = employee ? updateEmployee : createEmployee
@@ -41,33 +43,33 @@ function EmployeeDialog({ employee }: { employee?: EmployeeRecord }) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {employee ? (
-          <Button variant="ghost" size="icon" aria-label={`تعديل ${employee.name}`}><Pencil /></Button>
+          <Button variant="ghost" size="icon" aria-label={t("employeeReg.editAria").replace("{name}", employee.name)}><Pencil /></Button>
         ) : (
-          <Button><Plus data-icon="inline-start" />إضافة موظف</Button>
+          <Button><Plus data-icon="inline-start" />{t("employeeReg.addEmployee")}</Button>
         )}
       </DialogTrigger>
-      <DialogContent dir="rtl">
+      <DialogContent dir={dir}>
         <DialogHeader>
-          <DialogTitle>{employee ? "تعديل بيانات الموظف" : "إضافة موظف جديد"}</DialogTitle>
-          <DialogDescription>أدخل البيانات المرجعية التي ستظهر تلقائياً في قوائم حضور Toolbox Talk.</DialogDescription>
+          <DialogTitle>{employee ? t("employeeReg.dialogEditTitle") : t("employeeReg.dialogAddTitle")}</DialogTitle>
+          <DialogDescription>{t("employeeReg.dialogDesc")}</DialogDescription>
         </DialogHeader>
         <form action={formAction} className="flex flex-col gap-4">
           {employee && <input type="hidden" name="id" value={employee.id} />}
           <input type="hidden" name="active" value={String(active)} />
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="flex flex-col gap-2"><Label htmlFor={`employee-id-${employee?.id ?? "new"}`}>الرقم الوظيفي</Label><Input id={`employee-id-${employee?.id ?? "new"}`} name="employeeId" defaultValue={employee?.employeeId} required /></div>
-            <div className="flex flex-col gap-2"><Label htmlFor={`employee-name-${employee?.id ?? "new"}`}>الاسم</Label><Input id={`employee-name-${employee?.id ?? "new"}`} name="name" defaultValue={employee?.name} required /></div>
-            <div className="flex flex-col gap-2"><Label htmlFor={`employee-job-${employee?.id ?? "new"}`}>المسمى الوظيفي</Label><Input id={`employee-job-${employee?.id ?? "new"}`} name="designation" defaultValue={employee?.designation} /></div>
-            <div className="flex flex-col gap-2"><Label htmlFor={`employee-department-${employee?.id ?? "new"}`}>القسم</Label><Input id={`employee-department-${employee?.id ?? "new"}`} name="department" defaultValue={employee?.department} /></div>
-            <div className="flex flex-col gap-2"><Label htmlFor={`employee-company-${employee?.id ?? "new"}`}>الشركة</Label><Input id={`employee-company-${employee?.id ?? "new"}`} name="company" defaultValue={employee?.company || "MHS"} /></div>
-            <div className="flex flex-col gap-2"><Label htmlFor={`employee-nationality-${employee?.id ?? "new"}`}>الجنسية</Label><Input id={`employee-nationality-${employee?.id ?? "new"}`} name="nationality" defaultValue={employee?.nationality} /></div>
-            <div className="flex flex-col gap-2"><Label htmlFor={`employee-card-${employee?.id ?? "new"}`}>رقم البطاقة/الكود</Label><Input id={`employee-card-${employee?.id ?? "new"}`} name="cardCode" defaultValue={employee?.cardCode ?? ""} /></div>
+            <div className="flex flex-col gap-2"><Label htmlFor={`employee-id-${employee?.id ?? "new"}`}>{t("employeeReg.fEmployeeId")}</Label><Input id={`employee-id-${employee?.id ?? "new"}`} name="employeeId" defaultValue={employee?.employeeId} required /></div>
+            <div className="flex flex-col gap-2"><Label htmlFor={`employee-name-${employee?.id ?? "new"}`}>{t("employeeReg.fName")}</Label><Input id={`employee-name-${employee?.id ?? "new"}`} name="name" defaultValue={employee?.name} required /></div>
+            <div className="flex flex-col gap-2"><Label htmlFor={`employee-job-${employee?.id ?? "new"}`}>{t("employeeReg.fDesignation")}</Label><Input id={`employee-job-${employee?.id ?? "new"}`} name="designation" defaultValue={employee?.designation} /></div>
+            <div className="flex flex-col gap-2"><Label htmlFor={`employee-department-${employee?.id ?? "new"}`}>{t("employeeReg.fDepartment")}</Label><Input id={`employee-department-${employee?.id ?? "new"}`} name="department" defaultValue={employee?.department} /></div>
+            <div className="flex flex-col gap-2"><Label htmlFor={`employee-company-${employee?.id ?? "new"}`}>{t("employeeReg.fCompany")}</Label><Input id={`employee-company-${employee?.id ?? "new"}`} name="company" defaultValue={employee?.company || "MHS"} /></div>
+            <div className="flex flex-col gap-2"><Label htmlFor={`employee-nationality-${employee?.id ?? "new"}`}>{t("employeeReg.fNationality")}</Label><Input id={`employee-nationality-${employee?.id ?? "new"}`} name="nationality" defaultValue={employee?.nationality} /></div>
+            <div className="flex flex-col gap-2"><Label htmlFor={`employee-card-${employee?.id ?? "new"}`}>{t("employeeReg.fCardCode")}</Label><Input id={`employee-card-${employee?.id ?? "new"}`} name="cardCode" defaultValue={employee?.cardCode ?? ""} /></div>
           </div>
           <div className="flex items-center justify-between rounded-lg border border-border p-3">
-            <div className="flex flex-col gap-1"><Label htmlFor={`employee-active-${employee?.id ?? "new"}`}>الحالة</Label><span className="text-sm text-muted-foreground">الموظف النشط يظهر في قوائم اختيار الحضور.</span></div>
+            <div className="flex flex-col gap-1"><Label htmlFor={`employee-active-${employee?.id ?? "new"}`}>{t("employeeReg.fStatus")}</Label><span className="text-sm text-muted-foreground">{t("employeeReg.activeHint")}</span></div>
             <Switch id={`employee-active-${employee?.id ?? "new"}`} checked={active} onCheckedChange={setActive} />
           </div>
-          <DialogFooter><Button type="submit" disabled={pending}>{pending ? "جارٍ الحفظ..." : "حفظ"}</Button></DialogFooter>
+          <DialogFooter><Button type="submit" disabled={pending}>{pending ? t("employeeReg.saving") : t("employeeReg.save")}</Button></DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
@@ -75,14 +77,15 @@ function EmployeeDialog({ employee }: { employee?: EmployeeRecord }) {
 }
 
 function DeleteEmployeeButton({ employee }: { employee: EmployeeRecord }) {
+  const { t, dir } = useI18n()
   return (
     <AlertDialog>
-      <AlertDialogTrigger asChild><Button variant="ghost" size="icon" aria-label={`حذف ${employee.name}`}><Trash2 /></Button></AlertDialogTrigger>
-      <AlertDialogContent dir="rtl">
-        <AlertDialogHeader><AlertDialogTitle>حذف الموظف؟</AlertDialogTitle><AlertDialogDescription>سيُحذف {employee.name} من السجل المرجعي فقط، ولن تتأثر جلسات الحضور المحفوظة سابقاً.</AlertDialogDescription></AlertDialogHeader>
+      <AlertDialogTrigger asChild><Button variant="ghost" size="icon" aria-label={t("employeeReg.deleteAria").replace("{name}", employee.name)}><Trash2 /></Button></AlertDialogTrigger>
+      <AlertDialogContent dir={dir}>
+        <AlertDialogHeader><AlertDialogTitle>{t("employeeReg.deleteTitle")}</AlertDialogTitle><AlertDialogDescription>{t("employeeReg.deleteDesc").replace("{name}", employee.name)}</AlertDialogDescription></AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>إلغاء</AlertDialogCancel>
-          <form action={deleteEmployee}><input type="hidden" name="id" value={employee.id} /><AlertDialogAction type="submit">تأكيد الحذف</AlertDialogAction></form>
+          <AlertDialogCancel>{t("employeeReg.cancel")}</AlertDialogCancel>
+          <form action={deleteEmployee}><input type="hidden" name="id" value={employee.id} /><AlertDialogAction type="submit">{t("employeeReg.confirmDelete")}</AlertDialogAction></form>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -90,20 +93,21 @@ function DeleteEmployeeButton({ employee }: { employee: EmployeeRecord }) {
 }
 
 export function EmployeeRegistry({ employees }: { employees: EmployeeRecord[] }) {
+  const { t, dir } = useI18n()
   return (
-    <section className="flex flex-col gap-4" dir="rtl">
+    <section className="flex flex-col gap-4" dir={dir}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div><h2 className="text-lg font-semibold text-foreground">سجل الموظفين</h2><p className="text-sm text-muted-foreground">قاعدة مرجعية لاختيار الحضور وتعبئة بياناتهم تلقائياً.</p></div>
+        <div><h2 className="text-lg font-semibold text-foreground">{t("employeeReg.heading")}</h2><p className="text-sm text-muted-foreground">{t("employeeReg.subtitle")}</p></div>
         <EmployeeDialog />
       </div>
       <div className="overflow-hidden rounded-lg border border-border">
         <Table>
-          <TableHeader><TableRow><TableHead>الرقم الوظيفي</TableHead><TableHead>الاسم</TableHead><TableHead>المسمى الوظيفي</TableHead><TableHead>القسم</TableHead><TableHead>الشركة</TableHead><TableHead>حالة الملف</TableHead><TableHead>الحالة</TableHead><TableHead className="text-left">إجراءات</TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead>{t("employeeReg.colEmployeeId")}</TableHead><TableHead>{t("employeeReg.colName")}</TableHead><TableHead>{t("employeeReg.colDesignation")}</TableHead><TableHead>{t("employeeReg.colDepartment")}</TableHead><TableHead>{t("employeeReg.colCompany")}</TableHead><TableHead>{t("employeeReg.colProfileStatus")}</TableHead><TableHead>{t("employeeReg.colStatus")}</TableHead><TableHead className="text-end">{t("employeeReg.colActions")}</TableHead></TableRow></TableHeader>
           <TableBody>
             {employees.length === 0 ? (
-              <TableRow><TableCell colSpan={8} className="h-32 text-center"><div className="flex flex-col items-center gap-2 text-muted-foreground"><UserRound className="size-6" /><span>لا يوجد موظفون. أضف أول موظف للبدء.</span></div></TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="h-32 text-center"><div className="flex flex-col items-center gap-2 text-muted-foreground"><UserRound className="size-6" /><span>{t("employeeReg.empty")}</span></div></TableCell></TableRow>
             ) : employees.map((employee) => (
-              <TableRow key={employee.id}><TableCell dir="ltr" className="font-mono text-xs">{employee.employeeId}</TableCell><TableCell className="font-medium">{employee.name}</TableCell><TableCell>{employee.designation || "-"}</TableCell><TableCell>{employee.department || "-"}</TableCell><TableCell>{employee.company || "MHS"}</TableCell><TableCell><Badge variant={employee.profileStatus === "complete" ? "outline" : "destructive"}>{employee.profileStatus === "complete" ? "مكتمل" : "غير مكتمل"}</Badge></TableCell><TableCell><Badge variant={employee.active ? "default" : "secondary"}>{employee.active ? "نشط" : "غير نشط"}</Badge></TableCell><TableCell><div className="flex justify-end gap-1"><EmployeeDialog employee={employee} /><DeleteEmployeeButton employee={employee} /></div></TableCell></TableRow>
+              <TableRow key={employee.id}><TableCell dir="ltr" className="font-mono text-xs">{employee.employeeId}</TableCell><TableCell className="font-medium">{employee.name}</TableCell><TableCell>{employee.designation || "-"}</TableCell><TableCell>{employee.department || "-"}</TableCell><TableCell>{employee.company || "MHS"}</TableCell><TableCell><Badge variant={employee.profileStatus === "complete" ? "outline" : "destructive"}>{employee.profileStatus === "complete" ? t("employeeReg.statusComplete") : t("employeeReg.statusIncomplete")}</Badge></TableCell><TableCell><Badge variant={employee.active ? "default" : "secondary"}>{employee.active ? t("employeeReg.statusActive") : t("employeeReg.statusInactive")}</Badge></TableCell><TableCell><div className="flex justify-end gap-1"><EmployeeDialog employee={employee} /><DeleteEmployeeButton employee={employee} /></div></TableCell></TableRow>
             ))}
           </TableBody>
         </Table>

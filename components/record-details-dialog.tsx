@@ -16,6 +16,7 @@ import { getAttachments, type AttachmentRow } from "@/app/actions/attachments"
 import { downloadElementPdf } from "@/lib/pdf"
 import { signatureRoles as signatureRolesConfig, labelForSignatureKind } from "@/lib/signature-roles"
 import { toast } from "@/hooks/use-toast"
+import { useI18n } from "@/lib/i18n/client"
 
 export type DetailField = { label: string; value: string }
 
@@ -70,6 +71,7 @@ export function RecordDetailsDialog({
   // (used by training, where attendee signatures already appear inline).
   suppressReportAttachments?: boolean
 }) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [attachments, setAttachments] = useState<AttachmentRow[]>(initialAttachments)
   const [busy, setBusy] = useState<"pdf" | "email" | null>(null)
@@ -98,7 +100,7 @@ export function RecordDetailsDialog({
     const sigData = await Promise.all(
       signatureAttachments.map(async (s) => ({
         data: await toDataUrl(fileUrl(s.pathname)),
-        label: s.kind === "signature" ? "توقيع" : labelForSignatureKind(module, s.kind),
+        label: s.kind === "signature" ? t("recordDetails.signatureLabel") : labelForSignatureKind(module, s.kind),
       })),
     )
 
@@ -223,11 +225,11 @@ export function RecordDetailsDialog({
     try {
       el = await buildReportElement()
       await downloadElementPdf(el, fileBase)
-      toast({ title: "تم تنزيل ملف PDF" })
+      toast({ title: t("recordDetails.pdfDownloadedTitle") })
     } catch (err) {
       toast({
-        title: "تعذّر إنشاء PDF",
-        description: err instanceof Error ? err.message : "حدث خطأ.",
+        title: t("recordDetails.pdfFailedTitle"),
+        description: err instanceof Error ? err.message : t("recordDetails.genericError"),
         variant: "destructive",
       })
     } finally {
@@ -247,29 +249,29 @@ export function RecordDetailsDialog({
         .filter((f) => f.value && f.value !== "-" && !isBase64Image(f.value))
         .map((f) => `${f.label}: ${f.value}`)
       const body = [
-        `تقرير: ${title}`,
-        documentNo ? `رقم الوثيقة: ${documentNo}` : "",
+        t("recordDetails.mailReport").replace("{title}", title),
+        documentNo ? t("recordDetails.mailDocNo").replace("{no}", documentNo) : "",
         "",
         ...lines,
         "",
-        `عدد الصور المرفقة: ${attachments.filter((a) => a.kind === "photo").length}`,
-        `عدد التواقيع: ${attachments.filter((a) => a.kind === "signature" || a.kind.startsWith("signature:")).length}`,
+        t("recordDetails.mailPhotoCount").replace("{count}", String(attachments.filter((a) => a.kind === "photo").length)),
+        t("recordDetails.mailSigCount").replace("{count}", String(attachments.filter((a) => a.kind === "signature" || a.kind.startsWith("signature:")).length)),
         "",
-        "ملاحظة: تم تنزيل ملف PDF الكامل (يحتوي الصور والتواقيع) على جهازك — يرجى إرفاقه بهذه الرسالة.",
+        t("recordDetails.mailAttachNote"),
       ]
         .filter((l) => l !== null)
         .join("\n")
 
-      const mailto = `mailto:?subject=${encodeURIComponent(`تقرير ${title}`)}&body=${encodeURIComponent(body)}`
+      const mailto = `mailto:?subject=${encodeURIComponent(t("recordDetails.mailSubject").replace("{title}", title))}&body=${encodeURIComponent(body)}`
       window.location.href = mailto
       toast({
-        title: "تم تجهيز البريد",
-        description: "أُنزِل ملف PDF — أرفقه بالرسالة قبل الإرسال.",
+        title: t("recordDetails.emailReadyTitle"),
+        description: t("recordDetails.emailReadyDesc"),
       })
     } catch (err) {
       toast({
-        title: "تعذّر تجهيز البريد",
-        description: err instanceof Error ? err.message : "حدث خطأ.",
+        title: t("recordDetails.emailFailedTitle"),
+        description: err instanceof Error ? err.message : t("recordDetails.genericError"),
         variant: "destructive",
       })
     } finally {
@@ -282,7 +284,7 @@ export function RecordDetailsDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         {trigger ?? (
-          <Button variant="ghost" size="icon" className="size-8" aria-label="عرض التفاصيل">
+          <Button variant="ghost" size="icon" className="size-8" aria-label={t("recordDetails.viewDetails")}>
             <Eye className="size-4" />
           </Button>
         )}
@@ -296,7 +298,7 @@ export function RecordDetailsDialog({
         <div className="flex flex-wrap gap-2 border-b border-border pb-4">
           <Button size="sm" onClick={handleDownload} disabled={busy !== null} className="gap-1.5">
             {busy === "pdf" ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-            تنزيل PDF
+            {t("recordDetails.downloadPdf")}
           </Button>
           <Button
             size="sm"
@@ -306,7 +308,7 @@ export function RecordDetailsDialog({
             className="gap-1.5 bg-transparent"
           >
             {busy === "email" ? <Loader2 className="size-3.5 animate-spin" /> : <Mail className="size-3.5" />}
-            إرسال بالبريد
+            {t("recordDetails.sendEmail")}
           </Button>
         </div>
 
@@ -349,7 +351,7 @@ export function RecordDetailsDialog({
           <section className="flex flex-col gap-3">
             <h4 className="flex items-center gap-2 text-sm font-semibold text-foreground">
               <PenLine className="size-4 text-muted-foreground" />
-              التواقيع الرسمية
+              {t("recordDetails.officialSignatures")}
             </h4>
             <div className="grid gap-4 sm:grid-cols-3">
               {signatures.map((sig) => (
@@ -369,7 +371,7 @@ export function RecordDetailsDialog({
                     </div>
                   ) : (
                     <div className="flex h-24 items-center justify-center rounded-md border border-dashed border-border bg-muted/30">
-                      <span className="text-xs text-muted-foreground">لم يتم التوقيع بعد</span>
+                      <span className="text-xs text-muted-foreground">{t("recordDetails.notSignedYet")}</span>
                     </div>
                   )}
                 </div>

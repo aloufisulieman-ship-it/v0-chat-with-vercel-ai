@@ -5,12 +5,14 @@ import Link from "next/link"
 import { ArrowRight } from "lucide-react"
 import { GridView } from "./grid-view"
 import type { CameraStreamDto } from "../connected-cameras"
+import { getServerT } from "@/lib/i18n/server"
 
 export const dynamic = "force-dynamic"
 
 export default async function CameraGridPage() {
   const user = await requireHseReviewer()
   const rows = await getActiveCameraStreams()
+  const { t } = await getServerT()
 
   // تحويل التواريخ إلى نصوص لتتوافق مع بيانات الـ API أثناء التحديث الحي.
   const initial: CameraStreamDto[] = rows.map((r) => ({
@@ -24,8 +26,8 @@ export default async function CameraGridPage() {
 
   return (
     <AppShell
-      title="جدار الكاميرات المباشر"
-      subtitle="عرض جميع الكاميرات النشطة في آنٍ واحد على شاشة واحدة"
+      title={t("pageHeaders.gridTitle")}
+      subtitle={t("pageHeaders.gridSubtitle")}
       user={user}
       action={
         <Link
@@ -33,7 +35,7 @@ export default async function CameraGridPage() {
           className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
         >
           <ArrowRight className="size-4" />
-          العودة للوحة المراقبة
+          {t("aiMonitoring.cam.back")}
         </Link>
       }
     >

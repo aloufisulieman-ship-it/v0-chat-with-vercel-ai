@@ -27,35 +27,33 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "@/hooks/use-toast"
 import type { EmployeeRecord } from "./employee-registry"
+import { useI18n } from "@/lib/i18n/client"
+import type { TFunction } from "@/lib/i18n/translate"
 
 // ===== Worker groups & weekly schedule =====
 // JS getDay(): 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
 type Group = {
   id: "forklift" | "loading"
-  label: string
   icon: typeof Truck
   days: number[]
-  daysLabel: string
 }
 
 const GROUPS: Group[] = [
-  {
-    id: "forklift",
-    label: "سائقو الرافعات الشوكية",
-    icon: Truck,
-    days: [0, 3, 4],
-    daysLabel: "الأحد / الأربعاء / الخميس",
-  },
-  {
-    id: "loading",
-    label: "عمال التحميل والفرز والتعبئة",
-    icon: PackageOpen,
-    days: [1, 2],
-    daysLabel: "الاثنين / الثلاثاء",
-  },
+  { id: "forklift", icon: Truck, days: [0, 3, 4] },
+  { id: "loading", icon: PackageOpen, days: [1, 2] },
 ]
 
-const DAY_NAMES = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"]
+// Translated display helpers for a group (label + weekly days).
+function groupLabel(t: TFunction, id: Group["id"]) {
+  return id === "forklift" ? t("trainingMod.tbGroupForklift") : t("trainingMod.tbGroupLoading")
+}
+function groupDaysLabel(t: TFunction, id: Group["id"]) {
+  return id === "forklift" ? t("trainingMod.tbDaysForklift") : t("trainingMod.tbDaysLoading")
+}
+function dayName(t: TFunction, dow: number) {
+  const keys = ["daySun", "dayMon", "dayTue", "dayWed", "dayThu", "dayFri", "daySat"] as const
+  return t(`trainingMod.${keys[dow]}`)
+}
 
 const DEFAULT_CONDUCTOR = "سليمان العوفي"
 const DEFAULT_LOCATION = "السوق المركزي"
@@ -126,6 +124,7 @@ function nextSessionId(sessions: ToolboxSession[]): string {
 
 // ===== Signature pad (mouse + touch) =====
 function SignaturePad({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { t } = useI18n()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const drawingRef = useRef(false)
 
@@ -191,7 +190,7 @@ function SignaturePad({ value, onChange }: { value: string; onChange: (v: string
         {!value && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <PenLine className="size-3" /> وقّع هنا
+              <PenLine className="size-3" /> {t("trainingMod.signHere")}
             </span>
           </div>
         )}
@@ -201,7 +200,7 @@ function SignaturePad({ value, onChange }: { value: string; onChange: (v: string
         onClick={clear}
         className="flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive"
       >
-        <X className="size-3" /> مسح
+        <X className="size-3" /> {t("trainingMod.clearSignature")}
       </button>
     </div>
   )
@@ -221,6 +220,7 @@ type StoredToolboxSession = {
 }
 
 export function ToolboxTalkTab({ employees, initialSessions }: { employees: EmployeeRecord[]; initialSessions: StoredToolboxSession[] }) {
+  const { t, locale, dir } = useI18n()
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const today = new Date()
@@ -276,7 +276,7 @@ export function ToolboxTalkTab({ employees, initialSessions }: { employees: Empl
   const scheduledToday = group.days.includes(todayDow)
 
   const activeEmployees = employees.filter((employee) => employee.active)
-  const designations = Array.from(new Set(activeEmployees.map((employee) => employee.designation))).sort((a, b) => a.localeCompare(b, "ar"))
+  const designations = Array.from(new Set(activeEmployees.map((employee) => employee.designation))).sort((a, b) => a.localeCompare(b, locale))
 
   function updateRow(id: string, key: keyof AttendeeRow, value: string) {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, [key]: value } : r)))
@@ -314,12 +314,12 @@ export function ToolboxTalkTab({ employees, initialSessions }: { employees: Empl
 
   function handleSave() {
     if (!topic.trim()) {
-      toast({ title: "موضوع الحديث مطلوب", variant: "destructive" })
+      toast({ title: t("trainingMod.tbToastTopicRequired"), variant: "destructive" })
       return
     }
     const filled = rows.filter((r) => r.name.trim() !== "")
     if (filled.length === 0 || filled.some((row) => !row.employeeId.trim())) {
-      toast({ title: "الاسم والرقم الوظيفي مطلوبان لكل حاضر", variant: "destructive" })
+      toast({ title: t("trainingMod.tbToastAttendeeRequired"), variant: "destructive" })
       return
     }
     startTransition(async () => {
@@ -344,7 +344,7 @@ export function ToolboxTalkTab({ employees, initialSessions }: { employees: Empl
         attendees: filled,
         createdAt: new Date().toISOString(),
       }, ...current])
-      toast({ title: "تم حفظ الجلسة", description: `رقم السجل: ${result.documentNo}` })
+      toast({ title: t("trainingMod.tbToastSessionSaved"), description: `${t("trainingMod.tbRecordNo")}: ${result.documentNo}` })
       resetForm()
       router.refresh()
     })
@@ -352,7 +352,6 @@ export function ToolboxTalkTab({ employees, initialSessions }: { employees: Empl
 
   // Builds an Arabic RTL printable HTML document and triggers the print dialog.
   function printSession(session: ToolboxSession) {
-    const g = GROUPS.find((x) => x.id === session.groupId)
     const rowsHtml = session.attendees
       .map((a, i) => {
         const sig = a.signature.startsWith("data:image")
@@ -369,14 +368,14 @@ export function ToolboxTalkTab({ employees, initialSessions }: { employees: Empl
       .join("")
 
     const photoHtml = session.photo
-      ? `<div style="margin-top:16px;"><h3 style="color:#0f766e;margin:0 0 6px;font-size:13pt;">صورة الجلسة</h3><img src="${session.photo}" style="max-width:320px;max-height:240px;border:1px solid #cbd5e1;border-radius:4px;" /></div>`
+      ? `<div style="margin-top:16px;"><h3 style="color:#0f766e;margin:0 0 6px;font-size:13pt;">${t("trainingMod.tbPrintPhotoTitle")}</h3><img src="${session.photo}" style="max-width:320px;max-height:240px;border:1px solid #cbd5e1;border-radius:4px;" /></div>`
       : ""
 
     const html = `<!DOCTYPE html>
-    <html lang="ar" dir="rtl">
+    <html lang="${locale}" dir="${dir}">
     <head>
       <meta charset="utf-8" />
-      <title>${escapeHtml(session.id)} — الحديث التوعوي اليومي</title>
+      <title>${escapeHtml(session.id)} — ${t("trainingMod.tbPrintDocTitle")}</title>
       <style>
         * { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; }
         body { margin: 24px; color: #111; }
@@ -397,33 +396,33 @@ export function ToolboxTalkTab({ employees, initialSessions }: { employees: Empl
       <div class="header">
         <div class="brand">MHS</div>
         <div class="doc-no">
-          <div>الحديث التوعوي اليومي (Toolbox Talk)</div>
-          <div>رقم السجل: <strong>${escapeHtml(session.id)}</strong></div>
+          <div>${t("trainingMod.tbPrintHeader")}</div>
+          <div>${t("trainingMod.tbRecordNo")}: <strong>${escapeHtml(session.id)}</strong></div>
         </div>
       </div>
       <h1>${escapeHtml(session.topic)}</h1>
       <table class="meta">
-        <tr><td class="label">المجموعة</td><td>${escapeHtml(g?.label ?? "")}</td><td class="label">التاريخ</td><td dir="ltr">${escapeHtml(session.date)}</td></tr>
-        <tr><td class="label">قام بالتوعية</td><td>${escapeHtml(session.conductor)}</td><td class="label">الموقع</td><td>${escapeHtml(session.location)}</td></tr>
+        <tr><td class="label">${t("trainingMod.tbPrintGroup")}</td><td>${escapeHtml(groupLabel(t, session.groupId))}</td><td class="label">${t("trainingMod.tbPrintDate")}</td><td dir="ltr">${escapeHtml(session.date)}</td></tr>
+        <tr><td class="label">${t("trainingMod.tbPrintConductor")}</td><td>${escapeHtml(session.conductor)}</td><td class="label">${t("trainingMod.tbPrintLocation")}</td><td>${escapeHtml(session.location)}</td></tr>
       </table>
-      <h3 style="color:#0f766e;margin:0 0 6px;font-size:13pt;">سجل الحضور (${session.attendees.length})</h3>
+      <h3 style="color:#0f766e;margin:0 0 6px;font-size:13pt;">${t("trainingMod.tbPrintAttendance")} (${session.attendees.length})</h3>
       <table class="att">
         <thead>
           <tr>
-            <th>الرقم</th><th>الاسم</th><th>المسمى الوظيفي</th><th>الشركة</th><th>التوقيع</th>
+            <th>${t("trainingMod.tbPrintColNo")}</th><th>${t("trainingMod.tbPrintColName")}</th><th>${t("trainingMod.tbPrintColJobTitle")}</th><th>${t("trainingMod.tbPrintColCompany")}</th><th>${t("trainingMod.tbPrintColSignature")}</th>
           </tr>
         </thead>
         <tbody>${rowsHtml}</tbody>
       </table>
       ${photoHtml}
-      <div class="footer">نظام إدارة الصحة والسلامة والبيئة (HSE) — تم إنشاء هذا المستند إلكترونياً</div>
+      <div class="footer">${t("trainingMod.tbPrintFooter")}</div>
       <script>window.onload = function () { window.print(); }</script>
     </body>
     </html>`
 
     const win = window.open("", "_blank")
     if (!win) {
-      toast({ title: "تعذّر فتح نافذة الطباعة", description: "يرجى السماح بالنوافذ المنبثقة.", variant: "destructive" })
+      toast({ title: t("trainingMod.tbToastPrintFailed"), description: t("trainingMod.tbToastPrintFailedDesc"), variant: "destructive" })
       return
     }
     win.document.write(html)
@@ -435,16 +434,16 @@ export function ToolboxTalkTab({ employees, initialSessions }: { employees: Empl
     startTransition(async () => {
       await deleteToolboxSession(session.databaseId!)
       setSessions((current) => current.filter((item) => item.databaseId !== session.databaseId))
-      toast({ title: "تم حذف السجل" })
+      toast({ title: t("trainingMod.tbToastRecordDeleted") })
       router.refresh()
     })
   }
 
   return (
-    <Tabs defaultValue="new" dir="rtl" className="gap-4">
+    <Tabs defaultValue="new" dir={dir} className="gap-4">
       <TabsList>
-        <TabsTrigger value="new">جلسة جديدة</TabsTrigger>
-        <TabsTrigger value="history">السجلّات ({sessions.length})</TabsTrigger>
+        <TabsTrigger value="new">{t("trainingMod.tbTabNew")}</TabsTrigger>
+        <TabsTrigger value="history">{t("trainingMod.tbTabHistory")} ({sessions.length})</TabsTrigger>
       </TabsList>
 
       {/* ===== New session ===== */}
@@ -460,7 +459,7 @@ export function ToolboxTalkTab({ employees, initialSessions }: { employees: Empl
                 key={g.id}
                 type="button"
                 onClick={() => setGroupId(g.id)}
-                className={`flex items-start gap-3 rounded-lg border p-4 text-right transition-colors ${
+                className={`flex items-start gap-3 rounded-lg border p-4 text-start transition-colors ${
                   active ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
                 }`}
               >
@@ -468,13 +467,13 @@ export function ToolboxTalkTab({ employees, initialSessions }: { employees: Empl
                   <Icon className="size-5" />
                 </span>
                 <span className="flex flex-col">
-                  <span className="font-semibold text-foreground">{g.label}</span>
+                  <span className="font-semibold text-foreground">{groupLabel(t, g.id)}</span>
                   <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <CalendarDays className="size-3" /> {g.daysLabel}
+                    <CalendarDays className="size-3" /> {groupDaysLabel(t, g.id)}
                   </span>
                   {scheduled && (
                     <span className="mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-[11px] font-medium text-accent-foreground">
-                      <CheckCircle2 className="size-3" /> مجدول اليوم
+                      <CheckCircle2 className="size-3" /> {t("trainingMod.tbScheduledTodayBadge")}
                     </span>
                   )}
                 </span>
@@ -487,17 +486,22 @@ export function ToolboxTalkTab({ employees, initialSessions }: { employees: Empl
         {scheduledToday ? (
           <Alert className="border-primary/40 bg-primary/5">
             <CheckCircle2 className="size-4 text-primary" />
-            <AlertTitle>مجموعة مجدولة اليوم</AlertTitle>
+            <AlertTitle>{t("trainingMod.tbScheduledAlertTitle")}</AlertTitle>
             <AlertDescription>
-              {`اليوم ${DAY_NAMES[todayDow]} — مجموعة «${group.label}» مجدولة لإجراء الحديث التوعوي اليومي.`}
+              {t("trainingMod.tbScheduledAlertDesc")
+                .replace("{day}", dayName(t, todayDow))
+                .replace("{group}", groupLabel(t, group.id))}
             </AlertDescription>
           </Alert>
         ) : (
           <Alert variant="destructive">
             <AlertTriangle className="size-4" />
-            <AlertTitle>غير مجدولة اليوم</AlertTitle>
+            <AlertTitle>{t("trainingMod.tbNotScheduledTitle")}</AlertTitle>
             <AlertDescription>
-              {`اليوم ${DAY_NAMES[todayDow]} ليس ضمن أيام مجموعة «${group.label}» (${group.daysLabel}). يمكنك المتابعة عند الحاجة.`}
+              {t("trainingMod.tbNotScheduledDesc")
+                .replace("{day}", dayName(t, todayDow))
+                .replace("{group}", groupLabel(t, group.id))
+                .replace("{days}", groupDaysLabel(t, group.id))}
             </AlertDescription>
           </Alert>
         )}
@@ -505,38 +509,38 @@ export function ToolboxTalkTab({ employees, initialSessions }: { employees: Empl
         {/* Session form */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">بيانات الجلسة</CardTitle>
+            <CardTitle className="text-base">{t("trainingMod.tbSessionData")}</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1 sm:col-span-2">
-              <Label>موضوع الحديث التوعوي <span className="text-destructive">*</span></Label>
+              <Label>{t("trainingMod.tbTopicLabel")} <span className="text-destructive">*</span></Label>
               <Textarea
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
-                placeholder="مثال: السلامة أثناء تشغيل الرافعات الشوكية"
+                placeholder={t("trainingMod.tbTopicPlaceholder")}
                 rows={2}
               />
             </div>
             <div className="flex flex-col gap-1">
-              <Label>قام بالتوعية (Conductor)</Label>
+              <Label>{t("trainingMod.tbConductor")}</Label>
               <Input value={conductor} onChange={(e) => setConductor(e.target.value)} />
             </div>
             <div className="flex flex-col gap-1">
-              <Label>الموقع (Location)</Label>
+              <Label>{t("trainingMod.tbLocation")}</Label>
               <Input value={location} onChange={(e) => setLocation(e.target.value)} />
             </div>
             <div className="flex flex-col gap-1">
-              <Label>التاريخ</Label>
+              <Label>{t("trainingMod.tbDate")}</Label>
               <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} dir="ltr" />
             </div>
             <div className="flex flex-col gap-1">
-              <Label>صورة الجلسة</Label>
+              <Label>{t("trainingMod.tbSessionPhoto")}</Label>
               <Input type="file" accept="image/*" onChange={handlePhoto} />
             </div>
             {photo && (
               <div className="sm:col-span-2">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={photo || "/placeholder.svg"} alt="صورة الجلسة" className="h-32 w-auto rounded-md border border-border object-cover" />
+                <img src={photo || "/placeholder.svg"} alt={t("trainingMod.tbSessionPhoto")} className="h-32 w-auto rounded-md border border-border object-cover" />
               </div>
             )}
           </CardContent>
@@ -546,25 +550,25 @@ export function ToolboxTalkTab({ employees, initialSessions }: { employees: Empl
         <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0">
             <CardTitle className="flex items-center gap-2 text-base">
-              <Users className="size-4 text-muted-foreground" /> سجل الحضور
+              <Users className="size-4 text-muted-foreground" /> {t("trainingMod.attendanceLog")}
             </CardTitle>
             <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => setRows((r) => [...r, newRow()])}>
-              <Plus className="size-4" /> إضافة صف
+              <Plus className="size-4" /> {t("trainingMod.tbAddRow")}
             </Button>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto rounded-lg border border-border">
-              <table className="w-full border-collapse text-sm" dir="rtl">
+              <table className="w-full border-collapse text-sm" dir={dir}>
                 <thead>
                   <tr className="bg-muted">
                     <th className="border border-border px-2 py-2 text-center font-semibold">#</th>
-                    <th className="border border-border px-3 py-2 text-right font-semibold">المسمى الوظيفي</th>
-                    <th className="border border-border px-3 py-2 text-right font-semibold">الموظف</th>
-                    <th className="border border-border px-3 py-2 text-right font-semibold">الرقم الوظيفي</th>
-                    <th className="border border-border px-3 py-2 text-right font-semibold">البطاقة/الكود</th>
-                    <th className="border border-border px-3 py-2 text-right font-semibold">الشركة</th>
-                    <th className="border border-border px-3 py-2 text-center font-semibold">التوقيع</th>
-                    <th className="border border-border px-2 py-2 text-center font-semibold">حذف</th>
+                    <th className="border border-border px-3 py-2 text-start font-semibold">{t("trainingMod.tbColDesignation")}</th>
+                    <th className="border border-border px-3 py-2 text-start font-semibold">{t("trainingMod.tbColEmployee")}</th>
+                    <th className="border border-border px-3 py-2 text-start font-semibold">{t("trainingMod.tbColEmployeeId")}</th>
+                    <th className="border border-border px-3 py-2 text-start font-semibold">{t("trainingMod.tbColCard")}</th>
+                    <th className="border border-border px-3 py-2 text-start font-semibold">{t("trainingMod.tbColCompany")}</th>
+                    <th className="border border-border px-3 py-2 text-center font-semibold">{t("trainingMod.tbColSignature")}</th>
+                    <th className="border border-border px-2 py-2 text-center font-semibold">{t("trainingMod.tbColDelete")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -573,19 +577,19 @@ export function ToolboxTalkTab({ employees, initialSessions }: { employees: Empl
                       <td className="border border-border px-2 py-2 text-center text-muted-foreground">{i + 1}</td>
                       <td className="border border-border p-1">
                         <select value={r.jobTitle} onChange={(e) => updateRow(r.id, "jobTitle", e.target.value)} className="h-8 w-40 rounded-md border-0 bg-transparent px-2 text-sm outline-none">
-                          <option value="">اختر المسمى...</option>
+                          <option value="">{t("trainingMod.tbSelectDesignation")}</option>
                           {designations.map((designation) => <option key={designation} value={designation}>{designation}</option>)}
                         </select>
                       </td>
                       <td className="border border-border p-1">
                         <select value={r.employeeId} onChange={(e) => selectEmployee(r.id, e.target.value)} className="h-8 w-48 rounded-md border-0 bg-transparent px-2 text-sm outline-none">
-                          <option value="">اختر الموظف...</option>
+                          <option value="">{t("trainingMod.tbSelectEmployee")}</option>
                           {activeEmployees.filter((employee) => !r.jobTitle || employee.designation === r.jobTitle).map((employee) => <option key={employee.id} value={employee.employeeId}>{employee.name}</option>)}
                         </select>
-                        <Input value={r.name} onChange={(e) => updateRow(r.id, "name", e.target.value)} placeholder="أو إدخال الاسم يدوياً" className="mt-1 h-8 border-0 shadow-none focus-visible:ring-0" />
+                        <Input value={r.name} onChange={(e) => updateRow(r.id, "name", e.target.value)} placeholder={t("trainingMod.tbManualName")} className="mt-1 h-8 border-0 shadow-none focus-visible:ring-0" />
                       </td>
-                      <td className="border border-border p-1"><Input value={r.employeeId} onChange={(e) => updateRow(r.id, "employeeId", e.target.value)} placeholder="الرقم الوظيفي" className="h-8 min-w-28 border-0 font-mono shadow-none focus-visible:ring-0" dir="ltr" /></td>
-                      <td className="border border-border p-1"><Input value={r.cardCode} onChange={(e) => updateRow(r.id, "cardCode", e.target.value)} placeholder="البطاقة" className="h-8 min-w-28 border-0 shadow-none focus-visible:ring-0" dir="ltr" /></td>
+                      <td className="border border-border p-1"><Input value={r.employeeId} onChange={(e) => updateRow(r.id, "employeeId", e.target.value)} placeholder={t("trainingMod.tbColEmployeeId")} className="h-8 min-w-28 border-0 font-mono shadow-none focus-visible:ring-0" dir="ltr" /></td>
+                      <td className="border border-border p-1"><Input value={r.cardCode} onChange={(e) => updateRow(r.id, "cardCode", e.target.value)} placeholder={t("trainingMod.tbCardPh")} className="h-8 min-w-28 border-0 shadow-none focus-visible:ring-0" dir="ltr" /></td>
                       <td className="border border-border p-1">
                         <Input value={r.company} onChange={(e) => updateRow(r.id, "company", e.target.value)} placeholder="MHS" className="h-8 border-0 shadow-none focus-visible:ring-0" />
                       </td>
@@ -598,7 +602,7 @@ export function ToolboxTalkTab({ employees, initialSessions }: { employees: Empl
                           onClick={() => setRows((arr) => (arr.length > 1 ? arr.filter((x) => x.id !== r.id) : arr))}
                           disabled={rows.length === 1}
                           className="text-destructive hover:opacity-80 disabled:opacity-30"
-                          aria-label="حذف الصف"
+                          aria-label={t("trainingMod.tbDeleteRow")}
                         >
                           <Trash2 className="size-4" />
                         </button>
@@ -613,10 +617,10 @@ export function ToolboxTalkTab({ employees, initialSessions }: { employees: Empl
 
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={resetForm} className="gap-1">
-            إعادة تعيين
+            {t("trainingMod.tbReset")}
           </Button>
-<Button onClick={handleSave} disabled={pending} className="gap-2">
-              <Save className="size-4" /> {pending ? "جارٍ الحفظ..." : "حفظ الجلسة"}
+          <Button onClick={handleSave} disabled={pending} className="gap-2">
+              <Save className="size-4" /> {pending ? t("trainingMod.tbSaving") : t("trainingMod.tbSaveSession")}
           </Button>
         </div>
       </TabsContent>
@@ -626,11 +630,10 @@ export function ToolboxTalkTab({ employees, initialSessions }: { employees: Empl
         {sessions.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
             <History className="mx-auto mb-2 size-6" />
-            لا توجد جلسات محفوظة بعد.
+            {t("trainingMod.tbNoSessions")}
           </div>
         ) : (
           sessions.map((s) => {
-            const g = GROUPS.find((x) => x.id === s.groupId)
             return (
               <Card key={s.id}>
                 <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -642,21 +645,21 @@ export function ToolboxTalkTab({ employees, initialSessions }: { employees: Empl
                       <span className="font-semibold text-foreground">{s.topic}</span>
                     </div>
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1"><Users className="size-3" /> {g?.label}</span>
+                      <span className="flex items-center gap-1"><Users className="size-3" /> {groupLabel(t, s.groupId)}</span>
                       <span className="flex items-center gap-1"><CalendarDays className="size-3" /> <span dir="ltr">{s.date}</span></span>
-                      <span>الحضور: {s.attendees.length}</span>
-                      <span>قام بالتوعية: {s.conductor}</span>
+                      <span>{t("trainingMod.tbAttendance")}: {s.attendees.length}</span>
+                      <span>{t("trainingMod.tbConductorShort")}: {s.conductor}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" className="gap-1" onClick={() => printSession(s)}>
-                      <Printer className="size-4" /> طباعة PDF
+                      <Printer className="size-4" /> {t("trainingMod.tbPrintPdf")}
                     </Button>
                     <button
                       type="button"
                       onClick={() => deleteSession(s)}
                       className="text-destructive hover:opacity-80"
-                      aria-label="حذف السجل"
+                      aria-label={t("trainingMod.tbDeleteRecord")}
                     >
                       <Trash2 className="size-4" />
                     </button>

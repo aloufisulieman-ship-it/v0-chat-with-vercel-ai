@@ -6,8 +6,8 @@ import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { requireModule } from "@/lib/session"
 import { getViolations, getEmployees, deleteViolation } from "@/app/actions/hse"
-import { statusLabels } from "@/lib/labels"
-import { categoryLabels } from "@/lib/violation-category"
+import { getServerT } from "@/lib/i18n/server"
+import { statusLabel, categoryLabel } from "@/lib/i18n/labels"
 import { effectiveViolationStatus, isViolationClosed } from "@/lib/violation-status"
 import { FileWarning, Clock, CheckCircle2 } from "lucide-react"
 import { MissingOriginalField } from "@/components/missing-original-field"
@@ -18,9 +18,6 @@ import { FinanceClosureBlock } from "@/components/finance-closure-block"
 import { EntryModeBadge } from "@/components/entry-mode-badge"
 import { ViolationFormDialog } from "./violation-form"
 import { ViolationEditDialog } from "./violation-edit-dialog"
-
-// النص الظاهر في نافذة التفاصيل للحقول غير الموجودة أصلاً بالسجل المستورد.
-const NOT_IN_SOURCE = "غير متوفر بالسجل الأصلي"
 
 type Violation = Awaited<ReturnType<typeof getViolations>>[number]
 
@@ -36,7 +33,9 @@ export default async function ViolationsPage({
 }) {
   const user = await requireModule("violations")
   const [violations, employees] = await Promise.all([getViolations(), getEmployees()])
+  const { t } = await getServerT()
   const isAdmin = user.role === "admin"
+  const NOT_IN_SOURCE = t("violations.notInSource")
 
   // عند القدوم من صفحة التسجيلات نفتح نموذج المخالفة تلقائياً مع تحميل اللقطة كدليل.
   const sp = await searchParams
@@ -49,16 +48,16 @@ export default async function ViolationsPage({
   const open = violations.length - closed
 
   const columns: Column<Violation>[] = [
-    { key: "employeeName", header: "الموظف", render: (r) => <span className="font-medium">{r.employeeName}</span> },
-    { key: "employeeNo", header: "الرقم الوظيفي", render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.employeeNo || "-"}</span> },
-    { key: "description", header: "وصف المخالفة", render: (r) => r.description ? <span className="text-muted-foreground line-clamp-1 max-w-xs">{r.description}</span> : <MissingOriginalField value={null} /> },
-    { key: "place", header: "المكان", render: (r) => <MissingOriginalField value={r.place} /> },
-    { key: "detectedBy", header: "رُصدت بواسطة", render: (r) => r.detectedBy ? <span className="text-muted-foreground">{r.detectedBy}</span> : <span className="text-muted-foreground">-</span> },
-    { key: "violationDate", header: "التاريخ", render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.violationDate ?? "-"}</span> },
-    { key: "status", header: "الحالة", render: (r) => <StatusBadge status={effectiveViolationStatus(r)} /> },
-    { key: "entryMode", header: "المصدر", render: (r) => <EntryModeBadge entryMode={r.entryMode} /> },
+    { key: "employeeName", header: t("violations.colEmployee"), render: (r) => <span className="font-medium">{r.employeeName}</span> },
+    { key: "employeeNo", header: t("violations.colEmployeeNo"), render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.employeeNo || "-"}</span> },
+    { key: "description", header: t("violations.colDescription"), render: (r) => r.description ? <span className="text-muted-foreground line-clamp-1 max-w-xs">{r.description}</span> : <MissingOriginalField value={null} /> },
+    { key: "place", header: t("violations.colPlace"), render: (r) => <MissingOriginalField value={r.place} /> },
+    { key: "detectedBy", header: t("violations.colDetectedBy"), render: (r) => r.detectedBy ? <span className="text-muted-foreground">{r.detectedBy}</span> : <span className="text-muted-foreground">-</span> },
+    { key: "violationDate", header: t("violations.colDate"), render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.violationDate ?? "-"}</span> },
+    { key: "status", header: t("violations.colStatus"), render: (r) => <StatusBadge status={effectiveViolationStatus(r)} /> },
+    { key: "entryMode", header: t("violations.colSource"), render: (r) => <EntryModeBadge entryMode={r.entryMode} /> },
     {
-      key: "referral", header: "الإحالة",
+      key: "referral", header: t("violations.colReferral"),
       render: (r) =>
         r.category === "external" ? (
           <FinanceStatusBadge financeStatus={r.financeStatus} />
@@ -73,29 +72,29 @@ export default async function ViolationsPage({
           <RecordDetailsDialog
             module="violations"
             recordId={r.id}
-            title={`مخالفة: ${r.employeeName}`}
-            subtitle="نموذج مخالفة رسمي"
+            title={`${t("violations.detailsTitle")}: ${r.employeeName}`}
+            subtitle={t("violations.detailsSubtitle")}
             documentNo={r.documentNo ?? "MHS-IMS-PR-HSE-647"}
             fields={[
-              { label: "اسم الموظف", value: r.employeeName },
-              { label: "الرقم الوظيفي", value: r.employeeNo || "-" },
-              { label: "اسم الشركة", value: r.companyName || "-" },
-              { label: "نوع المخالفة", value: r.violationType || "-" },
-              { label: "التصنيف", value: categoryLabels[r.category ?? "internal"] ?? "-" },
-              { label: "الإجراء الداخلي", value: r.internalAction || "-" },
-              { label: "التاريخ", value: r.violationDate ?? "-" },
-              { label: "الوقت", value: r.violationTime || "-" },
-              { label: "المكان", value: r.place || NOT_IN_SOURCE },
-              { label: "رُصدت بواسطة", value: r.detectedBy || "-" },
-              { label: "وصف المخالفة", value: r.description || NOT_IN_SOURCE },
-              { label: "الشهود", value: r.witnesses || "-" },
-              { label: "الإجراء المقترح", value: r.proposedAction || "-" },
-              { label: "الحالة", value: statusLabels[effectiveViolationStatus(r)] ?? "-" },
+              { label: t("violations.fEmployeeName"), value: r.employeeName },
+              { label: t("violations.fEmployeeNo"), value: r.employeeNo || "-" },
+              { label: t("violations.fCompanyName"), value: r.companyName || "-" },
+              { label: t("violations.fViolationType"), value: r.violationType || "-" },
+              { label: t("violations.fCategory"), value: r.category ? categoryLabel(t, r.category) : "-" },
+              { label: t("violations.fInternalAction"), value: r.internalAction || "-" },
+              { label: t("violations.fDate"), value: r.violationDate ?? "-" },
+              { label: t("violations.fTime"), value: r.violationTime || "-" },
+              { label: t("violations.fPlace"), value: r.place || NOT_IN_SOURCE },
+              { label: t("violations.fDetectedBy"), value: r.detectedBy || "-" },
+              { label: t("violations.fDescription"), value: r.description || NOT_IN_SOURCE },
+              { label: t("violations.fWitnesses"), value: r.witnesses || "-" },
+              { label: t("violations.fProposedAction"), value: r.proposedAction || "-" },
+              { label: t("violations.fStatus"), value: statusLabel(t, effectiveViolationStatus(r)) },
             ]}
             signatures={[
-              { label: "توقيع المخالف", value: r.violatorSignature || "" },
-              { label: "توقيع المُبلِّغ / المشرف", value: r.editorSignature || "" },
-              { label: "توقيع مدير السلامة", value: r.managerSignature || "" },
+              { label: t("violations.sigViolator"), value: r.violatorSignature || "" },
+              { label: t("violations.sigReporter"), value: r.editorSignature || "" },
+              { label: t("violations.sigManager"), value: r.managerSignature || "" },
             ]}
             initialAttachments={[]}
             extraSection={
@@ -128,8 +127,8 @@ export default async function ViolationsPage({
 
   return (
     <AppShell
-      title="إدارة المخالفات"
-      subtitle="تسجيل ومتابعة المخالفات وفق النموذج الرسمي (MHS-IMS-PR-HSE-647)"
+      title={t("pageHeaders.violationsTitle")}
+      subtitle={t("pageHeaders.violationsSubtitle")}
       user={user}
       action={
         <ViolationFormDialog
@@ -141,13 +140,13 @@ export default async function ViolationsPage({
       }
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <KpiCard label="إجمالي المخالفات" value={violations.length} icon={FileWarning} tone="blue" />
-        <KpiCard label="مفتوحة / قيد المعالجة" value={open} icon={Clock} tone="accent" />
-        <KpiCard label="مغلقة" value={closed} icon={CheckCircle2} tone="primary" />
+        <KpiCard label={t("violations.totalViolations")} value={violations.length} icon={FileWarning} tone="blue" />
+        <KpiCard label={t("violations.openInProgress")} value={open} icon={Clock} tone="accent" />
+        <KpiCard label={t("violations.closed")} value={closed} icon={CheckCircle2} tone="primary" />
       </div>
       <div className="mt-6">
-        <h2 className="mb-3 text-lg font-semibold text-foreground">سجل المخالفات</h2>
-        <DataTable columns={columns} rows={violations} emptyMessage="لا توجد مخالفات مسجلة." />
+        <h2 className="mb-3 text-lg font-semibold text-foreground">{t("violations.registryTitle")}</h2>
+        <DataTable columns={columns} rows={violations} emptyMessage={t("violations.emptyMessage")} />
       </div>
     </AppShell>
   )
