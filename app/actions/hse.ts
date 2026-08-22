@@ -773,6 +773,7 @@ export async function getActions() {
     .orderBy(desc(correctiveAction.createdAt))
 }
 export async function createAction(formData: FormData) {
+  await assertWritable()
   const { userId, organizationId } = await requireModuleScope("actions")
   await db.insert(correctiveAction).values({
     userId,
@@ -788,6 +789,7 @@ export async function createAction(formData: FormData) {
   revalidatePath("/")
 }
 export async function deleteAction(id: number) {
+  await assertWritable()
   const scope = await requireModuleScope("actions")
   await db
     .delete(correctiveAction)
@@ -805,6 +807,7 @@ export async function getAudits() {
     .orderBy(desc(audit.createdAt))
 }
 export async function createAudit(formData: FormData) {
+  await assertWritable()
   const { userId, organizationId } = await requireModuleScope("audits")
   await db.insert(audit).values({
     userId,
@@ -819,6 +822,7 @@ export async function createAudit(formData: FormData) {
   revalidatePath("/audits")
 }
 export async function deleteAudit(id: number) {
+  await assertWritable()
   const scope = await requireModuleScope("audits")
   await db
     .delete(audit)
@@ -836,6 +840,7 @@ export async function getDocuments() {
     .orderBy(desc(document.createdAt))
 }
 export async function createDocument(formData: FormData) {
+  await assertWritable()
   const { userId, organizationId } = await requireModuleScope("documents")
   await db.insert(document).values({
     userId,
@@ -850,6 +855,7 @@ export async function createDocument(formData: FormData) {
   revalidatePath("/documents")
 }
 export async function deleteDocument(id: number) {
+  await assertWritable()
   const scope = await requireModuleScope("documents")
   await db
     .delete(document)
@@ -868,6 +874,7 @@ export async function getViolations() {
 }
 
 export async function createViolationFull(formData: FormData) {
+  await assertWritable()
   const { userId, organizationId } = await requireModuleScope("violations")
   const year = new Date().getFullYear()
   const existing = await db.select({ documentNo: violation.documentNo }).from(violation).where(eq(violation.organizationId, organizationId)).orderBy(desc(violation.createdAt))
@@ -980,7 +987,8 @@ export async function createViolationFull(formData: FormData) {
 export async function acceptDetectionAsViolation(
   detectionId: number,
   category: "internal" | "external",
-) {
+  ) {
+  await assertWritable()
   const { userId, organizationId } = await requireHseReviewerScope()
   if (category !== "internal" && category !== "external") {
     throw new Error("يجب تحديد تصنيف المخالفة: داخلية أو خارجية")
@@ -1078,6 +1086,7 @@ export async function acceptDetectionAsViolation(
 // تعديل يدوي كامل للمخالفة — مقتصر على مدير النظام (admin) فقط.
 // يسمح بتصحيح أي حقل ورفع نماذج ورقية ممسوحة إضافية للمخالفات اليدوية.
 export async function updateViolation(formData: FormData) {
+  await assertWritable()
   const { userId, organizationId, role } = await requireScope()
   if (role !== "admin") throw new Error("التعديل اليدوي متاح لمدير النظام فقط")
 
@@ -1152,6 +1161,7 @@ export async function updateViolation(formData: FormData) {
 }
 
 export async function deleteViolation(id: number) {
+  await assertWritable()
   const { userId, organizationId, isManager } = await requireModuleScope("violations")
   const v = await db
     .select()
@@ -1181,6 +1191,7 @@ export async function getObservations() {
 // يحفظ ملاحظة (observation) أو ملاحظة إيجابية (positive) من الجولة، ويولّد رقم
 // وثيقة رسمي: OBS-YYYY-XXX للملاحظات�� POS-YYYY-XXX للإيجابيات.
 export async function createObservationFull(formData: FormData) {
+  await assertWritable()
   const { userId, organizationId } = await requireModuleScope("violations")
   const kind = str(formData.get("kind"), "observation") === "positive" ? "positive" : "observation"
   const prefix = kind === "positive" ? "POS" : "OBS"
@@ -1237,6 +1248,7 @@ export async function createObservationFull(formData: FormData) {
 }
 
 export async function deleteObservation(id: number) {
+  await assertWritable()
   const { userId, organizationId, isManager } = await requireModuleScope("violations")
   const rows = await db
     .select()

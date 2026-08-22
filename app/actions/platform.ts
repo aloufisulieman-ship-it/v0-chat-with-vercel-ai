@@ -92,3 +92,16 @@ export async function exitOrganization(): Promise<void> {
   revalidatePath("/", "layout")
   redirect("/admin/organizations")
 }
+
+// اسم العرض للمؤسسة المدخول إليها حالياً (للافتة العرض)، أو "" إن لا يوجد.
+export async function getEnteredOrgName(organizationId: string): Promise<string> {
+  if (!organizationId) return ""
+  const [comp] = await db
+    .select({ name: company.name })
+    .from(company)
+    .where(eq(company.organizationId, organizationId))
+    .limit(1)
+  if (comp?.name && comp.name.trim()) return comp.name.trim()
+  const [org] = await db.select({ name: organization.name }).from(organization).where(eq(organization.id, organizationId)).limit(1)
+  return org?.name || ""
+}

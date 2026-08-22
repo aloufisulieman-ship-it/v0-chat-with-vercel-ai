@@ -216,7 +216,7 @@ export async function getCurrentUser(): Promise<AppUser | null> {
   return loadSessionUser()
 }
 
-// حارس الكتابة الموحّد: يُستدعى في مطلع كل server action يعدّل بيانات. يمنع أي تعديل
+// حارس الكتابة الموحّد: يُستدعى في مط��ع كل server action يعدّل بيانات. يمنع أي تعديل
 // أثناء وضع انتحال مسؤول المنصّة (عرض المؤسسة = قراءة فقط). مستقل عن ترتيب الاستدعاء
 // وعن أي helper نطاق استُخدم، فلا يمكن تفويته بتغيير مصدر النطاق.
 export async function assertWritable(): Promise<void> {
@@ -230,5 +230,13 @@ export async function assertWritable(): Promise<void> {
 export async function requirePlatformAdmin(): Promise<AppUser> {
   const u = await requireUser()
   if (!u.isPlatformAdmin) redirect("/")
+  return u
+}
+
+// حارس صفحات المؤسسة العامة (لوحة التحكم/الإعدادات) التي لا تمرّ بـ requireModule:
+// مسؤول المنصّة خارج وضع الدخول يُوجَّه لقائمة المؤسسات، لأنه لا ينتمي لأي مؤسسة.
+export async function requireOrgUser(): Promise<AppUser> {
+  const u = await requireUser()
+  if (u.isPlatformAdmin && !u.impersonating) redirect("/admin/organizations")
   return u
 }

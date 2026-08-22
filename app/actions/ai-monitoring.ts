@@ -4,7 +4,7 @@ import { db } from "@/lib/db"
 import { aiDetection, activeCameraStream, aiMonitoringNotification, user } from "@/lib/db/schema"
 import { and, desc, eq, gte, isNull, inArray, or } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
-import { requireUser, requireHseReviewerScope } from "@/lib/session"
+import { requireUser, requireHseReviewerScope, assertWritable } from "@/lib/session"
 import type { DetectionStatus, FrameViolation } from "@/lib/ai-monitoring"
 import { mergeFrameViolations } from "@/lib/ai-monitoring"
 import { sessionCameraId } from "@/lib/camera-session"
@@ -86,6 +86,7 @@ export async function touchCameraStream(input: {
   cameraLocation: string
   lastFrameUrl?: string
 }): Promise<void> {
+  await assertWritable()
   // البث/التسجيل متاح لأي مستخدم مسجّل دخول (الموظف المصوّر).
   const { id: userId, organizationId } = await requireUser()
   const inspectorName = (input.inspectorName || "كاميرا الهاتف").slice(0, 160)
@@ -223,6 +224,7 @@ export async function saveFrameDetection(input: {
   snapshotUrl?: string
   detections: FrameViolation[]
 }): Promise<AiDetection | null> {
+  await assertWritable()
   const merged = mergeFrameViolations(input.detections)
   if (!merged) return null
 
@@ -334,6 +336,7 @@ export async function markAiNotificationsRead() {
 
 // تحديث حالة اكتشاف (اطّلاع / معالجة / إنذار خاطئ).
 export async function updateDetectionStatus(id: number, status: string, notes?: string) {
+  await assertWritable()
   const { userId, organizationId, isManager } = await requireHseReviewerScope()
   if (!(VALID_STATUS as string[]).includes(status)) throw new Error("حالة غير صالحة")
 
@@ -358,6 +361,7 @@ export async function updateDetectionStatus(id: number, status: string, notes?: 
 }
 
 export async function deleteDetection(id: number) {
+  await assertWritable()
   const { userId, organizationId, isManager } = await requireHseReviewerScope()
   const where = isManager
     ? and(eq(aiDetection.organizationId, organizationId), eq(aiDetection.id, id))

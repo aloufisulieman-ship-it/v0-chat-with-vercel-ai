@@ -4,7 +4,7 @@ import { db } from "@/lib/db"
 import { violation, incident } from "@/lib/db/schema"
 import { and, desc, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
-import { requireModule, requireModuleScope } from "@/lib/session"
+import { requireModule, requireModuleScope, assertWritable } from "@/lib/session"
 import { normalizeHrStatus, type HrStatus } from "@/lib/hr-status"
 
 function str(v: FormDataEntryValue | null, fallback = "") {
@@ -76,6 +76,7 @@ function buildHrUpdate(formData: FormData, closerName: string) {
 }
 
 export async function updateHrViolation(formData: FormData) {
+  await assertWritable()
   const closer = await requireModule("hr")
   const id = Number(formData.get("id"))
   if (!Number.isFinite(id)) throw new Error("معرّف غير صالح")
@@ -91,6 +92,7 @@ export async function updateHrViolation(formData: FormData) {
 }
 
 export async function updateHrIncident(formData: FormData) {
+  await assertWritable()
   const closer = await requireModule("hr")
   const id = Number(formData.get("id"))
   if (!Number.isFinite(id)) throw new Error("معرّف غير صالح")

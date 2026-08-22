@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/session"
+import { requireOrgUser } from "@/lib/session"
 import { MobileCamera } from "./mobile-camera"
 import { SignOutButton } from "./sign-out-button"
 import { Cctv } from "lucide-react"
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic"
 // صفحة مستقلة تماماً للموظف المصوّر: لا قائمة جانبية ولا روابط لصفحات المراجعة.
 // متاحة لأي مستخدم مسجّل دخول (بعد الاعتماد)، دون اشتراط صلاحية المراقبة الذكية.
 export default async function MobileCameraPage() {
-  const u = await requireUser()
+  const u = await requireOrgUser()
   const { t, dir } = await getServerT()
 
   return (

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react"
 import { Save } from "lucide-react"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -18,16 +19,21 @@ type Company = {
   hseManager: string | null
 } | null
 
-export function CompanyForm({ company }: { company: Company }) {
+export function CompanyForm({ company, readOnly = false }: { company: Company; readOnly?: boolean }) {
   const { t } = useI18n()
   const [isPending, startTransition] = useTransition()
   const [saved, setSaved] = useState(false)
 
   function handleSubmit(formData: FormData) {
     startTransition(async () => {
-      await saveCompany(formData)
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2500)
+      try {
+        await saveCompany(formData)
+        setSaved(true)
+        setTimeout(() => setSaved(false), 2500)
+      } catch (err) {
+        // أثناء عرض مسؤول المنصّة للمؤسسة يرفض الخادم أي تعديل — نعرض رسالة لطيفة بدل تعطّل الصفحة.
+        toast.error(err instanceof Error ? err.message : t("companyForm.saveError"))
+      }
     })
   }
 
@@ -66,11 +72,12 @@ export function CompanyForm({ company }: { company: Company }) {
         </div>
       </div>
       <div className="flex items-center gap-3">
-        <Button type="submit" className="gap-2" disabled={isPending}>
+        <Button type="submit" className="gap-2" disabled={isPending || readOnly}>
           <Save className="size-4" />
           {isPending ? t("companyForm.saving") : t("companyForm.save")}
         </Button>
         {saved && <span className="text-sm text-primary">{t("companyForm.savedOk")}</span>}
+        {readOnly && <span className="text-sm text-muted-foreground">{t("companyForm.readOnlyHint")}</span>}
       </div>
     </form>
   )

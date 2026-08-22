@@ -4,6 +4,8 @@ import { Cairo } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { Toaster } from "@/components/ui/toaster"
 import { getCurrentUser } from "@/lib/session"
+import { getEnteredOrgName } from "@/app/actions/platform"
+import { PlatformImpersonationBanner } from "@/components/platform-impersonation-banner"
 import { resolveLocale } from "@/lib/i18n/server"
 import { localeDirection } from "@/lib/i18n/config"
 import { I18nProvider } from "@/lib/i18n/client"
@@ -32,10 +34,15 @@ export default async function RootLayout({
   const locale = await resolveLocale(currentUser?.locale)
   const dir = localeDirection[locale]
 
+  // أثناء دخول مسؤول المنصّة إلى مؤسسة، نعرض لافتة "عرض فقط" أعلى كل صفحات المؤسسة.
+  const impersonating = Boolean(currentUser?.isPlatformAdmin && currentUser?.impersonating)
+  const enteredOrgName = impersonating ? await getEnteredOrgName(currentUser!.organizationId).catch(() => "") : ""
+
   return (
     <html lang={locale} dir={dir} className="bg-background">
       <body className={`${cairo.variable} font-sans antialiased`}>
         <I18nProvider locale={locale}>
+          {impersonating && <PlatformImpersonationBanner organizationName={enteredOrgName} />}
           {children}
           <Toaster />
         </I18nProvider>
