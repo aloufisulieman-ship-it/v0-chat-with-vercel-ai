@@ -34,14 +34,14 @@ export const auth = betterAuth({
     user: {
       create: {
         before: async (newUser) => {
-          // First registered user becomes the approved admin.
-          const result = await pool.query('SELECT COUNT(*)::int AS count FROM "user"')
-          const isFirstUser = result.rows[0]?.count === 0
+          // نموذج متعدد المؤسسات: التسجيل العام يمرّ عبر registerOrganization الذي
+          // ينشئ المؤسسة ويرقّي المُسجِّل إلى admin/approved بعد الإنشاء. هنا نضبط
+          // الحد الأدنى الآمن فقط (عضو غير مُفعّل) لأي مسار إنشاء غير متوقّع.
           return {
             data: {
               ...newUser,
-              role: isFirstUser ? "admin" : "user",
-              status: isFirstUser ? "approved" : "pending",
+              role: "user",
+              status: "pending",
             },
           }
         },

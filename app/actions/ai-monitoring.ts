@@ -4,23 +4,12 @@ import { db } from "@/lib/db"
 import { aiDetection, activeCameraStream, aiMonitoringNotification, user } from "@/lib/db/schema"
 import { and, desc, eq, gte, isNull, inArray, or } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
-import { requireUser, requireHseReviewerId } from "@/lib/session"
+import { requireUser, requireHseReviewerScope } from "@/lib/session"
 import type { DetectionStatus, FrameViolation } from "@/lib/ai-monitoring"
 import { mergeFrameViolations } from "@/lib/ai-monitoring"
 import { sessionCameraId } from "@/lib/camera-session"
 
 const VALID_STATUS: DetectionStatus[] = ["new", "acknowledged", "resolved", "false_positive"]
-
-// المراجع (admin/manager) يرى كل الاكتشافات، وغيره يرى ما سجّلته أجهزته فقط.
-async function isManager(userId: string) {
-  const rows = await db
-    .select({ role: user.role })
-    .from(user)
-    .where(eq(user.id, userId))
-    .limit(1)
-  const u = rows[0]
-  return u?.role === "admin" || u?.role === "manager"
-}
 
 export type AiDetection = typeof aiDetection.$inferSelect
 
@@ -59,25 +48,21 @@ function toListItem(row: AiDetection): AiDetectionListItem {
 
 // قائمة الاكتشافات مرتبة بالأحدث (بدون base64 الثقيل — انظر toListItem).
 export async function getDetections(): Promise<AiDetectionListItem[]> {
-  const userId = await requireHseReviewerId()
-  const rows = (await isManager(userId))
-    ? await db.select().from(aiDetection).orderBy(desc(aiDetection.detectedAt))
-    : await db
-        .select()
-        .from(aiDetection)
-        .where(eq(aiDetection.userId, userId))
-        .orderBy(desc(aiDetection.detectedAt))
+  const { userId, organizationId, isManager } = await requireHseReviewerScope()
+  const where = isManager
+    ? eq(aiDetection.organizationId, organizationId)
+    : and(eq(aiDetection.organizationId, organizationId), eq(aiDetection.userId, userId))
+  const rows = await db.select().from(aiDetection).where(where).orderBy(desc(aiDetection.detectedAt))
   return rows.map(toListItem)
 }
 
-// لقطة إثبات اكتشاف واحد عند الطلب (base64 كامل). تحترم نطاق الرؤية نفسه:
+// لقطة إثبات اكتشاف واحد عند الطلب (base64 كامل). تحترم نطاق الرؤية نفسه داخل المؤسسة:
 // المدير يرى كل اللقطات، وغيره يرى لقطات اكتشافات أجهزته فقط.
 export async function getDetectionSnapshot(id: number): Promise<string> {
-  const userId = await requireHseReviewerId()
-  const manager = await isManager(userId)
-  const where = manager
-    ? eq(aiDetection.id, id)
-    : and(eq(aiDetection.id, id), eq(aiDetection.userId, userId))
+  const { userId, organizationId, isManager } = await requireHseReviewerScope()
+  const where = isManager
+    ? and(eq(aiDetection.organizationId, organizationId), eq(aiDetection.id, id))
+    : and(eq(aiDetection.organizationId, organizationId), eq(aiDetection.id, id), eq(aiDetection.userId, userId))
   const rows = await db
     .select({ snapshotUrl: aiDetection.snapshotUrl })
     .from(aiDetection)
@@ -102,7 +87,7 @@ export async function touchCameraStream(input: {
   lastFrameUrl?: string
 }): Promise<void> {
   // البث/التسجيل متاح لأي مستخدم مسجّل دخول (الموظف المصوّر).
-  const userId = (await requireUser()).id
+  const { id: userId, organizationId } = await requireUser()
   const inspectorName = (input.inspectorName || "كاميرا الهاتف").slice(0, 160)
   const cameraId = sessionCameraId(userId, inspectorName)
   const cameraLocation = (input.cameraLocation || "").slice(0, 200)
@@ -118,7 +103,7 @@ export async function touchCameraStream(input: {
 
   await db
     .insert(activeCameraStream)
-    .values({ userId, cameraId, inspectorName, cameraLocation, lastFrameUrl, lastSeenAt: new Date() })
+    .values({ userId, organizationId, cameraId, inspectorName, cameraLocation, lastFrameUrl, lastSeenAt: new Date() })
     .onConflictDoUpdate({
       target: [activeCameraStream.userId, activeCameraStream.cameraId],
       set,
@@ -127,15 +112,15 @@ export async function touchCameraStream(input: {
 
 // الكاميرات المتصلة حالياً (آخر إرسال خلال نافذة الاعتبار)، الأحدث أولاً.
 export async function getActiveCameraStreams(): Promise<ActiveCameraStream[]> {
-  const userId = await requireHseReviewerId()
+  const { userId, organizationId, isManager } = await requireHseReviewerScope()
   const since = new Date(Date.now() - ACTIVE_WINDOW_SECONDS * 1000)
   const base = db
     .select()
     .from(activeCameraStream)
     .where(
-      (await isManager(userId))
-        ? gte(activeCameraStream.lastSeenAt, since)
-        : and(eq(activeCameraStream.userId, userId), gte(activeCameraStream.lastSeenAt, since)),
+      isManager
+        ? and(eq(activeCameraStream.organizationId, organizationId), gte(activeCameraStream.lastSeenAt, since))
+        : and(eq(activeCameraStream.organizationId, organizationId), eq(activeCameraStream.userId, userId), gte(activeCameraStream.lastSeenAt, since)),
     )
     .orderBy(desc(activeCameraStream.lastSeenAt))
   return base
@@ -161,13 +146,12 @@ export type CameraLiveStatus = {
 // حالة كاميرا واحدة للعرض المباشر: آخر إطار من Blob + آخر نتيجة تحليل AI.
 // تحترم نطاق الرؤية نفسه (المدير يرى الكل، وغيره يرى كاميرات أجهزته فقط).
 export async function getCameraLiveStatus(cameraId: string): Promise<CameraLiveStatus> {
-  const userId = await requireHseReviewerId()
-  const manager = await isManager(userId)
+  const { userId, organizationId, isManager } = await requireHseReviewerScope()
   const id = (cameraId || "").slice(0, 120)
 
-  const camWhere = manager
-    ? eq(activeCameraStream.cameraId, id)
-    : and(eq(activeCameraStream.cameraId, id), eq(activeCameraStream.userId, userId))
+  const camWhere = isManager
+    ? and(eq(activeCameraStream.organizationId, organizationId), eq(activeCameraStream.cameraId, id))
+    : and(eq(activeCameraStream.organizationId, organizationId), eq(activeCameraStream.cameraId, id), eq(activeCameraStream.userId, userId))
   const camRows = await db
     .select()
     .from(activeCameraStream)
@@ -176,9 +160,9 @@ export async function getCameraLiveStatus(cameraId: string): Promise<CameraLiveS
     .limit(1)
   const cam = camRows[0]
 
-  const detWhere = manager
-    ? eq(aiDetection.cameraId, id)
-    : and(eq(aiDetection.cameraId, id), eq(aiDetection.userId, userId))
+  const detWhere = isManager
+    ? and(eq(aiDetection.organizationId, organizationId), eq(aiDetection.cameraId, id))
+    : and(eq(aiDetection.organizationId, organizationId), eq(aiDetection.cameraId, id), eq(aiDetection.userId, userId))
   const detRows = await db
     .select()
     .from(aiDetection)
@@ -210,10 +194,13 @@ export async function getCameraLiveStatus(cameraId: string): Promise<CameraLiveS
   }
 }
 
-// توليد معرّف الاكتشاف بالصيغة AID-YYYY-### تسلسلياً حسب السنة.
-async function nextDetectionId(): Promise<string> {
+// توليد معرّف الاكتشاف بالصيغة AID-YYYY-### تسلسلياً حسب السنة داخل المؤسسة.
+async function nextDetectionId(organizationId: string): Promise<string> {
   const year = new Date().getFullYear()
-  const rows = await db.select({ detectionId: aiDetection.detectionId }).from(aiDetection)
+  const rows = await db
+    .select({ detectionId: aiDetection.detectionId })
+    .from(aiDetection)
+    .where(eq(aiDetection.organizationId, organizationId))
   const prefix = `AID-${year}-`
   const maxSeq = rows
     .map((r) => r.detectionId ?? "")
@@ -240,15 +227,16 @@ export async function saveFrameDetection(input: {
   if (!merged) return null
 
   // يُستدعى نيابةً عن الموظف المصوّر (أي مستخدم مسجّل دخول).
-  const userId = (await requireUser()).id
+  const { id: userId, organizationId } = await requireUser()
   // نفس معرّف جلسة الكاميرا المستخدم في البث المباشر (مشتقّ من اسم المفتش).
   const cameraId = sessionCameraId(userId, input.inspectorName || "")
 
-  const detectionId = await nextDetectionId()
+  const detectionId = await nextDetectionId(organizationId)
   const [row] = await db
     .insert(aiDetection)
     .values({
       userId,
+      organizationId,
       detectionId,
       cameraId,
       inspectorName: input.inspectorName?.slice(0, 160) || "كاميرا الهاتف",
@@ -283,11 +271,13 @@ async function createDetectionNotifications(
   detection: AiDetection,
   severity: string,
 ): Promise<void> {
+  // المستقبِلون من نفس مؤسسة الاكتشاف فقط.
   const recipients = await db
     .select({ id: user.id })
     .from(user)
     .where(
       and(
+        eq(user.organizationId, detection.organizationId),
         eq(user.status, "approved"),
         or(
           inArray(user.role, ["admin", "manager"]),
@@ -301,6 +291,7 @@ async function createDetectionNotifications(
     .values(
       recipients.map((recipient) => ({
         userId: recipient.id,
+        organizationId: detection.organizationId,
         detectionId: detection.id,
         title: severity === "critical" ? "تنبيه كاميرا حرج" : "تنبيه كاميرا عالي الخطورة",
         message: `${detection.cameraLocation || detection.inspectorName} — ${detection.detectionId}`,
@@ -317,7 +308,11 @@ export async function getUnreadAiNotifications() {
     .select()
     .from(aiMonitoringNotification)
     .where(
-      and(eq(aiMonitoringNotification.userId, current.id), isNull(aiMonitoringNotification.readAt)),
+      and(
+        eq(aiMonitoringNotification.organizationId, current.organizationId),
+        eq(aiMonitoringNotification.userId, current.id),
+        isNull(aiMonitoringNotification.readAt),
+      ),
     )
     .orderBy(desc(aiMonitoringNotification.createdAt))
 }
@@ -329,13 +324,17 @@ export async function markAiNotificationsRead() {
     .update(aiMonitoringNotification)
     .set({ readAt: new Date() })
     .where(
-      and(eq(aiMonitoringNotification.userId, current.id), isNull(aiMonitoringNotification.readAt)),
+      and(
+        eq(aiMonitoringNotification.organizationId, current.organizationId),
+        eq(aiMonitoringNotification.userId, current.id),
+        isNull(aiMonitoringNotification.readAt),
+      ),
     )
 }
 
 // تحديث حالة اكتشاف (اطّلاع / معالجة / إنذار خاطئ).
 export async function updateDetectionStatus(id: number, status: string, notes?: string) {
-  const userId = await requireHseReviewerId()
+  const { userId, organizationId, isManager } = await requireHseReviewerScope()
   if (!(VALID_STATUS as string[]).includes(status)) throw new Error("حالة غير صالحة")
 
   const rows = await db
@@ -345,8 +344,9 @@ export async function updateDetectionStatus(id: number, status: string, notes?: 
     .limit(1)
   const actor = rows[0]?.name || "مستخدم"
 
-  const manager = await isManager(userId)
-  const where = manager ? eq(aiDetection.id, id) : and(eq(aiDetection.id, id), eq(aiDetection.userId, userId))
+  const where = isManager
+    ? and(eq(aiDetection.organizationId, organizationId), eq(aiDetection.id, id))
+    : and(eq(aiDetection.organizationId, organizationId), eq(aiDetection.id, id), eq(aiDetection.userId, userId))
 
   const patch: Partial<typeof aiDetection.$inferInsert> = { status }
   if (typeof notes === "string") patch.notes = notes.slice(0, 1000)
@@ -358,9 +358,10 @@ export async function updateDetectionStatus(id: number, status: string, notes?: 
 }
 
 export async function deleteDetection(id: number) {
-  const userId = await requireHseReviewerId()
-  const manager = await isManager(userId)
-  const where = manager ? eq(aiDetection.id, id) : and(eq(aiDetection.id, id), eq(aiDetection.userId, userId))
+  const { userId, organizationId, isManager } = await requireHseReviewerScope()
+  const where = isManager
+    ? and(eq(aiDetection.organizationId, organizationId), eq(aiDetection.id, id))
+    : and(eq(aiDetection.organizationId, organizationId), eq(aiDetection.id, id), eq(aiDetection.userId, userId))
   await db.delete(aiDetection).where(where)
   revalidatePath("/ai-monitoring")
 }

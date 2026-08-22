@@ -10,7 +10,7 @@ import { randomUUID } from "crypto"
 import { serializePermissions } from "@/lib/permissions"
 
 export async function getUsers() {
-  await requireAdmin()
+  const admin = await requireAdmin()
   return db
     .select({
       id: userTable.id,
@@ -23,6 +23,7 @@ export async function getUsers() {
       createdAt: userTable.createdAt,
     })
     .from(userTable)
+    .where(eq(userTable.organizationId, admin.organizationId))
     .orderBy(desc(userTable.createdAt))
 }
 
@@ -34,7 +35,7 @@ export async function createUser(input: {
   department: string
   permissions: string[]
 }): Promise<{ success?: true; error?: string }> {
-  await requireAdmin()
+  const admin = await requireAdmin()
 
   const name = input.name.trim()
   const email = input.email.trim().toLowerCase()
@@ -51,13 +52,14 @@ export async function createUser(input: {
     const created = await ctx.internalAdapter.createUser({ name, email, emailVerified: false })
     const userId = created.id
 
-    // Admin-created accounts are approved immediately with the chosen role/department/permissions.
+    // العضو الجديد ينضم إلى مؤسسة المدير مباشرةً (approved) بالدور/القسم/الصلاحيات المختارة.
     await db
       .update(userTable)
       .set({
         name,
         role: input.role,
         status: "approved",
+        organizationId: admin.organizationId,
         department: input.department,
         permissions: serializePermissions(input.permissions),
         updatedAt: new Date(),
@@ -85,7 +87,7 @@ export async function createUser(input: {
 
 // Update a user's department and module permissions (admin only).
 export async function updateUserPermissions(userId: string, department: string, permissions: string[]) {
-  await requireAdmin()
+  const admin = await requireAdmin()
   await db
     .update(userTable)
     .set({
@@ -93,13 +95,16 @@ export async function updateUserPermissions(userId: string, department: string, 
       permissions: serializePermissions(permissions),
       updatedAt: new Date(),
     })
-    .where(eq(userTable.id, userId))
+    .where(and(eq(userTable.id, userId), eq(userTable.organizationId, admin.organizationId)))
   revalidatePath("/users")
 }
 
 export async function approveUser(id: string) {
-  await requireAdmin()
-  await db.update(userTable).set({ status: "approved", updatedAt: new Date() }).where(eq(userTable.id, id))
+  const admin = await requireAdmin()
+  await db
+    .update(userTable)
+    .set({ status: "approved", updatedAt: new Date() })
+    .where(and(eq(userTable.id, id), eq(userTable.organizationId, admin.organizationId)))
   revalidatePath("/users")
 }
 
@@ -109,7 +114,7 @@ export async function rejectUser(id: string) {
   await db
     .update(userTable)
     .set({ status: "rejected", updatedAt: new Date() })
-    .where(and(eq(userTable.id, id), ne(userTable.id, admin.id)))
+    .where(and(eq(userTable.id, id), ne(userTable.id, admin.id), eq(userTable.organizationId, admin.organizationId)))
   revalidatePath("/users")
 }
 
@@ -120,13 +125,15 @@ export async function setUserRole(id: string, role: "admin" | "manager" | "user"
   await db
     .update(userTable)
     .set({ role, updatedAt: new Date() })
-    .where(and(eq(userTable.id, id), ne(userTable.id, admin.id)))
+    .where(and(eq(userTable.id, id), ne(userTable.id, admin.id), eq(userTable.organizationId, admin.organizationId)))
   revalidatePath("/users")
 }
 
 export async function deleteUser(id: string) {
   const admin = await requireAdmin()
   if (id === admin.id) return
-  await db.delete(userTable).where(and(eq(userTable.id, id), ne(userTable.id, admin.id)))
+  await db
+    .delete(userTable)
+    .where(and(eq(userTable.id, id), ne(userTable.id, admin.id), eq(userTable.organizationId, admin.organizationId)))
   revalidatePath("/users")
 }

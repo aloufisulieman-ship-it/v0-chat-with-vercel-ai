@@ -1,5 +1,15 @@
 import { pgTable, text, timestamp, boolean, serial, integer, date, uniqueIndex, index } from "drizzle-orm/pg-core"
 
+// ---------- المؤسسة (المستأجر) — الحدّ الأعلى للعزل في نظام SaaS متعدد المؤسسات ----------
+// كل مستخدم وكل سجل تشغيلي ينتمي إلى مؤسسة واحدة عبر organizationId. العزل بين
+// المؤسسات صارم: لا يُرى أي صف إلا ضمن مؤسسة صاحب الجلسة.
+export const organization = pgTable("organization", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull().default(""),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
 // ---------- Better Auth tables (do not rename columns) ----------
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -10,6 +20,10 @@ export const user = pgTable("user", {
   role: text("role").notNull().default("user"),
   status: text("status").notNull().default("pending"),
   department: text("department").notNull().default(""),
+  // معرّف المؤسسة التي ينتمي إليها المستخدم. يبقى nullable لأن الإنشاء يتم على
+  // مرحلتين: Better Auth ينشئ صف المستخدم أولاً، ثم registerOrganization يعيّن
+  // المؤسسة مباشرةً بعده. المستخدمون المُرحَّلون لديهم قيمة فعلية دائماً.
+  organizationId: text("organizationId"),
   // JSON array of module values the user can access, e.g. ["dashboard","violations"]
   permissions: text("permissions").notNull().default("[]"),
   // تفضيل لغة الواجهة لكل مستخدم ("ar" | "en") — يبقى ثابتًا عبر كل الجلسات.
@@ -62,6 +76,7 @@ export const verification = pgTable("verification", {
 export const company = pgTable("company", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
   name: text("name").notNull().default(""),
   industry: text("industry").default(""),
   address: text("address").default(""),
@@ -76,6 +91,7 @@ export const company = pgTable("company", {
 export const incident = pgTable("incident", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
   documentNo: text("documentNo").default(""),
   title: text("title").notNull(),
   location: text("location").default(""),
@@ -124,6 +140,7 @@ export const incident = pgTable("incident", {
 export const inspection = pgTable("inspection", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
   title: text("title").notNull(),
   area: text("area").default(""),
   inspector: text("inspector").default(""),
@@ -137,6 +154,7 @@ export const inspection = pgTable("inspection", {
 export const permit = pgTable("permit", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
   documentNo: text("documentNo").default(""),
   title: text("title").notNull(),
   type: text("type").default("construction"),
@@ -157,6 +175,7 @@ export const permit = pgTable("permit", {
 export const risk = pgTable("risk", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
   hazard: text("hazard").notNull(),
   activity: text("activity").default(""),
   likelihood: integer("likelihood").default(1),
@@ -170,6 +189,7 @@ export const risk = pgTable("risk", {
 export const training = pgTable("training", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
   title: text("title").notNull(),
   trainer: text("trainer").default(""),
   attendees: integer("attendees").default(0),
@@ -185,6 +205,7 @@ export const training = pgTable("training", {
 export const employee = pgTable("employees", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
   employeeId: text("employee_id").notNull(),
   name: text("name").notNull(),
   designation: text("designation").notNull().default(""),
@@ -201,6 +222,7 @@ export const employee = pgTable("employees", {
 export const toolboxSession = pgTable("toolbox_session", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
   sourceKey: text("source_key").notNull(),
   documentNo: text("document_no").notNull(),
   date: text("date").notNull().default(""),
@@ -217,6 +239,7 @@ export const toolboxSession = pgTable("toolbox_session", {
 export const toolboxAttendee = pgTable("toolbox_attendee", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
   sessionId: integer("session_id").notNull(),
   employeeRefId: integer("employee_ref_id"),
   employeeId: text("employee_id").notNull().default(""),
@@ -233,6 +256,7 @@ export const trainingAttendee = pgTable("training_attendee", {
   id: serial("id").primaryKey(),
   trainingId: integer("training_id").notNull(),
   userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
   rowNo: integer("row_no").default(0),
   name: text("name").default(""),
   designation: text("designation").default(""),
@@ -246,6 +270,7 @@ export const trainingAttendee = pgTable("training_attendee", {
 export const correctiveAction = pgTable("corrective_action", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
   title: text("title").notNull(),
   source: text("source").default(""),
   assignedTo: text("assignedTo").default(""),
@@ -258,6 +283,7 @@ export const correctiveAction = pgTable("corrective_action", {
 export const audit = pgTable("audit", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
   title: text("title").notNull(),
   standard: text("standard").default(""),
   auditor: text("auditor").default(""),
@@ -270,6 +296,7 @@ export const audit = pgTable("audit", {
 export const violation = pgTable("violation", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
   documentNo: text("documentNo").default("MHS-IMS-PR-HSE-647"),
   companyName: text("companyName").default(""),
   employeeRefId: integer("employee_ref_id"),
@@ -306,7 +333,7 @@ export const violation = pgTable("violation", {
   // مسار الإحالة إلى المالية للمخالفات الخارجية: pending | in_review | closed (null يُعامل كـ pending).
   financeStatus: text("finance_status"),
   settlementNumber: text("settlement_number").default(""),
-  // إيصال الدفع مخزّن كـ data URL واحد (بنفس آلية رفع الملفات في النظام).
+  // إيصال الدفع مخزّن كـ data URL واحد (بنفس آلية رفع الملفات في ال��ظام).
   paymentReceiptUrl: text("payment_receipt_url").default(""),
   financeClosedBy: text("finance_closed_by").default(""),
   financeClosedAt: timestamp("finance_closed_at"),
@@ -318,6 +345,7 @@ export const violation = pgTable("violation", {
 export const observation = pgTable("observation", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
   patrolId: text("patrolId").default(""),
   kind: text("kind").notNull().default("observation"),
   documentNo: text("documentNo").default(""),
@@ -333,6 +361,7 @@ export const observation = pgTable("observation", {
 export const attachment = pgTable("attachment", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
   module: text("module").notNull(),
   recordId: integer("recordId").notNull(),
   kind: text("kind").notNull().default("photo"),
@@ -352,6 +381,7 @@ export const attachment = pgTable("attachment", {
 export const aiDetection = pgTable("ai_detections", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
   detectionId: text("detection_id").notNull(), // AID-YYYY-###
   cameraId: text("camera_id").notNull().default(""),
   inspectorName: text("inspector_name").notNull().default(""), // اسم المفتش/الموظف صاحب الجلسة
@@ -380,6 +410,7 @@ export const aiDetection = pgTable("ai_detections", {
 export const aiMonitoringNotification = pgTable("ai_monitoring_notifications", {
   id: serial("id").primaryKey(),
   userId: text("user_id").notNull(),
+  organizationId: text("organizationId").notNull(),
   detectionId: integer("detection_id").notNull(),
   title: text("title").notNull(),
   message: text("message").notNull(),
@@ -395,6 +426,7 @@ export const activeCameraStream = pgTable(
   {
     id: serial("id").primaryKey(),
     userId: text("userId").notNull(),
+    organizationId: text("organizationId").notNull(),
     cameraId: text("camera_id").notNull(),
     inspectorName: text("inspector_name").notNull().default(""), // اسم المفتش/الموظف الذي بدأ الجلسة
     cameraLocation: text("camera_location").notNull().default(""),
@@ -432,6 +464,7 @@ export const webrtcSignal = pgTable(
 export const videoRecording = pgTable("video_recordings", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
   cameraId: text("camera_id").notNull().default(""),
   cameraName: text("camera_name").notNull().default(""),
   videoUrl: text("video_url").notNull(),
@@ -447,6 +480,7 @@ export const videoRecording = pgTable("video_recordings", {
 export const videoScreenshot = pgTable("video_screenshots", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
   recordingId: integer("recording_id").notNull(),
   cameraId: text("camera_id").notNull().default(""),
   imageUrl: text("image_url").notNull(),
@@ -459,6 +493,7 @@ export const videoScreenshot = pgTable("video_screenshots", {
 export const document = pgTable("document", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
   title: text("title").notNull(),
   category: text("category").default(""),
   version: text("version").default("1.0"),
@@ -494,6 +529,7 @@ export const translationCache = pgTable(
 export const plateRead = pgTable("plate_reads", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
   plateNumber: text("plate_number").notNull().default(""),
   confidence: integer("confidence").notNull().default(0), // 0-100
   imageUrl: text("image_url").notNull().default(""),
@@ -506,6 +542,7 @@ export const plateRead = pgTable("plate_reads", {
 export const employeeIdRead = pgTable("employee_id_reads", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
   employeeNumber: text("employee_number").notNull().default(""),
   // معرّف الموظف المطابق في جدول employees (رقمي)، أو null إن لم يُطابق.
   matchedEmployeeId: integer("matched_employee_id"),
@@ -521,6 +558,7 @@ export const employeeIdRead = pgTable("employee_id_reads", {
 export const tuktukRead = pgTable("tuktuk_reads", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
   tuktukNumber: text("tuktuk_number").notNull().default(""),
   // معرّف تصريح التوك توك المطابق في جدول permit (رقمي)، أو null.
   matchedPermitId: integer("matched_permit_id"),

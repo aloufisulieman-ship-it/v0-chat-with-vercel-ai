@@ -3,7 +3,8 @@ import { generateObject } from "ai"
 import { z } from "zod"
 import { db } from "@/lib/db"
 import { aiDetection } from "@/lib/db/schema"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
+import { getCurrentUser } from "@/lib/session"
 import { saveFrameDetection, touchCameraStream } from "@/app/actions/ai-monitoring"
 import {
   savePlateRead,
@@ -304,14 +305,18 @@ export async function POST(req: Request) {
       // حفظ الهوية المطابقة ضمن ملاحظات الاكتشاف ليجدها المراجع عند تحويله إلى مخالفة.
       if (identityNote) {
         try {
+          // نقيّد تحديث الملاحظة بمؤسسة المتصل حتى لا يُعدَّل اكتشاف مؤسسة أخرى.
+          const current = await getCurrentUser()
+          const orgId = current?.organizationId ?? ""
+          const scoped = and(eq(aiDetection.id, detectionRowId), eq(aiDetection.organizationId, orgId))
           const rows = await db
             .select({ notes: aiDetection.notes })
             .from(aiDetection)
-            .where(eq(aiDetection.id, detectionRowId))
+            .where(scoped)
             .limit(1)
           const prev = rows[0]?.notes || ""
           const combined = (prev ? `${prev} • ` : "") + identityNote
-          await db.update(aiDetection).set({ notes: combined.slice(0, 1000) }).where(eq(aiDetection.id, detectionRowId))
+          await db.update(aiDetection).set({ notes: combined.slice(0, 1000) }).where(scoped)
         } catch {
           /* تجاهل فشل تحديث الملاحظات */
         }

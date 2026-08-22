@@ -6,6 +6,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { authClient } from "@/lib/auth-client"
+import { registerOrganization } from "@/app/actions/auth-register"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -17,6 +18,7 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
   const { t } = useI18n()
   const router = useRouter()
   const [name, setName] = useState("")
+  const [companyName, setCompanyName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -29,15 +31,27 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
     setError(null)
     setLoading(true)
 
-    const { error } = isSignUp
-      ? await authClient.signUp.email({ email, password, name })
-      : await authClient.signIn.email({ email, password })
-
-    setLoading(false)
-
-    if (error) {
-      setError(error.message ?? t("auth.genericError"))
-      return
+    if (isSignUp) {
+      const { error } = await authClient.signUp.email({ email, password, name })
+      if (error) {
+        setLoading(false)
+        setError(error.message ?? t("auth.genericError"))
+        return
+      }
+      // تهيئة المؤسسة وترقية المُسجِّل إلى أول admin لها مباشرةً بعد إنشاء الحساب.
+      const provisioned = await registerOrganization({ companyName })
+      setLoading(false)
+      if (provisioned.error) {
+        setError(provisioned.error)
+        return
+      }
+    } else {
+      const { error } = await authClient.signIn.email({ email, password })
+      setLoading(false)
+      if (error) {
+        setError(error.message ?? t("auth.genericError"))
+        return
+      }
     }
 
     router.push("/")
@@ -61,10 +75,22 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           {isSignUp && (
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="name">{t("auth.fullName")}</Label>
-              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name" />
-            </div>
+            <>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="name">{t("auth.fullName")}</Label>
+                <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name" />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="companyName">{t("auth.companyName")}</Label>
+                <Input
+                  id="companyName"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  autoComplete="organization"
+                  placeholder={t("auth.companyNamePlaceholder")}
+                />
+              </div>
+            </>
           )}
           <div className="flex flex-col gap-2">
             <Label htmlFor="email">{t("auth.email")}</Label>

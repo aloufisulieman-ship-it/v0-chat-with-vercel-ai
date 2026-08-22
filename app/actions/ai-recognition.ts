@@ -14,16 +14,10 @@ import { and, desc, eq, inArray, or } from "drizzle-orm"
 import { requireUser } from "@/lib/session"
 import { normalizeCode, type PermitMatchStatus } from "@/lib/ai-recognition"
 
-// المراجع (admin/manager) يرى قراءات كل الأجهزة، وغيره يرى قراءات جهازه فقط.
-async function isManager(userId: string): Promise<boolean> {
-  const rows = await db.select({ role: user.role }).from(user).where(eq(user.id, userId)).limit(1)
-  const r = rows[0]?.role
-  return r === "admin" || r === "manager"
-}
-
-/* ---------------- عمليات البحث المرجعية (سجلّات القراءة المرجعية عبر التطبيق) ---------------- */
-// المطابقة تجري على مستوى التطبيق كاملاً (لا تُقيَّد بـ userId) لأن مُشغّل الكاميرا
-// غالباً حساب مختلف عن الحساب الذي أدخل سجل الموظفين/التصاريح؛ فالسجلّات مرجعية للقراءة فقط.
+/* ---------------- عمليات البحث المرجعية (سجلّات القراءة المرجعية داخل المؤسسة) ---------------- */
+// المطابقة تجري على مستوى المؤسسة كاملةً (لا تُقيَّد بـ userId) لأن مُشغّل الكاميرا
+// غالباً حساب مختلف عن الحساب الذي أدخل سجل الموظفين/التصاريح؛ لكنها مقيّدة دائماً
+// بـ organizationId حتى لا تطابق كاميرا مؤسسةٍ موظفي/تصاريح مؤسسة أخرى.
 
 export type EmployeeMatch = {
   id: number
@@ -32,7 +26,7 @@ export type EmployeeMatch = {
   department: string
 }
 
-export async function lookupEmployeeByNumber(numberRaw: string): Promise<EmployeeMatch | null> {
+export async function lookupEmployeeByNumber(organizationId: string, numberRaw: string): Promise<EmployeeMatch | null> {
   const target = normalizeCode(numberRaw)
   if (!target) return null
   const rows = await db
@@ -44,6 +38,7 @@ export async function lookupEmployeeByNumber(numberRaw: string): Promise<Employe
       cardCode: employee.cardCode,
     })
     .from(employee)
+    .where(eq(employee.organizationId, organizationId))
   const hit = rows.find(
     (r) => normalizeCode(r.employeeId) === target || normalizeCode(r.cardCode || "") === target,
   )
@@ -72,7 +67,7 @@ function computePermitStatus(status: string, validTo: string | null): PermitMatc
   return to.getTime() >= start.getTime() ? "valid" : "expired"
 }
 
-export async function lookupTuktukPermit(numberRaw: string): Promise<TuktukPermitMatch | null> {
+export async function lookupTuktukPermit(organizationId: string, numberRaw: string): Promise<TuktukPermitMatch | null> {
   const target = normalizeCode(numberRaw)
   if (!target) return null
   const rows = await db
@@ -85,7 +80,7 @@ export async function lookupTuktukPermit(numberRaw: string): Promise<TuktukPermi
       details: permit.details,
     })
     .from(permit)
-    .where(eq(permit.type, "tuktuk"))
+    .where(and(eq(permit.organizationId, organizationId), eq(permit.type, "tuktuk")))
 
   const hit = rows.find((r) => {
     let vehicleNo = ""
@@ -127,11 +122,12 @@ type BaseReadInput = {
 }
 
 export async function savePlateRead(input: BaseReadInput & { plateNumber: string }): Promise<{ id: number }> {
-  const userId = (await requireUser()).id
+  const { id: userId, organizationId } = await requireUser()
   const [row] = await db
     .insert(plateRead)
     .values({
       userId,
+      organizationId,
       plateNumber: (input.plateNumber || "").slice(0, 40),
       confidence: input.confidence,
       imageUrl: input.imageUrl || "",
@@ -145,12 +141,13 @@ export async function savePlateRead(input: BaseReadInput & { plateNumber: string
 export async function saveEmployeeIdRead(
   input: BaseReadInput & { employeeNumber: string },
 ): Promise<{ id: number; match: EmployeeMatch | null }> {
-  const userId = (await requireUser()).id
-  const match = await lookupEmployeeByNumber(input.employeeNumber)
+  const { id: userId, organizationId } = await requireUser()
+  const match = await lookupEmployeeByNumber(organizationId, input.employeeNumber)
   const [row] = await db
     .insert(employeeIdRead)
     .values({
       userId,
+      organizationId,
       employeeNumber: (input.employeeNumber || "").slice(0, 60),
       matchedEmployeeId: match?.id ?? null,
       confidence: input.confidence,
@@ -165,13 +162,14 @@ export async function saveEmployeeIdRead(
 export async function saveTuktukRead(
   input: BaseReadInput & { tuktukNumber: string },
 ): Promise<{ id: number; match: TuktukPermitMatch | null; permitStatus: PermitMatchStatus }> {
-  const userId = (await requireUser()).id
-  const match = await lookupTuktukPermit(input.tuktukNumber)
+  const { id: userId, organizationId } = await requireUser()
+  const match = await lookupTuktukPermit(organizationId, input.tuktukNumber)
   const permitStatus: PermitMatchStatus = match ? match.permitStatus : "not_found"
   const [row] = await db
     .insert(tuktukRead)
     .values({
       userId,
+      organizationId,
       tuktukNumber: (input.tuktukNumber || "").slice(0, 40),
       matchedPermitId: match?.id ?? null,
       permitStatus,
@@ -195,11 +193,14 @@ export async function createExpiredPermitAlert(input: {
   location?: string
   readId: number
 }): Promise<void> {
+  const { organizationId } = await requireUser()
+  // المستقبِلون من نفس المؤسسة فقط.
   const recipients = await db
     .select({ id: user.id })
     .from(user)
     .where(
       and(
+        eq(user.organizationId, organizationId),
         eq(user.status, "approved"),
         or(
           inArray(user.role, ["admin", "manager"]),
@@ -215,6 +216,7 @@ export async function createExpiredPermitAlert(input: {
     .values(
       recipients.map((r) => ({
         userId: r.id,
+        organizationId,
         detectionId: input.readId,
         title: "قيادة بدون تصريح ساري",
         message: `توك توك رقم ${input.tuktukNumber} (${statusText})${where ? ` — ${where}` : ""}`,
@@ -245,12 +247,20 @@ function iso(v: unknown): string {
 
 export async function getRecentReads(limit = 20): Promise<UnifiedRead[]> {
   const me = await requireUser()
-  const manager = await isManager(me.id)
+  const organizationId = me.organizationId
+  // المدير/الأدمن يرى قراءات كل مؤسسته؛ غيره يرى قراءاته فقط — مع تقييد المؤسسة دائماً.
+  const manager = me.role === "admin" || me.role === "manager"
   const cap = Math.min(50, Math.max(1, limit))
 
-  const plateWhere = manager ? undefined : eq(plateRead.userId, me.id)
-  const empWhere = manager ? undefined : eq(employeeIdRead.userId, me.id)
-  const tukWhere = manager ? undefined : eq(tuktukRead.userId, me.id)
+  const plateWhere = manager
+    ? eq(plateRead.organizationId, organizationId)
+    : and(eq(plateRead.organizationId, organizationId), eq(plateRead.userId, me.id))
+  const empWhere = manager
+    ? eq(employeeIdRead.organizationId, organizationId)
+    : and(eq(employeeIdRead.organizationId, organizationId), eq(employeeIdRead.userId, me.id))
+  const tukWhere = manager
+    ? eq(tuktukRead.organizationId, organizationId)
+    : and(eq(tuktukRead.organizationId, organizationId), eq(tuktukRead.userId, me.id))
 
   const [plates, emps, tuks] = await Promise.all([
     db.select().from(plateRead).where(plateWhere).orderBy(desc(plateRead.capturedAt)).limit(cap),
@@ -267,7 +277,7 @@ export async function getRecentReads(limit = 20): Promise<UnifiedRead[]> {
     const rows = await db
       .select({ id: employee.id, name: employee.name, department: employee.department })
       .from(employee)
-      .where(inArray(employee.id, empIds))
+      .where(and(eq(employee.organizationId, organizationId), inArray(employee.id, empIds)))
     for (const r of rows) empNameById.set(r.id, { name: r.name, department: r.department })
   }
   const permitById = new Map<number, { driverName: string; documentNo: string }>()
@@ -275,7 +285,7 @@ export async function getRecentReads(limit = 20): Promise<UnifiedRead[]> {
     const rows = await db
       .select({ id: permit.id, documentNo: permit.documentNo, requestedBy: permit.requestedBy, details: permit.details })
       .from(permit)
-      .where(inArray(permit.id, permitIds))
+      .where(and(eq(permit.organizationId, organizationId), inArray(permit.id, permitIds)))
     for (const r of rows) {
       let driverName = r.requestedBy || ""
       try {

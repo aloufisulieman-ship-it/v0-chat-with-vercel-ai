@@ -1,15 +1,15 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { get } from "@vercel/blob"
-import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { attachment } from "@/lib/db/schema"
 import { and, eq } from "drizzle-orm"
-import { headers } from "next/headers"
+import { getCurrentUser } from "@/lib/session"
 
-// Serves private blob files only to the authenticated owner of the attachment.
+// Serves private blob files only to the authenticated owner of the attachment,
+// scoped to the caller's organization for tenant isolation.
 export async function GET(request: NextRequest) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) {
+  const current = await getCurrentUser()
+  if (!current) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
@@ -18,11 +18,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Missing pathname" }, { status: 400 })
   }
 
-  // Ensure the file belongs to this user.
+  // Ensure the file belongs to this user within their organization.
   const rows = await db
     .select({ id: attachment.id })
     .from(attachment)
-    .where(and(eq(attachment.pathname, pathname), eq(attachment.userId, session.user.id)))
+    .where(
+      and(
+        eq(attachment.pathname, pathname),
+        eq(attachment.organizationId, current.organizationId),
+        eq(attachment.userId, current.id),
+      ),
+    )
     .limit(1)
 
   if (!rows[0]) {
