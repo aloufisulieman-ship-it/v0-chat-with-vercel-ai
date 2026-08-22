@@ -93,11 +93,18 @@ function dateOrNull(v: FormDataEntryValue | null) {
 
 /* ---------------- Company / profile ---------------- */
 export async function getCompany() {
-  const { userId, organizationId } = await requireScope()
+  const { userId, organizationId, readOnly } = await requireScope()
+  // في وضع عرض مسؤول المنصّة (قراءة فقط) لا يملك المستخدم سجل ملف مؤسسة خاصاً به داخل
+  // المؤسسة المدخول إليها، فنعرض ملف المؤسسة التمثيلي (أحدث سجل) بدل نموذج فارغ.
   const rows = await db
     .select()
     .from(company)
-    .where(and(eq(company.organizationId, organizationId), eq(company.userId, userId)))
+    .where(
+      readOnly
+        ? eq(company.organizationId, organizationId)
+        : and(eq(company.organizationId, organizationId), eq(company.userId, userId)),
+    )
+    .orderBy(desc(company.updatedAt))
     .limit(1)
   return rows[0] ?? null
 }
