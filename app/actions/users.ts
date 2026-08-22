@@ -3,7 +3,7 @@
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { user as userTable, account as accountTable } from "@/lib/db/schema"
-import { requireAdmin } from "@/lib/session"
+import { requireAdmin, assertWritable } from "@/lib/session"
 import { and, desc, eq, ne } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { randomUUID } from "crypto"
@@ -35,6 +35,7 @@ export async function createUser(input: {
   department: string
   permissions: string[]
 }): Promise<{ success?: true; error?: string }> {
+  await assertWritable()
   const admin = await requireAdmin()
 
   const name = input.name.trim()
@@ -87,6 +88,7 @@ export async function createUser(input: {
 
 // Update a user's department and module permissions (admin only).
 export async function updateUserPermissions(userId: string, department: string, permissions: string[]) {
+  await assertWritable()
   const admin = await requireAdmin()
   await db
     .update(userTable)
@@ -100,6 +102,7 @@ export async function updateUserPermissions(userId: string, department: string, 
 }
 
 export async function approveUser(id: string) {
+  await assertWritable()
   const admin = await requireAdmin()
   await db
     .update(userTable)
@@ -109,6 +112,7 @@ export async function approveUser(id: string) {
 }
 
 export async function rejectUser(id: string) {
+  await assertWritable()
   const admin = await requireAdmin()
   if (id === admin.id) return
   await db
@@ -119,6 +123,7 @@ export async function rejectUser(id: string) {
 }
 
 export async function setUserRole(id: string, role: "admin" | "manager" | "user") {
+  await assertWritable()
   const admin = await requireAdmin()
   // Cannot change your own role (avoid locking yourself out of admin).
   if (id === admin.id) return
@@ -130,6 +135,7 @@ export async function setUserRole(id: string, role: "admin" | "manager" | "user"
 }
 
 export async function deleteUser(id: string) {
+  await assertWritable()
   const admin = await requireAdmin()
   if (id === admin.id) return
   await db

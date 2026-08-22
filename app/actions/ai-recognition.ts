@@ -11,7 +11,7 @@ import {
   aiMonitoringNotification,
 } from "@/lib/db/schema"
 import { and, desc, eq, inArray, or } from "drizzle-orm"
-import { requireUser } from "@/lib/session"
+import { requireUser, assertWritable } from "@/lib/session"
 import { normalizeCode, type PermitMatchStatus } from "@/lib/ai-recognition"
 
 /* ---------------- عمليات البحث المرجعية (سجلّات القراءة المرجعية داخل المؤسسة) ---------------- */
@@ -122,6 +122,7 @@ type BaseReadInput = {
 }
 
 export async function savePlateRead(input: BaseReadInput & { plateNumber: string }): Promise<{ id: number }> {
+  await assertWritable()
   const { id: userId, organizationId } = await requireUser()
   const [row] = await db
     .insert(plateRead)
@@ -141,6 +142,7 @@ export async function savePlateRead(input: BaseReadInput & { plateNumber: string
 export async function saveEmployeeIdRead(
   input: BaseReadInput & { employeeNumber: string },
 ): Promise<{ id: number; match: EmployeeMatch | null }> {
+  await assertWritable()
   const { id: userId, organizationId } = await requireUser()
   const match = await lookupEmployeeByNumber(organizationId, input.employeeNumber)
   const [row] = await db
@@ -162,6 +164,7 @@ export async function saveEmployeeIdRead(
 export async function saveTuktukRead(
   input: BaseReadInput & { tuktukNumber: string },
 ): Promise<{ id: number; match: TuktukPermitMatch | null; permitStatus: PermitMatchStatus }> {
+  await assertWritable()
   const { id: userId, organizationId } = await requireUser()
   const match = await lookupTuktukPermit(organizationId, input.tuktukNumber)
   const permitStatus: PermitMatchStatus = match ? match.permitStatus : "not_found"
@@ -193,6 +196,7 @@ export async function createExpiredPermitAlert(input: {
   location?: string
   readId: number
 }): Promise<void> {
+  await assertWritable()
   const { organizationId } = await requireUser()
   // المستقبِلون من نفس المؤسسة فقط.
   const recipients = await db

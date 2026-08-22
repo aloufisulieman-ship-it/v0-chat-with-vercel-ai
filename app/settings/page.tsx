@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { CompanyForm } from "@/components/company-form"
 import { ChangePasswordForm } from "@/components/change-password-form"
-import { requireUser } from "@/lib/session"
+import { requireOrgUser } from "@/lib/session"
 import { getCompany } from "@/app/actions/hse"
 import { getUsers } from "@/app/actions/users"
 import { getServerT } from "@/lib/i18n/server"
@@ -28,7 +28,7 @@ function roleLabel(t: TFunction, role?: string | null): string {
 }
 
 export default async function SettingsPage() {
-  const user = await requireUser()
+  const user = await requireOrgUser()
   const company = await getCompany()
   const isAdmin = user.role === "admin"
   const team = isAdmin ? await getUsers() : []
@@ -42,7 +42,7 @@ export default async function SettingsPage() {
             <Building2 className="size-5 text-primary" />
             <h3 className="text-base font-semibold text-foreground">{t("settingsPage.facilityInfo")}</h3>
           </div>
-          <CompanyForm company={company} />
+          <CompanyForm company={company} readOnly={user.impersonating} />
         </Card>
 
         <Card className="flex flex-col gap-4 p-6">

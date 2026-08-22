@@ -28,6 +28,7 @@ import {
   requireScope,
   requireHseReviewerScope,
   requireUser,
+  assertWritable,
   type ModuleScope,
 } from "@/lib/session"
 import { scopeWhere } from "@/lib/scope"
@@ -92,16 +93,24 @@ function dateOrNull(v: FormDataEntryValue | null) {
 
 /* ---------------- Company / profile ---------------- */
 export async function getCompany() {
-  const { userId, organizationId } = await requireScope()
+  const { userId, organizationId, readOnly } = await requireScope()
+  // في وضع عرض مسؤول المنصّة (قراءة فقط) لا يملك المستخدم سجل ملف مؤسسة خاصاً به داخل
+  // المؤسسة المدخول إليها، فنعرض ملف المؤسسة التمثيلي (أحدث سجل) بدل نموذج فارغ.
   const rows = await db
     .select()
     .from(company)
-    .where(and(eq(company.organizationId, organizationId), eq(company.userId, userId)))
+    .where(
+      readOnly
+        ? eq(company.organizationId, organizationId)
+        : and(eq(company.organizationId, organizationId), eq(company.userId, userId)),
+    )
+    .orderBy(desc(company.updatedAt))
     .limit(1)
   return rows[0] ?? null
 }
 
 export async function saveCompany(formData: FormData) {
+  await assertWritable()
   const { userId, organizationId } = await requireScope()
   const existing = await db
     .select()
@@ -140,6 +149,7 @@ export async function getIncidents() {
     .orderBy(desc(incident.createdAt))
 }
 export async function createIncident(formData: FormData) {
+  await assertWritable()
   const { userId, organizationId } = await requireModuleScope("incidents")
   await db.insert(incident).values({
     userId,
@@ -159,6 +169,7 @@ export async function createIncident(formData: FormData) {
 
 // Full incident report: auto document number, parties, causes and signatures.
 export async function createIncidentFull(formData: FormData) {
+  await assertWritable()
   const { userId, organizationId } = await requireModuleScope("incidents")
 
   const title = str(formData.get("title")).trim()
@@ -267,6 +278,7 @@ export async function createIncidentFull(formData: FormData) {
   return { documentNo }
 }
 export async function deleteIncident(id: number) {
+  await assertWritable()
   const scope = await requireModuleScope("incidents")
   await db
     .delete(incident)
@@ -285,6 +297,7 @@ export async function getInspections() {
     .orderBy(desc(inspection.createdAt))
 }
 export async function createInspection(formData: FormData) {
+  await assertWritable()
   const { userId, organizationId } = await requireModuleScope("inspections")
   await db.insert(inspection).values({
     userId,
@@ -301,6 +314,7 @@ export async function createInspection(formData: FormData) {
   revalidatePath("/")
 }
 export async function deleteInspection(id: number) {
+  await assertWritable()
   const scope = await requireModuleScope("inspections")
   await db
     .delete(inspection)
@@ -318,6 +332,7 @@ export async function getPermits() {
     .orderBy(desc(permit.createdAt))
 }
 export async function createPermit(formData: FormData) {
+  await assertWritable()
   const { userId, organizationId } = await requireModuleScope("permits")
   const type = str(formData.get("type"), "construction")
   const prefix = permitTypePrefix[type] ?? "PTW"
@@ -358,6 +373,7 @@ export async function createPermit(formData: FormData) {
   revalidatePath("/")
 }
 export async function deletePermit(id: number) {
+  await assertWritable()
   const scope = await requireModuleScope("permits")
   await db
     .delete(permit)
@@ -378,6 +394,7 @@ export async function updatePermitStatus(
   approverName: string,
   notes?: string,
 ) {
+  await assertWritable()
   const u = await requireUser()
   if (!isPermitApprover(u.role, u.department)) {
     throw new Error("ليس لديك صلاحية لاعتماد أو رفض التصاريح")
@@ -413,6 +430,7 @@ export async function getRisks() {
     .orderBy(desc(risk.createdAt))
 }
 export async function createRisk(formData: FormData) {
+  await assertWritable()
   const { userId, organizationId } = await requireModuleScope("risks")
   await db.insert(risk).values({
     userId,
@@ -429,6 +447,7 @@ export async function createRisk(formData: FormData) {
   revalidatePath("/")
 }
 export async function deleteRisk(id: number) {
+  await assertWritable()
   const scope = await requireModuleScope("risks")
   await db
     .delete(risk)
@@ -446,6 +465,7 @@ export async function getTrainings() {
     .orderBy(desc(training.createdAt))
 }
 export async function createTraining(formData: FormData) {
+  await assertWritable()
   const { userId, organizationId } = await requireModuleScope("training")
   await db.insert(training).values({
     userId,
@@ -471,6 +491,7 @@ export type AttendeeInput = {
 // table. Attendees are stored in training_attendee; signatures (trainer + each
 // attendee) are also persisted to the attachment table like violation signatures.
 export async function createTrainingFull(formData: FormData) {
+  await assertWritable()
   const { userId, organizationId } = await requireModuleScope("training")
 
   const title = str(formData.get("title")).trim()
@@ -565,6 +586,7 @@ function employeeValues(formData: FormData) {
 }
 
 export async function createEmployee(formData: FormData) {
+  await assertWritable()
   const { userId, organizationId } = await requireScope()
   await db.insert(employee).values({ userId, organizationId, ...employeeValues(formData) })
   revalidatePath("/employees")
@@ -573,6 +595,7 @@ export async function createEmployee(formData: FormData) {
 }
 
 export async function updateEmployee(formData: FormData) {
+  await assertWritable()
   const { userId, organizationId } = await requireScope()
   const id = Number(formData.get("id"))
   if (!Number.isFinite(id)) throw new Error("معرّف الموظف غير صالح")
@@ -586,6 +609,7 @@ export async function updateEmployee(formData: FormData) {
 }
 
 export async function deleteEmployee(formData: FormData) {
+  await assertWritable()
   const { userId, organizationId } = await requireScope()
   const id = Number(formData.get("id"))
   if (!Number.isFinite(id)) throw new Error("معرّف الموظف غير صالح")
@@ -687,6 +711,7 @@ async function persistToolboxSession(userId: string, organizationId: string, inp
 }
 
 export async function saveToolboxSession(input: ToolboxSessionInput) {
+  await assertWritable()
   const { userId, organizationId } = await requireModuleScope("training")
   const created = await persistToolboxSession(userId, organizationId, input)
   revalidatePath("/training")
@@ -695,6 +720,7 @@ export async function saveToolboxSession(input: ToolboxSessionInput) {
 }
 
 export async function importToolboxSessions(inputs: ToolboxSessionInput[]) {
+  await assertWritable()
   const { userId, organizationId } = await requireModuleScope("training")
   for (const input of inputs) await persistToolboxSession(userId, organizationId, { ...input, sourceKey: input.sourceKey || `local-${input.id}` })
   revalidatePath("/training")
@@ -702,6 +728,7 @@ export async function importToolboxSessions(inputs: ToolboxSessionInput[]) {
 }
 
 export async function deleteToolboxSession(id: number) {
+  await assertWritable()
   const { userId, organizationId } = await requireModuleScope("training")
   const [owned] = await db.select({ id: toolboxSession.id }).from(toolboxSession).where(and(eq(toolboxSession.id, id), eq(toolboxSession.organizationId, organizationId), eq(toolboxSession.userId, userId))).limit(1)
   if (!owned) throw new Error("الجلسة غير موجودة")
@@ -735,6 +762,7 @@ export async function getAllTrainingAttendees() {
 }
 
 export async function deleteTraining(id: number) {
+  await assertWritable()
   const { userId, organizationId } = await requireModuleScope("training")
   await db.delete(trainingAttendee).where(and(eq(trainingAttendee.trainingId, id), eq(trainingAttendee.organizationId, organizationId), eq(trainingAttendee.userId, userId)))
   await db.delete(training).where(and(eq(training.id, id), eq(training.organizationId, organizationId), eq(training.userId, userId)))
@@ -752,6 +780,7 @@ export async function getActions() {
     .orderBy(desc(correctiveAction.createdAt))
 }
 export async function createAction(formData: FormData) {
+  await assertWritable()
   const { userId, organizationId } = await requireModuleScope("actions")
   await db.insert(correctiveAction).values({
     userId,
@@ -767,6 +796,7 @@ export async function createAction(formData: FormData) {
   revalidatePath("/")
 }
 export async function deleteAction(id: number) {
+  await assertWritable()
   const scope = await requireModuleScope("actions")
   await db
     .delete(correctiveAction)
@@ -784,6 +814,7 @@ export async function getAudits() {
     .orderBy(desc(audit.createdAt))
 }
 export async function createAudit(formData: FormData) {
+  await assertWritable()
   const { userId, organizationId } = await requireModuleScope("audits")
   await db.insert(audit).values({
     userId,
@@ -798,6 +829,7 @@ export async function createAudit(formData: FormData) {
   revalidatePath("/audits")
 }
 export async function deleteAudit(id: number) {
+  await assertWritable()
   const scope = await requireModuleScope("audits")
   await db
     .delete(audit)
@@ -815,6 +847,7 @@ export async function getDocuments() {
     .orderBy(desc(document.createdAt))
 }
 export async function createDocument(formData: FormData) {
+  await assertWritable()
   const { userId, organizationId } = await requireModuleScope("documents")
   await db.insert(document).values({
     userId,
@@ -829,6 +862,7 @@ export async function createDocument(formData: FormData) {
   revalidatePath("/documents")
 }
 export async function deleteDocument(id: number) {
+  await assertWritable()
   const scope = await requireModuleScope("documents")
   await db
     .delete(document)
@@ -847,6 +881,7 @@ export async function getViolations() {
 }
 
 export async function createViolationFull(formData: FormData) {
+  await assertWritable()
   const { userId, organizationId } = await requireModuleScope("violations")
   const year = new Date().getFullYear()
   const existing = await db.select({ documentNo: violation.documentNo }).from(violation).where(eq(violation.organizationId, organizationId)).orderBy(desc(violation.createdAt))
@@ -959,7 +994,8 @@ export async function createViolationFull(formData: FormData) {
 export async function acceptDetectionAsViolation(
   detectionId: number,
   category: "internal" | "external",
-) {
+  ) {
+  await assertWritable()
   const { userId, organizationId } = await requireHseReviewerScope()
   if (category !== "internal" && category !== "external") {
     throw new Error("يجب تحديد تصنيف المخالفة: داخلية أو خارجية")
@@ -1057,6 +1093,7 @@ export async function acceptDetectionAsViolation(
 // تعديل يدوي كامل للمخالفة — مقتصر على مدير النظام (admin) فقط.
 // يسمح بتصحيح أي حقل ورفع نماذج ورقية ممسوحة إضافية للمخالفات اليدوية.
 export async function updateViolation(formData: FormData) {
+  await assertWritable()
   const { userId, organizationId, role } = await requireScope()
   if (role !== "admin") throw new Error("التعديل اليدوي متاح لمدير النظام فقط")
 
@@ -1131,6 +1168,7 @@ export async function updateViolation(formData: FormData) {
 }
 
 export async function deleteViolation(id: number) {
+  await assertWritable()
   const { userId, organizationId, isManager } = await requireModuleScope("violations")
   const v = await db
     .select()
@@ -1160,6 +1198,7 @@ export async function getObservations() {
 // يحفظ ملاحظة (observation) أو ملاحظة إيجابية (positive) من الجولة، ويولّد رقم
 // وثيقة رسمي: OBS-YYYY-XXX للملاحظات�� POS-YYYY-XXX للإيجابيات.
 export async function createObservationFull(formData: FormData) {
+  await assertWritable()
   const { userId, organizationId } = await requireModuleScope("violations")
   const kind = str(formData.get("kind"), "observation") === "positive" ? "positive" : "observation"
   const prefix = kind === "positive" ? "POS" : "OBS"
@@ -1216,6 +1255,7 @@ export async function createObservationFull(formData: FormData) {
 }
 
 export async function deleteObservation(id: number) {
+  await assertWritable()
   const { userId, organizationId, isManager } = await requireModuleScope("violations")
   const rows = await db
     .select()

@@ -4,7 +4,7 @@ import { db } from "@/lib/db"
 import { incident, violation } from "@/lib/db/schema"
 import { and, desc, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
-import { requireModule, requireModuleScope } from "@/lib/session"
+import { requireModule, requireModuleScope, assertWritable } from "@/lib/session"
 import { normalizeFinanceStatus, type FinanceStatus } from "@/lib/finance-status"
 
 function str(v: FormDataEntryValue | null, fallback = "") {
@@ -71,6 +71,7 @@ function buildFinanceUpdate(formData: FormData, closerName: string) {
 }
 
 export async function updateFinanceViolation(formData: FormData) {
+  await assertWritable()
   const closer = await requireModule("finance")
   const id = Number(formData.get("id"))
   if (!Number.isFinite(id)) throw new Error("معرّف غير صالح")
@@ -86,6 +87,7 @@ export async function updateFinanceViolation(formData: FormData) {
 }
 
 export async function updateFinanceIncident(formData: FormData) {
+  await assertWritable()
   const closer = await requireModule("finance")
   const id = Number(formData.get("id"))
   if (!Number.isFinite(id)) throw new Error("معرّف غير صالح")

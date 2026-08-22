@@ -5,7 +5,7 @@ import { videoRecording, videoScreenshot } from "@/lib/db/schema"
 import { and, desc, eq } from "drizzle-orm"
 import { put, del } from "@vercel/blob"
 import { revalidatePath } from "next/cache"
-import { requireUser, requireHseReviewerScope } from "@/lib/session"
+import { requireUser, requireHseReviewerScope, assertWritable } from "@/lib/session"
 
 export type VideoRecordingDto = {
   id: number
@@ -56,6 +56,7 @@ export async function createRecording(input: {
   durationSeconds: number
   fileSizeBytes: number
 }): Promise<{ id: number }> {
+  await assertWritable()
   const u = await requireUser()
   if (!input.videoUrl || !input.videoUrl.startsWith("http")) {
     throw new Error("رابط الفيديو غير صالح")
@@ -180,6 +181,7 @@ export async function saveScreenshot(input: {
   dataUrl: string
   atSeconds: number
 }): Promise<VideoScreenshotDto> {
+  await assertWritable()
   const { userId, organizationId } = await requireHseReviewerScope()
 
   // التأكد من ملكية التسجيل قبل ربط اللقطة به.
@@ -232,6 +234,7 @@ export async function saveScreenshot(input: {
 // حذف تسجيل بالكامل: الفيديو + كل لقطاته من Blob وقاع��ة البيانات.
 // مقصور على المراجع صاحب الحساب.
 export async function deleteRecording(id: number): Promise<void> {
+  await assertWritable()
   const { userId, organizationId } = await requireHseReviewerScope()
   const rec = (
     await db
@@ -266,6 +269,7 @@ export async function deleteRecording(id: number): Promise<void> {
 
 // حذف لقطة واحدة (من Blob والقاعدة).
 export async function deleteScreenshot(id: number): Promise<void> {
+  await assertWritable()
   const { userId, organizationId } = await requireHseReviewerScope()
   const shot = (
     await db
@@ -286,6 +290,7 @@ export async function deleteScreenshot(id: number): Promise<void> {
 
 // ربط لقطة بمخالفة أُنشئت منها (لأغراض العرض فقط).
 export async function linkScreenshotToViolation(screenshotId: number): Promise<void> {
+  await assertWritable()
   const { userId, organizationId } = await requireHseReviewerScope()
   // نضع علامة الربط دون تخزين معرّف حقيقي (المخالفة تُنشأ عبر نظام المخالفات المستقل).
   await db

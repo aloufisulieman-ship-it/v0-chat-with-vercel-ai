@@ -34,18 +34,21 @@ export async function registerOrganization(input: {
     "مؤسستي"
 
   const orgId = randomUUID()
+  // المؤسسة الجديدة تبدأ "قيد المراجعة" حتى يعتمدها مسؤول المنصّة.
   await db.insert(organization).values({
     id: orgId,
     name: orgName.slice(0, 200),
+    status: "pending",
   })
 
-  // المُسجِّل يصبح أول admin معتمد لمؤسسته.
+  // المُسجِّل يصبح أول admin لمؤسسته، لكن بحالة "قيد المراجعة" — لا يستطيع استخدام
+  // النظام حتى يعتمد مسؤول المنصّة المؤسسة (عندها تتحوّل حالته إلى approved).
   await db
     .update(userTable)
     .set({
       organizationId: orgId,
       role: "admin",
-      status: "approved",
+      status: "pending",
       updatedAt: new Date(),
     })
     .where(eq(userTable.id, userId))

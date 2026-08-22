@@ -15,14 +15,14 @@ import { KpiCard } from "@/components/kpi-card"
 import { Card } from "@/components/ui/card"
 import { IncidentTrendChart, IncidentTypeChart, SeverityChart } from "@/components/dashboard-charts"
 import { StatusBadge, SeverityBadge } from "@/components/status-badge"
-import { requireUser } from "@/lib/session"
+import { requireOrgUser } from "@/lib/session"
 import { getDashboardData } from "@/app/actions/hse"
 import { getServerT } from "@/lib/i18n/server"
 import { incidentTypeLabel, severityLabel, categoryLabel } from "@/lib/i18n/labels"
 import { effectiveViolationStatus, isViolationClosed } from "@/lib/violation-status"
 
 export default async function DashboardPage() {
-  const user = await requireUser()
+  const user = await requireOrgUser()
   const { locale, t } = await getServerT()
   const { incidents, inspections, permits, risks, actions, observations, violations } = await getDashboardData()
 

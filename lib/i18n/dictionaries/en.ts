@@ -1671,6 +1671,8 @@ export const en: Dictionary = {
     saving: "Saving...",
     save: "Save facility info",
     savedOk: "Saved successfully",
+    saveError: "Could not save changes",
+    readOnlyHint: "View only — editing is disabled while a platform admin is viewing this organization.",
   },
 
   usersManager: {

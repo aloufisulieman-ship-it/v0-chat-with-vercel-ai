@@ -4,7 +4,7 @@ import { db } from "@/lib/db"
 import { attachment } from "@/lib/db/schema"
 import { and, asc, eq } from "drizzle-orm"
 import { put, del } from "@vercel/blob"
-import { requireScope } from "@/lib/session"
+import { requireScope, assertWritable } from "@/lib/session"
 
 export type AttachmentRow = {
   id: number
@@ -41,6 +41,7 @@ export async function getAttachmentsForModule(module: string): Promise<Attachmen
 
 // Upload one file (photo or signature) to Vercel Blob and record it in the DB.
 export async function uploadAttachment(formData: FormData) {
+  await assertWritable()
   const { userId, organizationId } = await requireScope()
   const module = String(formData.get("module") || "")
   const recordId = Number(formData.get("recordId") || 0)
@@ -76,6 +77,7 @@ export async function uploadAttachment(formData: FormData) {
 }
 
 export async function deleteAttachment(id: number) {
+  await assertWritable()
   const { userId, organizationId } = await requireScope()
   const rows = await db
     .select()

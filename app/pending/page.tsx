@@ -8,6 +8,8 @@ import { getServerT } from "@/lib/i18n/server"
 export default async function PendingPage() {
   const user = await getCurrentUser()
   if (!user) redirect("/sign-in")
+  // مسؤول المنصّة لا ينتمي لمؤسسة — يُوجَّه دائماً إلى لوحة تحكّم المنصّة.
+  if (user.isPlatformAdmin) redirect("/admin/organizations")
   if (user.status === "approved") redirect("/")
 
   const rejected = user.status === "rejected"

@@ -6,6 +6,9 @@ import { pgTable, text, timestamp, boolean, serial, integer, date, uniqueIndex, 
 export const organization = pgTable("organization", {
   id: text("id").primaryKey(),
   name: text("name").notNull().default(""),
+  // حالة مراجعة المؤسسة على مستوى المنصّة: pending (بانتظار موافقة مسؤول المنصّة) |
+  // approved (مُعتمدة ويمكن لمستخدميها استخدام النظام) | rejected (مرفوضة، الوصول محجوب).
+  status: text("status").notNull().default("pending"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
@@ -328,7 +331,7 @@ export const violation = pgTable("violation", {
   hrStatus: text("hr_status"),
   hrClosedBy: text("hr_closed_by").default(""),
   hrClosedAt: timestamp("hr_closed_at"),
-  // مرفقات قرار الموارد البشرية (JSON array من data URLs، بنفس آلية الصور/التواقيع).
+  // م��فقات قرار الموارد البشرية (JSON array من data URLs، بنفس آلية الصور/التواقيع).
   hrAttachmentUrl: text("hr_attachment_url").default(""),
   // مسار الإحالة إلى المالية للمخالفات الخارجية: pending | in_review | closed (null يُعامل كـ pending).
   financeStatus: text("finance_status"),
