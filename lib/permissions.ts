@@ -4,6 +4,14 @@ import { moduleOptions, type ModuleKey } from "@/lib/labels"
 export type { ModuleKey }
 export { moduleOptions }
 
+// دور مسؤول المنصّة: فوق المؤسسات، لا ينتمي لأي organizationId، ويرى كل المؤسسات.
+// يختلف جوهرياً عن دور "admin" الذي هو مدير داخل مؤسسة واحدة فقط.
+export const PLATFORM_ADMIN_ROLE = "platform_admin"
+
+export function isPlatformAdmin(role: string | null | undefined): boolean {
+  return role === PLATFORM_ADMIN_ROLE
+}
+
 // Parse the stored permissions string (a JSON array of module values) into an array.
 export function parsePermissions(raw: string | null | undefined): ModuleKey[] {
   if (!raw) return []
