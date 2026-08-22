@@ -1,7 +1,7 @@
 import { cache } from "react"
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
-import { user as userTable } from "@/lib/db/schema"
+import { user as userTable, organization } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
@@ -26,6 +26,9 @@ export type AppUser = {
   impersonating: boolean
   // مؤسسة مسؤول المنصّة الأصلية (قبل الدخول) — للعرض فقط، غالباً فارغة.
   homeOrganizationId: string
+  // حالة مراجعة مؤسسة المستخدم على مستوى المنصّة: pending | approved | rejected.
+  // فارغة لمسؤول المنصّة (لا ينتمي لمؤسسة). تُستخدم لحجب مستخدمي المؤسسات غير المعتمدة.
+  orgStatus: string
 }
 
 const userColumns = {
@@ -73,9 +76,15 @@ const loadSessionUser = cache(async (): Promise<AppUser | null> => {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session?.user) return null
 
-  const rows = await db.select(userColumns).from(userTable).where(eq(userTable.id, session.user.id)).limit(1)
+  const rows = await db
+    .select({ ...userColumns, orgStatus: organization.status })
+    .from(userTable)
+    .leftJoin(organization, eq(userTable.organizationId, organization.id))
+    .where(eq(userTable.id, session.user.id))
+    .limit(1)
   const row = rows[0]
   if (!row) return null
+  const orgStatus = row.orgStatus ?? ""
   // العمود nullable على مستوى قاعدة البيانات (الإنشاء على مرحلتين)، لكن أي مستخدم
   // معتمد يملك مؤسسة فعلية دائماً (تُعيَّن ذرّياً مع الاعتماد). نوحّد النوع إلى string.
   const homeOrganizationId = row.organizationId ?? ""
@@ -100,6 +109,7 @@ const loadSessionUser = cache(async (): Promise<AppUser | null> => {
     isPlatformAdmin: platformAdmin,
     impersonating,
     homeOrganizationId,
+    orgStatus,
   }
 })
 
@@ -129,6 +139,10 @@ export async function requireUser(): Promise<AppUser> {
 
   // Users awaiting approval are sent to a holding page.
   if (u.status !== "approved") redirect("/pending")
+
+  // بوابة على مستوى المؤسسة: مستخدمو مؤسسة غير معتمدة (قيد المراجعة/مرفوضة) يُحجبون
+  // حتى لو كانت حالتهم الفردية approved. لا ينطبق على مسؤول المنصّة (لا مؤسسة له).
+  if (!u.isPlatformAdmin && u.orgStatus && u.orgStatus !== "approved") redirect("/pending")
 
   return u
 }

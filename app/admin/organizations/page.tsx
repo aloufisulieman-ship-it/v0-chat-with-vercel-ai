@@ -1,7 +1,7 @@
-import { Building2, Users, Briefcase, CalendarDays } from "lucide-react"
+import { Building2, Users, Briefcase, CalendarDays, Clock } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { listOrganizations } from "@/app/actions/platform"
-import { EnterOrganizationButton } from "@/components/enter-organization-button"
+import { OrganizationActions } from "@/components/organization-actions"
 
 export const dynamic = "force-dynamic"
 
@@ -12,17 +12,19 @@ export default async function AdminOrganizationsPage() {
 
   const totalEmployees = orgs.reduce((s, o) => s + o.employeeCount, 0)
   const totalUsers = orgs.reduce((s, o) => s + o.userCount, 0)
+  const pendingCount = orgs.filter((o) => o.status === "pending").length
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground text-balance">المؤسسات المسجّلة</h1>
         <p className="mt-1 text-sm text-muted-foreground text-pretty">
-          عرض كل المؤسسات على المنصّة. ادخل أي مساحة لعرض بياناتها (عرض للقراءة فقط).
+          راجِع طلبات تسجيل المؤسسات: اعتمِد أو ارفض كل طلب، وادخل أي مساحة لعرض بياناتها (عرض للقراءة فقط).
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <SummaryCard icon={Clock} label="قيد المراجعة" value={pendingCount} highlight={pendingCount > 0} />
         <SummaryCard icon={Building2} label="إجمالي المؤسسات" value={orgs.length} />
         <SummaryCard icon={Users} label="إجمالي المستخدمين" value={totalUsers} />
         <SummaryCard icon={Briefcase} label="إجمالي الموظفين" value={totalEmployees} />
@@ -60,7 +62,7 @@ export default async function AdminOrganizationsPage() {
                 </div>
               </div>
               <div className="shrink-0 md:pe-2">
-                <EnterOrganizationButton orgId={o.id} />
+                <OrganizationActions orgId={o.id} status={o.status} name={o.name} />
               </div>
             </Card>
           ))}
@@ -74,14 +76,20 @@ function SummaryCard({
   icon: Icon,
   label,
   value,
+  highlight = false,
 }: {
   icon: typeof Building2
   label: string
   value: number
+  highlight?: boolean
 }) {
   return (
     <Card className="flex items-center gap-3 p-4">
-      <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+      <div
+        className={`flex size-10 items-center justify-center rounded-lg ${
+          highlight ? "bg-accent/20 text-accent-foreground" : "bg-primary/10 text-primary"
+        }`}
+      >
         <Icon className="size-5" />
       </div>
       <div className="flex flex-col">
@@ -92,10 +100,18 @@ function SummaryCard({
   )
 }
 
-function StatusPill({ status }: { status: "active" | "pending" }) {
-  return status === "active" ? (
-    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">نشطة</span>
-  ) : (
-    <span className="rounded-full bg-accent/15 px-2 py-0.5 text-xs font-medium text-accent-foreground">قيد الإعداد</span>
+function StatusPill({ status }: { status: "pending" | "approved" | "rejected" }) {
+  if (status === "approved") {
+    return <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">معتمدة</span>
+  }
+  if (status === "rejected") {
+    return (
+      <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">مرفوضة</span>
+    )
+  }
+  return (
+    <span className="rounded-full bg-accent/15 px-2 py-0.5 text-xs font-medium text-accent-foreground">
+      قيد المراجعة
+    </span>
   )
 }

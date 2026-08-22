@@ -2,7 +2,7 @@
 
 import { db } from "@/lib/db"
 import { organization, company, user as userTable } from "@/lib/db/schema"
-import { desc, eq } from "drizzle-orm"
+import { and, desc, eq } from "drizzle-orm"
 import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
 import { requirePlatformAdmin } from "@/lib/session"
@@ -16,7 +16,13 @@ export type OrganizationSummary = {
   userCount: number
   approvedUserCount: number
   registeredAt: string
-  status: "active" | "pending"
+  status: "pending" | "approved" | "rejected"
+}
+
+// ترتيب عرض الحالات: المؤسسات قيد المراجعة أولاً (تحتاج إجراءً)، ثم المعتمدة، ثم المرفوضة.
+const STATUS_ORDER: Record<string, number> = { pending: 0, approved: 1, rejected: 2 }
+function normalizeOrgStatus(s: string | null | undefined): "pending" | "approved" | "rejected" {
+  return s === "approved" || s === "rejected" ? s : "pending"
 }
 
 // قائمة كل المؤسسات المسجّلة — حصرية لمسؤول المنصّة (رؤية عابرة للمؤسسات، الاستثناء
@@ -57,21 +63,23 @@ export async function listOrganizations(): Promise<OrganizationSummary[]> {
     counts.set(key, cur)
   }
 
-  return orgs.map((o) => {
-    const c = companyByOrg.get(o.id)
-    const cnt = counts.get(o.id) ?? { total: 0, approved: 0 }
-    const name = (c?.name && c.name.trim()) || o.name || "مؤسسة بدون اسم"
-    return {
-      id: o.id,
-      name,
-      sector: (c?.industry && c.industry.trim()) || "غير محدد",
-      employeeCount: c?.employeeCount ?? 0,
-      userCount: cnt.total,
-      approvedUserCount: cnt.approved,
-      registeredAt: o.createdAt.toISOString(),
-      status: cnt.approved > 0 ? "active" : "pending",
-    }
-  })
+  return orgs
+    .map((o): OrganizationSummary => {
+      const c = companyByOrg.get(o.id)
+      const cnt = counts.get(o.id) ?? { total: 0, approved: 0 }
+      const name = (c?.name && c.name.trim()) || o.name || "مؤسسة بدون اسم"
+      return {
+        id: o.id,
+        name,
+        sector: (c?.industry && c.industry.trim()) || "غير محدد",
+        employeeCount: c?.employeeCount ?? 0,
+        userCount: cnt.total,
+        approvedUserCount: cnt.approved,
+        registeredAt: o.createdAt.toISOString(),
+        status: normalizeOrgStatus(o.status),
+      }
+    })
+    .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status])
 }
 
 // دخول مسؤول المنصّة إلى مساحة مؤسسة (عرض للقراءة فقط). يضبط الكوكي الموقّع ثم يوجّه
@@ -104,4 +112,54 @@ export async function getEnteredOrgName(organizationId: string): Promise<string>
   if (comp?.name && comp.name.trim()) return comp.name.trim()
   const [org] = await db.select({ name: organization.name }).from(organization).where(eq(organization.id, organizationId)).limit(1)
   return org?.name || ""
+}
+
+// يتحقق من وجود المؤسسة ويعيد صفها، وإلا يرمي خطأً. حصري لمسؤول المنصّة (يُتحقق قبله).
+async function assertOrgExists(orgId: string): Promise<void> {
+  const [row] = await db.select({ id: organization.id }).from(organization).where(eq(organization.id, orgId)).limit(1)
+  if (!row) throw new Error("المؤسسة غير موجودة")
+}
+
+// اعتماد مؤسسة: تتحوّل حالتها إلى approved، ويُعتمد مديرها الأول (دور admin) ليتمكّن من
+// الدخول واستخدام النظام. لا نعتمد بقية الأعضاء — يديرهم مدير المؤسسة بنفسه لاحقاً.
+export async function approveOrganization(orgId: string): Promise<{ success: true }> {
+  await requirePlatformAdmin()
+  await assertOrgExists(orgId)
+  const now = new Date()
+  await db.update(organization).set({ status: "approved", updatedAt: now }).where(eq(organization.id, orgId))
+  await db
+    .update(userTable)
+    .set({ status: "approved", updatedAt: now })
+    .where(and(eq(userTable.organizationId, orgId), eq(userTable.role, "admin")))
+  revalidatePath("/admin/organizations")
+  return { success: true }
+}
+
+// رفض مؤسسة: تتحوّل حالتها إلى rejected ويُحجب كل مستخدميها (status=rejected) فيرَون
+// رسالة الرفض في صفحة الانتظار.
+export async function rejectOrganization(orgId: string): Promise<{ success: true }> {
+  await requirePlatformAdmin()
+  await assertOrgExists(orgId)
+  const now = new Date()
+  await db.update(organization).set({ status: "rejected", updatedAt: now }).where(eq(organization.id, orgId))
+  await db
+    .update(userTable)
+    .set({ status: "rejected", updatedAt: now })
+    .where(eq(userTable.organizationId, orgId))
+  revalidatePath("/admin/organizations")
+  return { success: true }
+}
+
+// تعديل اسم المؤسسة من لوحة المنصّة (الحقل الوحيد القابل للتعديل قبل اكتمال ملف الشركة).
+export async function updateOrganizationName(orgId: string, name: string): Promise<{ success: true; error?: string }> {
+  await requirePlatformAdmin()
+  await assertOrgExists(orgId)
+  const trimmed = (name || "").trim()
+  if (!trimmed) return { success: true, error: "الاسم مطلوب" }
+  await db
+    .update(organization)
+    .set({ name: trimmed.slice(0, 200), updatedAt: new Date() })
+    .where(eq(organization.id, orgId))
+  revalidatePath("/admin/organizations")
+  return { success: true }
 }
