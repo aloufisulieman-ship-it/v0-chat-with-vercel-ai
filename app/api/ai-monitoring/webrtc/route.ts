@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { and, asc, eq, gt, lt } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { webrtcSignal } from "@/lib/db/schema"
+import { webrtcSignal, activeCameraStream } from "@/lib/db/schema"
 import { getCurrentUser, isHseReviewer } from "@/lib/session"
 import { sessionCameraId } from "@/lib/camera-session"
 
@@ -53,7 +53,26 @@ async function resolveCameraId(role: string, params: { cameraId?: string; inspec
   if (!isHseReviewer(user.role)) {
     throw new AuthError("مشاهدة البث المباشر مقصورة على مسؤول HSE (مدير أو أدمن).", 403)
   }
-  return (params.cameraId || "").trim()
+  const targetCameraId = (params.cameraId || "").trim()
+  if (!targetCameraId) return ""
+
+  // عزل بين المؤسسات: لا يشاهد المراجع إلا كاميرا مسجّلة كبثّ نشط ضمن مؤسسته.
+  // (cameraId تجزئة غير تشفيرية 32-بت قابلة للتخمين نظرياً، فنتحقق من الانتماء صراحةً
+  // بدل الوثوق بالمعرّف الممرّر.)
+  const owned = await db
+    .select({ id: activeCameraStream.id })
+    .from(activeCameraStream)
+    .where(
+      and(
+        eq(activeCameraStream.cameraId, targetCameraId),
+        eq(activeCameraStream.organizationId, user.organizationId),
+      ),
+    )
+    .limit(1)
+  if (!owned[0]) {
+    throw new AuthError("هذه الكاميرا لا تتبع مؤسستك.", 403)
+  }
+  return targetCameraId
 }
 
 // تحويل أي خطأ إلى استجابة JSON واضحة (مع تسجيل التفاصيل الكاملة في السجل).

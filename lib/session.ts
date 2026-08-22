@@ -64,7 +64,11 @@ const loadSessionUser = cache(async (): Promise<AppUser | null> => {
   if (!session?.user) return null
 
   const rows = await db.select(userColumns).from(userTable).where(eq(userTable.id, session.user.id)).limit(1)
-  return rows[0] ?? null
+  const row = rows[0]
+  if (!row) return null
+  // العمود nullable على مستوى قاعدة البيانات (الإنشاء على مرحلتين)، لكن أي مستخدم
+  // معتمد يملك مؤسسة فعلية دائماً (تُعيَّن ذرّياً مع الاعتماد). نوحّد النوع إلى string.
+  return { ...row, organizationId: row.organizationId ?? "" }
 })
 
 // Returns the authenticated user with role/status, or redirects to sign-in.

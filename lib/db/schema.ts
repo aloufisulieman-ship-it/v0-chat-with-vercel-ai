@@ -20,8 +20,10 @@ export const user = pgTable("user", {
   role: text("role").notNull().default("user"),
   status: text("status").notNull().default("pending"),
   department: text("department").notNull().default(""),
-  // معرّف المؤسسة التي ينتمي إليها المستخدم. يُملأ لكل المستخدمين بعد الترحيل.
-  organizationId: text("organizationId").notNull(),
+  // معرّف المؤسسة التي ينتمي إليها المستخدم. يبقى nullable لأن الإنشاء يتم على
+  // مرحلتين: Better Auth ينشئ صف المستخدم أولاً، ثم registerOrganization يعيّن
+  // المؤسسة مباشرةً بعده. المستخدمون المُرحَّلون لديهم قيمة فعلية دائماً.
+  organizationId: text("organizationId"),
   // JSON array of module values the user can access, e.g. ["dashboard","violations"]
   permissions: text("permissions").notNull().default("[]"),
   // تفضيل لغة الواجهة لكل مستخدم ("ar" | "en") — يبقى ثابتًا عبر كل الجلسات.

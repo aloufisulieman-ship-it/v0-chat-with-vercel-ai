@@ -1609,6 +1609,8 @@ export const en: Dictionary = {
     signUpSubtitle: "Sign up to start managing safety at your company",
     signInSubtitle: "Sign in to continue to the dashboard",
     fullName: "Full name",
+    companyName: "Company / Organization name",
+    companyNamePlaceholder: "Optional — you can change it later",
     pleaseWait: "Please wait...",
     createAccount: "Create account",
     haveAccount: "Already have an account? ",

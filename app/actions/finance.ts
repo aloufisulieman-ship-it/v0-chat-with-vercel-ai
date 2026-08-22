@@ -4,7 +4,7 @@ import { db } from "@/lib/db"
 import { incident, violation } from "@/lib/db/schema"
 import { and, desc, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
-import { requireModule, requireModuleUserId } from "@/lib/session"
+import { requireModule, requireModuleScope } from "@/lib/session"
 import { normalizeFinanceStatus, type FinanceStatus } from "@/lib/finance-status"
 
 function str(v: FormDataEntryValue | null, fallback = "") {
@@ -16,21 +16,21 @@ function str(v: FormDataEntryValue | null, fallback = "") {
 // قائمة مراجعة شاملة: من له صلاحية "finance" يرى كل المخالفات الخارجية بغض النظر
 // عن منشئها (المخالفة الخارجية تُحال تلقائياً للمالية بمجرد كون التصنيف "external").
 export async function getFinanceViolations() {
-  await requireModuleUserId("finance")
+  const { organizationId } = await requireModuleScope("finance")
   return db
     .select()
     .from(violation)
-    .where(eq(violation.category, "external"))
+    .where(and(eq(violation.organizationId, organizationId), eq(violation.category, "external")))
     .orderBy(desc(violation.createdAt))
 }
 
-// الحوادث المحوّلة صراحةً إلى المالية فقط، بغض النظر عن منشئها.
+// الحوادث المحوّلة صراحةً إلى المالية فقط، بغض النظر عن منشئها (داخل المؤسسة).
 export async function getFinanceIncidents() {
-  await requireModuleUserId("finance")
+  const { organizationId } = await requireModuleScope("finance")
   return db
     .select()
     .from(incident)
-    .where(eq(incident.routedTo, "finance"))
+    .where(and(eq(incident.organizationId, organizationId), eq(incident.routedTo, "finance")))
     .orderBy(desc(incident.createdAt))
 }
 
@@ -78,7 +78,7 @@ export async function updateFinanceViolation(formData: FormData) {
   await db
     .update(violation)
     .set(buildFinanceUpdate(formData, closer.name))
-    .where(eq(violation.id, id))
+    .where(and(eq(violation.id, id), eq(violation.organizationId, closer.organizationId)))
 
   revalidatePath("/finance")
   revalidatePath("/violations")
@@ -93,7 +93,7 @@ export async function updateFinanceIncident(formData: FormData) {
   await db
     .update(incident)
     .set(buildFinanceUpdate(formData, closer.name))
-    .where(and(eq(incident.id, id), eq(incident.routedTo, "finance")))
+    .where(and(eq(incident.id, id), eq(incident.organizationId, closer.organizationId), eq(incident.routedTo, "finance")))
 
   revalidatePath("/finance")
   revalidatePath("/incidents")
