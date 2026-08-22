@@ -4,7 +4,7 @@ import { db } from "@/lib/db"
 import { violation, incident } from "@/lib/db/schema"
 import { and, desc, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
-import { requireModule, requireModuleUserId } from "@/lib/session"
+import { requireModule, requireModuleScope } from "@/lib/session"
 import { normalizeHrStatus, type HrStatus } from "@/lib/hr-status"
 
 function str(v: FormDataEntryValue | null, fallback = "") {
@@ -20,21 +20,21 @@ function dateOrNull(v: FormDataEntryValue | null) {
 // قائمة مراجعة شاملة: من له صلاحية "hr" يرى كل المخالفات الداخلية بغض النظر عن
 // منشئها أو الحالة الرئيسية أو internalAction — يُعتمد على hrStatus للمعالَجة/الإغلاق.
 export async function getHrViolations() {
-  await requireModuleUserId("hr")
+  const { organizationId } = await requireModuleScope("hr")
   return db
     .select()
     .from(violation)
-    .where(eq(violation.category, "internal"))
+    .where(and(eq(violation.organizationId, organizationId), eq(violation.category, "internal")))
     .orderBy(desc(violation.createdAt))
 }
 
-// الحوادث المحوّلة صراحةً إلى الموارد البشرية فقط، بغض النظر عن منشئها.
+// الحوادث المحوّلة صراحةً إلى الموارد البشرية فقط، بغض النظر عن منشئها (داخل المؤسسة).
 export async function getHrIncidents() {
-  await requireModuleUserId("hr")
+  const { organizationId } = await requireModuleScope("hr")
   return db
     .select()
     .from(incident)
-    .where(eq(incident.routedTo, "hr"))
+    .where(and(eq(incident.organizationId, organizationId), eq(incident.routedTo, "hr")))
     .orderBy(desc(incident.createdAt))
 }
 
@@ -83,7 +83,7 @@ export async function updateHrViolation(formData: FormData) {
   await db
     .update(violation)
     .set(buildHrUpdate(formData, closer.name))
-    .where(eq(violation.id, id))
+    .where(and(eq(violation.id, id), eq(violation.organizationId, closer.organizationId)))
 
   revalidatePath("/hr")
   revalidatePath("/violations")
@@ -98,7 +98,7 @@ export async function updateHrIncident(formData: FormData) {
   await db
     .update(incident)
     .set(buildHrUpdate(formData, closer.name))
-    .where(and(eq(incident.id, id), eq(incident.routedTo, "hr")))
+    .where(and(eq(incident.id, id), eq(incident.organizationId, closer.organizationId), eq(incident.routedTo, "hr")))
 
   revalidatePath("/hr")
   revalidatePath("/incidents")

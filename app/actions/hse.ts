@@ -838,17 +838,18 @@ export async function deleteDocument(id: number) {
 
 /* ---------------- Violations ---------------- */
 export async function getViolations() {
-  const userId = await requireModuleUserId("violations")
-  if (await isManagerUser(userId)) {
-    return db.select().from(violation).orderBy(desc(violation.createdAt))
-  }
-  return db.select().from(violation).where(eq(violation.userId, userId)).orderBy(desc(violation.createdAt))
+  const scope = await requireModuleScope("violations")
+  return db
+    .select()
+    .from(violation)
+    .where(scopeWhere({ organizationId: violation.organizationId, userId: violation.userId }, scope))
+    .orderBy(desc(violation.createdAt))
 }
 
 export async function createViolationFull(formData: FormData) {
-  const userId = await requireModuleUserId("violations")
+  const { userId, organizationId } = await requireModuleScope("violations")
   const year = new Date().getFullYear()
-  const existing = await db.select({ documentNo: violation.documentNo }).from(violation).orderBy(desc(violation.createdAt))
+  const existing = await db.select({ documentNo: violation.documentNo }).from(violation).where(eq(violation.organizationId, organizationId)).orderBy(desc(violation.createdAt))
   const thisYearNos = existing.map((v) => v.documentNo ?? "").filter((n) => n.startsWith(`VIO-${year}-`))
   const maxSeq = thisYearNos.reduce((max, n) => {
     const seq = parseInt(n.split("-")[2] ?? "0", 10)
@@ -860,7 +861,7 @@ export async function createViolationFull(formData: FormData) {
   if (!employeeName) throw new Error("اسم الموظف مطلوب")
   const requestedEmployeeRefId = Number(formData.get("employeeRefId"))
   const employeeRefId = Number.isFinite(requestedEmployeeRefId) && requestedEmployeeRefId > 0
-    ? (await db.select({ id: employee.id }).from(employee).where(and(eq(employee.id, requestedEmployeeRefId), eq(employee.userId, userId))).limit(1))[0]?.id ?? null
+    ? (await db.select({ id: employee.id }).from(employee).where(and(eq(employee.id, requestedEmployeeRefId), eq(employee.organizationId, organizationId), eq(employee.userId, userId))).limit(1))[0]?.id ?? null
     : null
 
   // مسار إحالة حصري حسب التصنيف: الداخلية → الموارد البشرية، الخارجية → المالية.
@@ -876,6 +877,7 @@ export async function createViolationFull(formData: FormData) {
     .insert(violation)
     .values({
       userId,
+      organizationId,
       documentNo,
       companyName: str(formData.get("companyName")),
       employeeRefId,
@@ -911,7 +913,7 @@ export async function createViolationFull(formData: FormData) {
     const images = JSON.parse(str(formData.get("images"), "[]")) as string[]
     for (let i = 0; i < images.length; i++) {
       if (typeof images[i] === "string" && images[i].startsWith("data:image")) {
-        await saveDataUrlAttachment(userId, "violations", recordId, "photo", images[i], `evidence-${i + 1}`)
+        await saveDataUrlAttachment(userId, organizationId, "violations", recordId, "photo", images[i], `evidence-${i + 1}`)
       }
     }
   } catch {
@@ -924,7 +926,7 @@ export async function createViolationFull(formData: FormData) {
     const docs = JSON.parse(str(formData.get("manualDocs"), "[]")) as string[]
     for (let i = 0; i < docs.length; i++) {
       if (typeof docs[i] === "string" && docs[i].startsWith("data:")) {
-        await saveDataUrlAttachment(userId, "violations", recordId, "manual_form", docs[i], `manual-form-${i + 1}`)
+        await saveDataUrlAttachment(userId, organizationId, "violations", recordId, "manual_form", docs[i], `manual-form-${i + 1}`)
       }
     }
   } catch {
@@ -940,7 +942,7 @@ export async function createViolationFull(formData: FormData) {
   ]
   for (const sig of signaturePairs) {
     if (sig.value.startsWith("data:image")) {
-      await saveDataUrlAttachment(userId, "violations", recordId, sig.kind, sig.value, sig.name)
+      await saveDataUrlAttachment(userId, organizationId, "violations", recordId, sig.kind, sig.value, sig.name)
     }
   }
 
@@ -958,12 +960,16 @@ export async function acceptDetectionAsViolation(
   detectionId: number,
   category: "internal" | "external",
 ) {
-  const userId = await requireHseReviewerId()
+  const { userId, organizationId } = await requireHseReviewerScope()
   if (category !== "internal" && category !== "external") {
     throw new Error("يجب تحديد تصنيف المخالفة: داخلية أو خارجية")
   }
 
-  const [det] = await db.select().from(aiDetection).where(eq(aiDetection.id, detectionId)).limit(1)
+  const [det] = await db
+    .select()
+    .from(aiDetection)
+    .where(and(eq(aiDetection.id, detectionId), eq(aiDetection.organizationId, organizationId)))
+    .limit(1)
   if (!det) throw new Error("الاكتشاف غير موجود")
   if (det.status === "converted" && det.linkedViolationNo) {
     // مُحوّل مسبقاً — أعد رقم المخالفة القائم دون إنشاء تكرار.
@@ -973,11 +979,12 @@ export async function acceptDetectionAsViolation(
   const actorRows = await db.select({ name: user.name }).from(user).where(eq(user.id, userId)).limit(1)
   const actor = actorRows[0]?.name || "مستخدم"
 
-  // رقم مخالفة تسلسلي حسب السنة (بنفس آلية createViolationFull).
+  // رقم مخالفة تسلسلي حسب السنة داخل المؤسسة (بنفس آلية createViolationFull).
   const year = new Date().getFullYear()
   const existing = await db
     .select({ documentNo: violation.documentNo })
     .from(violation)
+    .where(eq(violation.organizationId, organizationId))
     .orderBy(desc(violation.createdAt))
   const maxSeq = existing
     .map((v) => v.documentNo ?? "")
@@ -1000,6 +1007,7 @@ export async function acceptDetectionAsViolation(
     .insert(violation)
     .values({
       userId,
+      organizationId,
       documentNo,
       employeeName: "غير محدد — رصد آلي",
       violationType: typeLabel,
@@ -1027,18 +1035,18 @@ export async function acceptDetectionAsViolation(
         const buf = Buffer.from(await res.arrayBuffer())
         const contentType = res.headers.get("content-type") || "image/jpeg"
         const dataUrl = `data:${contentType};base64,${buf.toString("base64")}`
-        await saveDataUrlAttachment(userId, "violations", recordId, "photo", dataUrl, "ai-detection-evidence")
+        await saveDataUrlAttachment(userId, organizationId, "violations", recordId, "photo", dataUrl, "ai-detection-evidence")
       }
     }
   } catch {
     // تجاهل فشل جلب اللقطة — المخالفة محفوظة أصلاً.
   }
 
-  // حدّث الاكتشاف: الحالة "converted" + الربط برقم المخالفة الجديد.
+  // حدّث الاكتشاف: الحالة "converted" + الربط برقم المخالفة الجديد (داخل نفس المؤسسة).
   await db
     .update(aiDetection)
     .set({ status: "converted", linkedViolationNo: documentNo, resolvedBy: actor })
-    .where(eq(aiDetection.id, detectionId))
+    .where(and(eq(aiDetection.id, detectionId), eq(aiDetection.organizationId, organizationId)))
 
   revalidatePath("/ai-monitoring")
   revalidatePath("/violations")
@@ -1049,9 +1057,8 @@ export async function acceptDetectionAsViolation(
 // تعديل يدوي كامل للمخالفة — مقتصر على مدير النظام (admin) فقط.
 // يسمح بتصحيح أي حقل ورفع نماذج ورقية ممسوحة إضافية للمخالفات اليدوية.
 export async function updateViolation(formData: FormData) {
-  const userId = await getUserId()
-  const userRows = await db.select({ role: user.role }).from(user).where(eq(user.id, userId)).limit(1)
-  if (userRows[0]?.role !== "admin") throw new Error("التعديل اليدوي متاح لمدير النظام فقط")
+  const { userId, organizationId, role } = await requireScope()
+  if (role !== "admin") throw new Error("التعديل اليدوي متاح لمدير النظام فقط")
 
   const id = Number(formData.get("id"))
   if (!Number.isFinite(id)) throw new Error("معرّف غير صالح")
@@ -1066,8 +1073,9 @@ export async function updateViolation(formData: FormData) {
   const [current] = await db
     .select({ hrStatus: violation.hrStatus, financeStatus: violation.financeStatus })
     .from(violation)
-    .where(eq(violation.id, id))
+    .where(and(eq(violation.id, id), eq(violation.organizationId, organizationId)))
     .limit(1)
+  if (!current) throw new Error("المخالفة غير موجودة")
 
   const referral = isExternal
     ? {
@@ -1104,14 +1112,14 @@ export async function updateViolation(formData: FormData) {
       status: str(formData.get("status"), "open"),
       ...referral,
     })
-    .where(eq(violation.id, id))
+    .where(and(eq(violation.id, id), eq(violation.organizationId, organizationId)))
 
   // إرفاق نماذج ورقية ممسوحة إضافية إن وُجدت.
   try {
     const docs = JSON.parse(str(formData.get("manualDocs"), "[]")) as string[]
     for (let i = 0; i < docs.length; i++) {
       if (typeof docs[i] === "string" && docs[i].startsWith("data:")) {
-        await saveDataUrlAttachment(userId, "violations", id, "manual_form", docs[i], `manual-form-edit-${Date.now()}-${i + 1}`)
+        await saveDataUrlAttachment(userId, organizationId, "violations", id, "manual_form", docs[i], `manual-form-edit-${Date.now()}-${i + 1}`)
       }
     }
   } catch {
@@ -1123,18 +1131,16 @@ export async function updateViolation(formData: FormData) {
 }
 
 export async function deleteViolation(id: number) {
-  const userId = await requireModuleUserId("violations")
-  const userRows = await db.select({ role: user.role, department: user.department }).from(user).where(eq(user.id, userId)).limit(1)
-  const u = userRows[0]
-  const v = await db.select().from(violation).where(eq(violation.id, id)).limit(1)
+  const { userId, organizationId, isManager } = await requireModuleScope("violations")
+  const v = await db
+    .select()
+    .from(violation)
+    .where(and(eq(violation.id, id), eq(violation.organizationId, organizationId)))
+    .limit(1)
   if (!v[0]) throw new Error("المخالفة غير موجودة")
-  const canDelete =
-    u?.role === "admin" ||
-    u?.department === "المدير العام" ||
-    u?.department === "مفتش السلامة" ||
-    v[0].userId === userId
+  const canDelete = isManager || v[0].userId === userId
   if (!canDelete) throw new Error("غير مصرح لك بالحذف")
-  await db.delete(violation).where(eq(violation.id, id))
+  await db.delete(violation).where(and(eq(violation.id, id), eq(violation.organizationId, organizationId)))
   revalidatePath("/violations")
   revalidatePath("/")
 }
@@ -1143,17 +1149,18 @@ export async function deleteViolation(id: number) {
 
 // يجلب كل الملاحظات/الإيجابيات الخاصة بالمستخدم؛ المدراء يرون الجميع.
 export async function getObservations() {
-  const userId = await requireModuleUserId("violations")
-  if (await isManagerUser(userId)) {
-    return db.select().from(observation).orderBy(desc(observation.createdAt))
-  }
-  return db.select().from(observation).where(eq(observation.userId, userId)).orderBy(desc(observation.createdAt))
+  const scope = await requireModuleScope("violations")
+  return db
+    .select()
+    .from(observation)
+    .where(scopeWhere({ organizationId: observation.organizationId, userId: observation.userId }, scope))
+    .orderBy(desc(observation.createdAt))
 }
 
 // يحفظ ملاحظة (observation) أو ملاحظة إيجابية (positive) من الجولة، ويولّد رقم
-// وثيقة رسمي: OBS-YYYY-XXX للملاحظات، POS-YYYY-XXX للإيجابيات.
+// وثيقة رسمي: OBS-YYYY-XXX للملاحظات�� POS-YYYY-XXX للإيجابيات.
 export async function createObservationFull(formData: FormData) {
-  const userId = await requireModuleUserId("violations")
+  const { userId, organizationId } = await requireModuleScope("violations")
   const kind = str(formData.get("kind"), "observation") === "positive" ? "positive" : "observation"
   const prefix = kind === "positive" ? "POS" : "OBS"
   const year = new Date().getFullYear()
@@ -1161,7 +1168,7 @@ export async function createObservationFull(formData: FormData) {
   const existing = await db
     .select({ documentNo: observation.documentNo })
     .from(observation)
-    .where(eq(observation.kind, kind))
+    .where(and(eq(observation.organizationId, organizationId), eq(observation.kind, kind)))
   const thisYearNos = existing.map((o) => o.documentNo ?? "").filter((n) => n.startsWith(`${prefix}-${year}-`))
   const maxSeq = thisYearNos.reduce((max, n) => {
     const seq = parseInt(n.split("-")[2] ?? "0", 10)
@@ -1176,6 +1183,7 @@ export async function createObservationFull(formData: FormData) {
     .insert(observation)
     .values({
       userId,
+      organizationId,
       patrolId: str(formData.get("patrolId")),
       kind,
       documentNo,
@@ -1195,7 +1203,7 @@ export async function createObservationFull(formData: FormData) {
     const images = JSON.parse(str(formData.get("images"), "[]")) as string[]
     for (let i = 0; i < images.length; i++) {
       if (typeof images[i] === "string" && images[i].startsWith("data:image")) {
-        await saveDataUrlAttachment(userId, "observations", recordId, "photo", images[i], `photo-${i + 1}`)
+        await saveDataUrlAttachment(userId, organizationId, "observations", recordId, "photo", images[i], `photo-${i + 1}`)
       }
     }
   } catch {
@@ -1208,39 +1216,36 @@ export async function createObservationFull(formData: FormData) {
 }
 
 export async function deleteObservation(id: number) {
-  const userId = await requireModuleUserId("violations")
-  const userRows = await db.select({ role: user.role, department: user.department }).from(user).where(eq(user.id, userId)).limit(1)
-  const u = userRows[0]
-  const rows = await db.select().from(observation).where(eq(observation.id, id)).limit(1)
+  const { userId, organizationId, isManager } = await requireModuleScope("violations")
+  const rows = await db
+    .select()
+    .from(observation)
+    .where(and(eq(observation.id, id), eq(observation.organizationId, organizationId)))
+    .limit(1)
   if (!rows[0]) throw new Error("الملاحظة غير موجودة")
-  const canDelete =
-    u?.role === "admin" ||
-    u?.department === "المدير العام" ||
-    u?.department === "مفتش السلامة" ||
-    rows[0].userId === userId
+  const canDelete = isManager || rows[0].userId === userId
   if (!canDelete) throw new Error("غير مصرح لك بالحذف")
-  await db.delete(observation).where(eq(observation.id, id))
+  await db.delete(observation).where(and(eq(observation.id, id), eq(observation.organizationId, organizationId)))
   revalidatePath("/")
   revalidatePath("/reports")
 }
 
 /* ---------------- Dashboard aggregates ---------------- */
 export async function getDashboardData() {
-  const userId = await getUserId()
-  const isManager = await isManagerUser(userId)
-  // المدير/المراجع يرى كل سجلات المؤسسة؛ غيره يرى سجلاته فقط. نبني شرط الفلترة لكل
-  // جدول (undefined = بدون فلتر = كل السجلات) لتفادي تكرار الاستعلامات.
+  const scope = await requireScope()
+  // العزل بين المؤسسات صارم (organizationId دائماً)؛ وداخل المؤسسة يرى المديرُ كل
+  // السجلات والموظفُ سجلاته فقط عبر scopeWhere.
   const [inc, ins, per, rsk, act, obs, vio] = await Promise.all([
-    db.select().from(incident).where(isManager ? undefined : eq(incident.userId, userId)),
-    db.select().from(inspection).where(isManager ? undefined : eq(inspection.userId, userId)),
-    db.select().from(permit).where(isManager ? undefined : eq(permit.userId, userId)),
-    db.select().from(risk).where(isManager ? undefined : eq(risk.userId, userId)),
-    db.select().from(correctiveAction).where(isManager ? undefined : eq(correctiveAction.userId, userId)),
-    db.select().from(observation).where(isManager ? undefined : eq(observation.userId, userId)),
+    db.select().from(incident).where(scopeWhere({ organizationId: incident.organizationId, userId: incident.userId }, scope)),
+    db.select().from(inspection).where(scopeWhere({ organizationId: inspection.organizationId, userId: inspection.userId }, scope)),
+    db.select().from(permit).where(scopeWhere({ organizationId: permit.organizationId, userId: permit.userId }, scope)),
+    db.select().from(risk).where(scopeWhere({ organizationId: risk.organizationId, userId: risk.userId }, scope)),
+    db.select().from(correctiveAction).where(scopeWhere({ organizationId: correctiveAction.organizationId, userId: correctiveAction.userId }, scope)),
+    db.select().from(observation).where(scopeWhere({ organizationId: observation.organizationId, userId: observation.userId }, scope)),
     db
       .select()
       .from(violation)
-      .where(isManager ? undefined : eq(violation.userId, userId))
+      .where(scopeWhere({ organizationId: violation.organizationId, userId: violation.userId }, scope))
       .orderBy(desc(violation.createdAt)),
   ])
   return { incidents: inc, inspections: ins, permits: per, risks: rsk, actions: act, observations: obs, violations: vio }
@@ -1274,9 +1279,8 @@ export async function getReportData(
   dateFrom: string,
   dateTo: string,
 ): Promise<ReportSection[]> {
-  const userId = await requireModuleUserId("reports")
-  // نفس قاعدة الرؤية: المدير/المراجع يصدّر تقارير كل المؤسسة، وغيره تقاريره فقط.
-  const isManager = await isManagerUser(userId)
+  const scope = await requireModuleScope("reports")
+  // العزل بين المؤسسات صارم؛ وداخل المؤسسة: المدير يصدّر تقارير كل المؤسسة والموظف تقاريره فقط.
   const from = (dateFrom || "").slice(0, 10)
   const to = (dateTo || "").slice(0, 10)
   const sections: ReportSection[] = []
@@ -1285,7 +1289,7 @@ export async function getReportData(
     const rows = await db
       .select()
       .from(incident)
-      .where(isManager ? undefined : eq(incident.userId, userId))
+      .where(scopeWhere({ organizationId: incident.organizationId, userId: incident.userId }, scope))
       .orderBy(desc(incident.createdAt))
     const filtered = rows.filter((r) => inRange(r.incidentDate ?? null, from, to))
     sections.push({
@@ -1316,7 +1320,7 @@ export async function getReportData(
     const rows = await db
       .select()
       .from(violation)
-      .where(isManager ? undefined : eq(violation.userId, userId))
+      .where(scopeWhere({ organizationId: violation.organizationId, userId: violation.userId }, scope))
       .orderBy(desc(violation.createdAt))
     const filtered = rows.filter((r) => inRange(r.violationDate ?? null, from, to))
     sections.push({
@@ -1345,7 +1349,7 @@ export async function getReportData(
     const rows = await db
       .select()
       .from(inspection)
-      .where(isManager ? undefined : eq(inspection.userId, userId))
+      .where(scopeWhere({ organizationId: inspection.organizationId, userId: inspection.userId }, scope))
       .orderBy(desc(inspection.createdAt))
     const filtered = rows.filter((r) => inRange(r.inspectionDate ?? null, from, to))
     sections.push({
@@ -1377,9 +1381,11 @@ export async function getReportData(
       .select()
       .from(observation)
       .where(
-        isManager
-          ? eq(observation.kind, "observation")
-          : and(eq(observation.userId, userId), eq(observation.kind, "observation")),
+        scopeWhere(
+          { organizationId: observation.organizationId, userId: observation.userId },
+          scope,
+          eq(observation.kind, "observation"),
+        ),
       )
       .orderBy(desc(observation.createdAt))
     const filtered = rows.filter((r) => inRange(r.observationDate ?? null, from, to))
@@ -1410,9 +1416,11 @@ export async function getReportData(
       .select()
       .from(observation)
       .where(
-        isManager
-          ? eq(observation.kind, "positive")
-          : and(eq(observation.userId, userId), eq(observation.kind, "positive")),
+        scopeWhere(
+          { organizationId: observation.organizationId, userId: observation.userId },
+          scope,
+          eq(observation.kind, "positive"),
+        ),
       )
       .orderBy(desc(observation.createdAt))
     const filtered = rows.filter((r) => inRange(r.observationDate ?? null, from, to))
