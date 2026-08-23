@@ -14,7 +14,7 @@ import {
 } from "@/lib/db/schema"
 import { and, desc, eq, inArray, or } from "drizzle-orm"
 import { requireUser, assertWritable } from "@/lib/session"
-import { normalizeCode, type PermitMatchStatus } from "@/lib/ai-recognition"
+import { normalizeCode, normalizePlate, type PermitMatchStatus } from "@/lib/ai-recognition"
 
 /* ---------------- عمليات البحث المرجعية (سجلّات القراءة المرجعية داخل المؤسسة) ---------------- */
 // المطابقة تجري على مستوى المؤسسة كاملةً (لا تُقيَّد بـ userId) لأن مُشغّل الكاميرا
@@ -77,8 +77,11 @@ export type EquipmentMatch = {
 }
 
 export async function lookupEquipmentByPlate(organizationId: string, plateRaw: string): Promise<EquipmentMatch | null> {
-  const target = normalizeCode(plateRaw)
+  // المطابقة بالرقم الكامل (حروف + أرقام معاً) بعد التطبيع الموحّد، حتى لا تُخلط
+  // مركبتان لهما نفس الأرقام لكن برمز حروف مختلف.
+  const target = normalizePlate(plateRaw)
   if (!target) return null
+  const codeTarget = normalizeCode(plateRaw)
   const rows = await db
     .select({
       id: equipment.id,
@@ -92,7 +95,9 @@ export async function lookupEquipmentByPlate(organizationId: string, plateRaw: s
     .from(equipment)
     .where(eq(equipment.organizationId, organizationId))
   const hit = rows.find(
-    (r) => normalizeCode(r.plateNumber) === target || normalizeCode(r.internalCode || "") === target,
+    (r) =>
+      normalizePlate(r.plateNumber) === target ||
+      (Boolean(r.internalCode) && normalizeCode(r.internalCode || "") === codeTarget),
   )
   if (!hit) return null
   return {

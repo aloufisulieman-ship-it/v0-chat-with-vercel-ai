@@ -49,7 +49,19 @@ const violationsPart = z
 
 const platePart = z
   .object({
-    plateNumber: z.string().describe("رقم اللوحة كاملاً كما يظهر (أرقام + رمز حرفي عربي إن وُجد)"),
+    plateLetters: z
+      .string()
+      .describe(
+        "رمز الحروف على اللوحة كما يظهر (مثال بالعربي: \"ي ر\" أو بالإنجليزي: \"YR\"). " +
+          "إلزامي إذا ظهر أي حرف؛ اتركه فارغاً فقط إذا لم يظهر أي رمز حرفي إطلاقاً.",
+      ),
+    plateDigits: z.string().describe("أرقام اللوحة فقط (مثال: 3072)"),
+    plateNumber: z
+      .string()
+      .describe(
+        "رقم اللوحة كاملاً = رمز الحروف + الأرقام معاً كوحدة واحدة (مثال: \"3072 ي ر\" أو \"YR 3072\"). " +
+          "لا تُعِد الأرقام وحدها أبداً إذا ظهر رمز حرفي على اللوحة.",
+      ),
     confidence: z.number().min(0).max(100).describe("نسبة الثقة 0-100"),
   })
   .nullable()
@@ -107,7 +119,11 @@ export async function POST(req: Request) {
     }
     if (modes.includes("plate")) {
       shape.plate = platePart
-      instructions.push("• اللوحات: اقرأ رقم لوحة المركبة الظاهرة (نمط عُماني: أرقام + رمز حرفي عربي).")
+      instructions.push(
+        "• اللوحات (نمط عُماني): تتكوّن اللوحة من جزأين معاً — رمز حروف (مثل \"ي ر\" / \"YR\") + أرقام (مثل 3072). " +
+          "اقرأ الجزأين معاً دائماً: أعِد رمز الحروف في plateLetters، والأرقام في plateDigits، والرقم الكامل (حروف + أرقام) في plateNumber. " +
+          "لا تُرجِع الأرقام وحدها أبداً عند وجود رمز حرفي، لأن مركبتين قد تحملان نفس الأرقام برمز حروف مختلف.",
+      )
     }
     if (modes.includes("employee_id")) {
       shape.employeeId = employeePart
@@ -243,8 +259,14 @@ export async function POST(req: Request) {
     // ---- وضع اللوحات ----
     let equipmentMatch: { plate: string; equipmentType: string; ownerCompany: string; driverName: string } | null = null
     if (modes.includes("plate") && obj.plate) {
-      const p = obj.plate as { plateNumber?: string; confidence?: number }
-      const value = (p.plateNumber || "").trim()
+      const p = obj.plate as { plateNumber?: string; plateLetters?: string; plateDigits?: string; confidence?: number }
+      const full = (p.plateNumber || "").trim()
+      const letters = (p.plateLetters || "").trim()
+      const digits = (p.plateDigits || "").trim()
+      // نبني القيمة الكاملة من الأجزاء عند غياب الحروف من plateNumber، ضماناً لعدم
+      // فقدان رمز الحروف حتى لو أعاد النموذج الأرقام وحدها في plateNumber.
+      const hasLetterInFull = /[A-Za-z\u0600-\u06FF]/.test(full)
+      const value = letters && !hasLetterInFull ? `${letters} ${digits || full}`.trim() : full || [letters, digits].filter(Boolean).join(" ").trim()
       const confidence = normalizeConfidence(p.confidence)
       if (value && confidence >= MIN_STORE_CONFIDENCE) {
         const { id, match } = await savePlateRead({
