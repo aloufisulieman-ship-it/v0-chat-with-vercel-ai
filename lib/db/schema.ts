@@ -405,6 +405,14 @@ export const aiDetection = pgTable("ai_detections", {
   confidenceScore: integer("confidence_score").notNull().default(0), // 0-100
   snapshotUrl: text("snapshot_url").notNull().default(""),
   detectedAt: timestamp("detected_at").notNull().defaultNow(),
+  // منع التكرار: عند استمرار نفس المخالفة لنفس الشخص/المركبة في نفس الموقع ضمن نافذة
+  // زمنية قصيرة، لا يُنشأ سجل جديد بل يُحدَّث الموجود: يزداد detectionCount ويُحدَّث
+  // lastDetectedAt. subjectKey هو هوية الشخص (اليونيفورم) أو المركبة (اللوحة) مطبّعة،
+  // وsubjectType يميّز employee/vehicle حتى لا تُخلط الهويات.
+  detectionCount: integer("detection_count").notNull().default(1),
+  lastDetectedAt: timestamp("last_detected_at").notNull().defaultNow(),
+  subjectKey: text("subject_key").notNull().default(""),
+  subjectType: text("subject_type").notNull().default(""),
   status: text("status").notNull().default("new"),
   acknowledgedBy: text("acknowledged_by").default(""),
   resolvedBy: text("resolved_by").default(""),
@@ -458,7 +466,7 @@ export const webrtcSignal = pgTable(
   {
     id: serial("id").primaryKey(),
     cameraId: text("camera_id").notNull(), // جلسة الكاميرا الهدف
-    viewerSessionId: text("viewer_session_id").notNull(), // جلسة تفاوض المشاهد (تسمح بإعادة الاتصال)
+    viewerSessionId: text("viewer_session_id").notNull(), // جلسة تف��وض المشاهد (تسمح بإعادة الاتصال)
     sender: text("sender").notNull(), // "camera" | "viewer"
     kind: text("kind").notNull(), // "offer" | "answer" | "ice"
     payload: text("payload").notNull(), // SDP أو مرشّح ICE مُرمَّز JSON

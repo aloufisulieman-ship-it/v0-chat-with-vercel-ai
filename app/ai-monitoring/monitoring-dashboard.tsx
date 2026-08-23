@@ -62,6 +62,9 @@ export type DetectionDto = {
   // توفّر لقطة إثبات لهذا الاكتشاف (اللقطة نفسها تُجلب عند فتح النافذة).
   hasSnapshot: boolean
   detectedAt: string
+  // عدد مرات رصد نفس المخالفة المستمرة (دمج التكرار)، وآخر وقت رُصدت فيه.
+  detectionCount: number
+  lastDetectedAt: string
   status: string
   acknowledgedBy: string
   resolvedBy: string
@@ -488,6 +491,7 @@ export function MonitoringDashboard({
                     t("aiMonitoring.colTime"),
                     t("aiMonitoring.colInspectorLocation"),
                     t("aiMonitoring.colViolation"),
+                    t("aiMonitoring.colDetectionCount"),
                     t("aiMonitoring.colSeverity"),
                     t("aiMonitoring.colConfidence"),
                     t("aiMonitoring.colEvidence"),
@@ -506,7 +510,7 @@ export function MonitoringDashboard({
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
+                    <td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">
                       {t("aiMonitoring.noMatching")}
                     </td>
                   </tr>
@@ -552,6 +556,24 @@ export function MonitoringDashboard({
                             {d.notes}
                           </div>
                         )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {/* عدد مرات الرصد المتكرر لنفس المخالفة المستمرة (بدل صفوف مكررة) */}
+                        <span
+                          className={
+                            d.detectionCount > 1
+                              ? "inline-flex min-w-8 items-center justify-center rounded-full bg-primary/10 px-2 py-0.5 font-mono text-xs font-bold text-primary"
+                              : "inline-flex min-w-8 items-center justify-center font-mono text-xs text-muted-foreground"
+                          }
+                          title={
+                            d.detectionCount > 1
+                              ? `${t("aiMonitoring.lastSeen")}: ${timeFmt(d.lastDetectedAt, locale)}`
+                              : undefined
+                          }
+                          dir="ltr"
+                        >
+                          {d.detectionCount > 1 ? `×${d.detectionCount}` : "1"}
+                        </span>
                       </td>
                       <td className="px-4 py-3">
                         <Badge

@@ -213,16 +213,27 @@ async function nextDetectionId(organizationId: string): Promise<string> {
   return `${prefix}${String(maxSeq + 1).padStart(3, "0")}`
 }
 
+// نافذة منع التكرار: طالما استمر نفس السلوك المخالف لنفس الشخص/المركبة في نفس
+// الموقع خلال هذه المدة، يُحدَّث السجل الموجود بدل إنشاء سجل جديد.
+const DEDUP_WINDOW_MINUTES = 15
+
 // حفظ كل مخالفات الإطار الواحد في سجل واحد فقط. يُستدعى مرة واحدة لكل لقطة من
 // مسار /api/ai-monitoring/analyze: إن رُصدت عدة مخالفات في نفس الإطار (مثل
 // عامل بلا خوذة وبلا سترة عاكسة) تُدمج جميعها في بند واحد بنفس اللقطة بدل تكرار
-// صفوف بنفس الصورة. يُرجع السجل المُنشأ أو null إن لم تُرصد أي مخالفة.
-// منطق الدمج نفسه في mergeFrameViolations (دالة نقية قابلة للاختبار في lib).
+// صفوف بنفس الصورة. يُرجع السجل المُنشأ/المُحدَّث أو null إن لم تُرصد أي مخالفة.
+//
+// منع التكرار عبر الإطارات المتتالية: قبل الإنشاء نبحث عن سجل «مفتوح» (غير محلول/
+// غير مرفوض) لنفس نوع المخالفة الأساسي ولنفس الهوية (subjectKey) في نفس الموقع
+// رُصد آخر مرة خلال آخر DEDUP_WINDOW_MINIUTES دقيقة. إن وُجد نُحدّث عدّاد الرصد
+// (detectionCount) وآخر وقت رصد وأحدث لقطة بدل إنشاء صف مكرر. يُنشأ سجل جديد فقط
+// عند اختلاف النوع أو الهوية أو الموقع، أو انقطاع الرصد أطول من النافذة الزمنية.
 export async function saveFrameDetection(input: {
   inspectorName: string
   cameraLocation: string
   snapshotUrl?: string
   detections: FrameViolation[]
+  subjectKey?: string
+  subjectType?: string
 }): Promise<AiDetection | null> {
   await assertWritable()
   const merged = mergeFrameViolations(input.detections)
@@ -232,6 +243,49 @@ export async function saveFrameDetection(input: {
   const { id: userId, organizationId } = await requireUser()
   // نفس معرّف جلسة الكاميرا المستخدم في البث المباشر (مشتقّ من اسم المفتش).
   const cameraId = sessionCameraId(userId, input.inspectorName || "")
+  const cameraLocation = input.cameraLocation?.slice(0, 200) || ""
+  const subjectKey = (input.subjectKey || "").slice(0, 120)
+  const subjectType = (input.subjectType || "").slice(0, 20)
+  const now = new Date()
+  const windowStart = new Date(now.getTime() - DEDUP_WINDOW_MINUTES * 60_000)
+
+  // البحث عن سجل مفتوح مطابق ضمن النافذة الزمنية لدمج الرصد المتكرر فيه.
+  const [existing] = await db
+    .select()
+    .from(aiDetection)
+    .where(
+      and(
+        eq(aiDetection.organizationId, organizationId),
+        eq(aiDetection.detectionType, merged.primaryType),
+        eq(aiDetection.cameraLocation, cameraLocation),
+        eq(aiDetection.subjectKey, subjectKey),
+        inArray(aiDetection.status, ["new", "acknowledged"]),
+        gte(aiDetection.lastDetectedAt, windowStart),
+      ),
+    )
+    .orderBy(desc(aiDetection.lastDetectedAt))
+    .limit(1)
+
+  if (existing) {
+    // تحديث السجل القائم: زيادة العدّاد، تحديث آخر وقت رصد وأحدث لقطة/ثقة/أنواع.
+    const mergedTypes = Array.from(
+      new Set([...parseDetectionTypes(existing.detectionTypes, existing.detectionType), ...merged.types]),
+    )
+    const [updated] = await db
+      .update(aiDetection)
+      .set({
+        detectionCount: existing.detectionCount + 1,
+        lastDetectedAt: now,
+        detectionTypes: JSON.stringify(mergedTypes),
+        confidenceScore: Math.max(existing.confidenceScore, merged.primaryConfidence),
+        // نحدّث اللقطة لأحدث دليل بصري إن توفّرت لقطة جديدة.
+        snapshotUrl: input.snapshotUrl || existing.snapshotUrl,
+      })
+      .where(eq(aiDetection.id, existing.id))
+      .returning()
+    revalidatePath("/ai-monitoring")
+    return updated
+  }
 
   const detectionId = await nextDetectionId(organizationId)
   const [row] = await db
@@ -242,7 +296,7 @@ export async function saveFrameDetection(input: {
       detectionId,
       cameraId,
       inspectorName: input.inspectorName?.slice(0, 160) || "كاميرا الهاتف",
-      cameraLocation: input.cameraLocation?.slice(0, 200) || "",
+      cameraLocation,
       detectionType: merged.primaryType,
       detectionTypes: JSON.stringify(merged.types),
       severity: merged.primarySeverity,
@@ -250,11 +304,16 @@ export async function saveFrameDetection(input: {
       snapshotUrl: input.snapshotUrl || "",
       notes: merged.notes,
       status: "new",
+      detectionCount: 1,
+      lastDetectedAt: now,
+      subjectKey,
+      subjectType,
     })
     .returning()
 
   // إشعار المسؤولين والمفتشين عند الاكتشافات عالية الخطورة/الحرجة (سلوك مدموج من
-  // فرع ai-smart-monitoring). لا يوقف فشلُ الإشعار حفظَ الاكتشاف.
+  // فرع ai-smart-monitoring). لا يوقف فشلُ الإشعار حفظَ الاكتشاف. يُرسَل مرة واحدة
+  // عند إنشاء السجل فقط — لا يتكرر مع كل رصد لاحق لنفس المخالفة المستمرة.
   if (merged.primarySeverity === "high" || merged.primarySeverity === "critical") {
     try {
       await createDetectionNotifications(row, merged.primarySeverity)
