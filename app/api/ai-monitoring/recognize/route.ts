@@ -21,6 +21,8 @@ import {
 import {
   isRecognitionMode,
   normalizeConfidence,
+  normalizeCode,
+  normalizePlate,
   HIGH_CONFIDENCE,
   MIN_STORE_CONFIDENCE,
   type RecognitionMode,
@@ -178,7 +180,7 @@ export async function POST(req: Request) {
     await touchCameraStream({ inspectorName, cameraLocation })
 
     const result: {
-      violations?: { count: number; detections: unknown[]; detectionDbId?: number }
+      violations?: { count: number; detections: unknown[]; detectionDbId?: number; detectionCount?: number }
       plate?: {
         value: string
         confidence: number
@@ -221,40 +223,20 @@ export async function POST(req: Request) {
       }
     } = {}
 
-    // ---- وضع المخالفات ----
+    // ---- وضع المخالفات (تُحلَّل هنا، ويُؤجَّل الحفظ حتى تُعرَف الهوية) ----
+    // نؤجّل استدعاء saveFrameDetection إلى ما بعد أوضاع اللوحة/الرقم الوظيفي/التوك
+    // توك حتى نمرّر مفتاح الهوية (subjectKey) اللازم لمنع تكرار نفس المخالفة لنفس
+    // الشخص/المركبة طالما استمر السلوك.
     let detectionRowId: number | undefined
-    if (modes.includes("violations")) {
-      const raw = Array.isArray(obj.detections) ? (obj.detections as Record<string, unknown>[]) : []
-      const frameDetections = raw.map((d) => ({
-        type: String(d.type) as DetectionType,
-        severity: String(d.severity),
-        confidence: normalizeConfidence(d.confidence as number),
-        description: String(d.description ?? ""),
-      }))
-      const row = await saveFrameDetection({
-        inspectorName,
-        cameraLocation,
-        snapshotUrl: image,
-        detections: frameDetections,
-      })
-      if (row) {
-        detectionRowId = row.id
-        result.violations = {
-          count: frameDetections.length,
-          detectionDbId: row.id,
-          detections: frameDetections.map((d) => ({
-            id: row.id,
-            detectionId: row.detectionId,
-            type: d.type,
-            severity: d.severity,
-            confidence: d.confidence,
-            description: d.description,
-          })),
-        }
-      } else {
-        result.violations = { count: 0, detections: [] }
-      }
-    }
+    const frameDetections =
+      modes.includes("violations")
+        ? (Array.isArray(obj.detections) ? (obj.detections as Record<string, unknown>[]) : []).map((d) => ({
+            type: String(d.type) as DetectionType,
+            severity: String(d.severity),
+            confidence: normalizeConfidence(d.confidence as number),
+            description: String(d.description ?? ""),
+          }))
+        : []
 
     // ---- وضع اللوحات ----
     let equipmentMatch: { plate: string; equipmentType: string; ownerCompany: string; driverName: string } | null = null
@@ -371,6 +353,51 @@ export async function POST(req: Request) {
         if (match && permitStatus === "valid" && confidence >= HIGH_CONFIDENCE) {
           tuktukMatch = { driverName: match.driverName, vehicleNo: value }
         }
+      }
+    }
+
+    // ---- حفظ المخالفة مع مفتاح الهوية لمنع التكرار ----
+    // نشتقّ هوية موحّدة: الموظف (الرقم الوظيفي المطابق أو المقروء) له الأولوية، ثم
+    // المركبة (اللوحة الكاملة حروف+أرقام)، ثم التوك توك. تُطبَّع بنفس منطق المطابقة
+    // حتى يُدمج الرصد المتكرر لنفس الشخص/المركبة في سجل واحد بعدّاد بدل صفوف مكررة.
+    if (modes.includes("violations") && frameDetections.length > 0) {
+      let subjectKey = ""
+      let subjectType = ""
+      if (result.employee?.value) {
+        subjectType = "employee"
+        subjectKey = `emp:${normalizeCode(employeeMatch?.employeeNo || result.employee.value)}`
+      } else if (result.plate?.value) {
+        subjectType = "vehicle"
+        subjectKey = `veh:${normalizePlate(equipmentMatch?.plate || result.plate.value)}`
+      } else if (result.tuktuk?.value) {
+        subjectType = "vehicle"
+        subjectKey = `tuk:${normalizeCode(result.tuktuk.value)}`
+      }
+      const row = await saveFrameDetection({
+        inspectorName,
+        cameraLocation,
+        snapshotUrl: image,
+        detections: frameDetections,
+        subjectKey,
+        subjectType,
+      })
+      if (row) {
+        detectionRowId = row.id
+        result.violations = {
+          count: frameDetections.length,
+          detectionDbId: row.id,
+          detectionCount: row.detectionCount,
+          detections: frameDetections.map((d) => ({
+            id: row.id,
+            detectionId: row.detectionId,
+            type: d.type,
+            severity: d.severity,
+            confidence: d.confidence,
+            description: d.description,
+          })),
+        }
+      } else {
+        result.violations = { count: 0, detections: [] }
       }
     }
 

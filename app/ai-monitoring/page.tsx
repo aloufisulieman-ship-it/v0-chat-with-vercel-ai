@@ -28,6 +28,8 @@ export default async function AiMonitoringPage() {
     // اللقطة تُجلب عند الطلب؛ نمرّر فقط علامة التوفّر لعرض زر «لقطة».
     hasSnapshot: r.hasSnapshot,
     detectedAt: (r.detectedAt as unknown as Date)?.toISOString?.() ?? String(r.detectedAt),
+    detectionCount: r.detectionCount ?? 1,
+    lastDetectedAt: (r.lastDetectedAt as unknown as Date)?.toISOString?.() ?? String(r.lastDetectedAt),
     status: r.status,
     acknowledgedBy: r.acknowledgedBy ?? "",
     resolvedBy: r.resolvedBy ?? "",
