@@ -419,10 +419,21 @@ export function ViolationFormDialog({
               />
               {uniformLookup.trim() !== "" && (
                 uniformMatch ? (
-                  <p className="flex items-center gap-1.5 text-xs font-medium text-primary">
-                    <BadgeCheck className="size-3.5" />
-                    {t("violationForm.uniformMatched").replace("{name}", uniformMatch.name).replace("{id}", uniformMatch.employeeId)}
-                  </p>
+                  <div className="flex items-center gap-3 rounded-md border border-primary/30 bg-background p-2">
+                    {uniformMatch.photoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={uniformMatch.photoUrl || "/placeholder.svg"} alt={uniformMatch.name} className="size-10 shrink-0 rounded-full border border-border object-cover" />
+                    ) : (
+                      <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-dashed border-border text-muted-foreground"><BadgeCheck className="size-4" /></span>
+                    )}
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-1.5 text-xs font-medium text-primary">
+                        <BadgeCheck className="size-3.5 shrink-0" />
+                        {t("violationForm.uniformMatched").replace("{name}", uniformMatch.name).replace("{id}", uniformMatch.employeeId)}
+                      </p>
+                      {uniformMatch.phone && <p className="font-mono text-xs text-muted-foreground" dir="ltr">{uniformMatch.phone}</p>}
+                    </div>
+                  </div>
                 ) : (
                   <p className="text-xs text-destructive">{t("violationForm.uniformNoMatch")}</p>
                 )

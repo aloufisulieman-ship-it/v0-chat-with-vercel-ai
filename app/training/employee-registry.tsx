@@ -24,6 +24,8 @@ export type EmployeeRecord = {
   profileStatus: string
   cardCode: string | null
   uniformNumber: string | null
+  phone: string | null
+  photoUrl: string | null
   active: boolean
 }
 
@@ -33,7 +35,16 @@ function EmployeeDialog({ employee }: { employee?: EmployeeRecord }) {
   const { t, dir } = useI18n()
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(employee?.active ?? true)
+  const [photo, setPhoto] = useState(employee?.photoUrl ?? "")
   const action: EmployeeAction = employee ? updateEmployee : createEmployee
+
+  function onPhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => setPhoto(String(reader.result || ""))
+    reader.readAsDataURL(file)
+  }
   const [, formAction, pending] = useActionState(async (_: null, formData: FormData) => {
     await action(formData)
     setOpen(false)
@@ -57,6 +68,7 @@ function EmployeeDialog({ employee }: { employee?: EmployeeRecord }) {
         <form action={formAction} className="flex flex-col gap-4">
           {employee && <input type="hidden" name="id" value={employee.id} />}
           <input type="hidden" name="active" value={String(active)} />
+          <input type="hidden" name="photoUrl" value={photo} />
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2"><Label htmlFor={`employee-id-${employee?.id ?? "new"}`}>{t("employeeReg.fEmployeeId")}</Label><Input id={`employee-id-${employee?.id ?? "new"}`} name="employeeId" defaultValue={employee?.employeeId} required /></div>
             <div className="flex flex-col gap-2"><Label htmlFor={`employee-name-${employee?.id ?? "new"}`}>{t("employeeReg.fName")}</Label><Input id={`employee-name-${employee?.id ?? "new"}`} name="name" defaultValue={employee?.name} required /></div>
@@ -66,6 +78,23 @@ function EmployeeDialog({ employee }: { employee?: EmployeeRecord }) {
             <div className="flex flex-col gap-2"><Label htmlFor={`employee-nationality-${employee?.id ?? "new"}`}>{t("employeeReg.fNationality")}</Label><Input id={`employee-nationality-${employee?.id ?? "new"}`} name="nationality" defaultValue={employee?.nationality} /></div>
             <div className="flex flex-col gap-2"><Label htmlFor={`employee-card-${employee?.id ?? "new"}`}>{t("employeeReg.fCardCode")}</Label><Input id={`employee-card-${employee?.id ?? "new"}`} name="cardCode" defaultValue={employee?.cardCode ?? ""} /></div>
             <div className="flex flex-col gap-2 sm:col-span-2"><Label htmlFor={`employee-uniform-${employee?.id ?? "new"}`}>{t("employeeReg.fUniformNumber")}</Label><Input id={`employee-uniform-${employee?.id ?? "new"}`} name="uniformNumber" defaultValue={employee?.uniformNumber ?? ""} placeholder={t("employeeReg.fUniformPlaceholder")} dir="ltr" inputMode="numeric" /><span className="text-xs text-muted-foreground">{t("employeeReg.fUniformHint")}</span></div>
+            <div className="flex flex-col gap-2"><Label htmlFor={`employee-phone-${employee?.id ?? "new"}`}>{t("employeeReg.fPhone")}</Label><Input id={`employee-phone-${employee?.id ?? "new"}`} name="phone" defaultValue={employee?.phone ?? ""} dir="ltr" inputMode="tel" /></div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor={`employee-photo-${employee?.id ?? "new"}`}>{t("employeeReg.fPhotoUrl")}</Label>
+              <div className="flex items-center gap-3">
+                {photo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={photo || "/placeholder.svg"} alt={t("employeeReg.fPhotoUrl")} className="size-12 rounded-full border border-border object-cover" />
+                ) : (
+                  <span className="flex size-12 items-center justify-center rounded-full border border-dashed border-border text-muted-foreground"><UserRound className="size-5" /></span>
+                )}
+                <div className="flex flex-col gap-1">
+                  <Input id={`employee-photo-${employee?.id ?? "new"}`} type="file" accept="image/*" onChange={onPhotoChange} className="text-xs" />
+                  {photo && <button type="button" onClick={() => setPhoto("")} className="text-start text-xs text-destructive">{t("employeeReg.fPhotoRemove")}</button>}
+                </div>
+              </div>
+              <span className="text-xs text-muted-foreground">{t("employeeReg.fPhotoHint")}</span>
+            </div>
           </div>
           <div className="flex items-center justify-between rounded-lg border border-border p-3">
             <div className="flex flex-col gap-1"><Label htmlFor={`employee-active-${employee?.id ?? "new"}`}>{t("employeeReg.fStatus")}</Label><span className="text-sm text-muted-foreground">{t("employeeReg.activeHint")}</span></div>

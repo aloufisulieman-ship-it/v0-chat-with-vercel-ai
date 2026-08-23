@@ -581,6 +581,8 @@ function employeeValues(formData: FormData) {
     profileStatus: designation ? "complete" : "incomplete",
     cardCode: str(formData.get("cardCode")).trim(),
     uniformNumber: str(formData.get("uniformNumber")).trim(),
+    phone: str(formData.get("phone")).trim(),
+    photoUrl: str(formData.get("photoUrl")).trim(),
     active: formData.get("active") !== "false",
     updatedAt: new Date(),
   }
