@@ -217,6 +217,9 @@ export const employee = pgTable("employees", {
   nationality: text("nationality").notNull().default(""),
   profileStatus: text("profile_status").notNull().default("complete"),
   cardCode: text("card_code").default(""),
+  // الرقم التعريفي المطرّز على ظهر زيّ الموظف (تحت شعار MHS) — مرجع هوية الموظف عند
+  // رصد المخالفات. يُدخله المفتش يدوياً في المخالفة فيربطها النظام تلقائياً بملف الموظف.
+  uniformNumber: text("uniform_number").notNull().default(""),
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),

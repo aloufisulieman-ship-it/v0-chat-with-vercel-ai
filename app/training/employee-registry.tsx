@@ -23,6 +23,7 @@ export type EmployeeRecord = {
   nationality: string
   profileStatus: string
   cardCode: string | null
+  uniformNumber: string | null
   active: boolean
 }
 
@@ -64,6 +65,7 @@ function EmployeeDialog({ employee }: { employee?: EmployeeRecord }) {
             <div className="flex flex-col gap-2"><Label htmlFor={`employee-company-${employee?.id ?? "new"}`}>{t("employeeReg.fCompany")}</Label><Input id={`employee-company-${employee?.id ?? "new"}`} name="company" defaultValue={employee?.company || "MHS"} /></div>
             <div className="flex flex-col gap-2"><Label htmlFor={`employee-nationality-${employee?.id ?? "new"}`}>{t("employeeReg.fNationality")}</Label><Input id={`employee-nationality-${employee?.id ?? "new"}`} name="nationality" defaultValue={employee?.nationality} /></div>
             <div className="flex flex-col gap-2"><Label htmlFor={`employee-card-${employee?.id ?? "new"}`}>{t("employeeReg.fCardCode")}</Label><Input id={`employee-card-${employee?.id ?? "new"}`} name="cardCode" defaultValue={employee?.cardCode ?? ""} /></div>
+            <div className="flex flex-col gap-2 sm:col-span-2"><Label htmlFor={`employee-uniform-${employee?.id ?? "new"}`}>{t("employeeReg.fUniformNumber")}</Label><Input id={`employee-uniform-${employee?.id ?? "new"}`} name="uniformNumber" defaultValue={employee?.uniformNumber ?? ""} placeholder={t("employeeReg.fUniformPlaceholder")} dir="ltr" inputMode="numeric" /><span className="text-xs text-muted-foreground">{t("employeeReg.fUniformHint")}</span></div>
           </div>
           <div className="flex items-center justify-between rounded-lg border border-border p-3">
             <div className="flex flex-col gap-1"><Label htmlFor={`employee-active-${employee?.id ?? "new"}`}>{t("employeeReg.fStatus")}</Label><span className="text-sm text-muted-foreground">{t("employeeReg.activeHint")}</span></div>
@@ -102,12 +104,12 @@ export function EmployeeRegistry({ employees }: { employees: EmployeeRecord[] })
       </div>
       <div className="overflow-hidden rounded-lg border border-border">
         <Table>
-          <TableHeader><TableRow><TableHead>{t("employeeReg.colEmployeeId")}</TableHead><TableHead>{t("employeeReg.colName")}</TableHead><TableHead>{t("employeeReg.colDesignation")}</TableHead><TableHead>{t("employeeReg.colDepartment")}</TableHead><TableHead>{t("employeeReg.colCompany")}</TableHead><TableHead>{t("employeeReg.colProfileStatus")}</TableHead><TableHead>{t("employeeReg.colStatus")}</TableHead><TableHead className="text-end">{t("employeeReg.colActions")}</TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead>{t("employeeReg.colEmployeeId")}</TableHead><TableHead>{t("employeeReg.colName")}</TableHead><TableHead>{t("employeeReg.colUniform")}</TableHead><TableHead>{t("employeeReg.colDesignation")}</TableHead><TableHead>{t("employeeReg.colDepartment")}</TableHead><TableHead>{t("employeeReg.colCompany")}</TableHead><TableHead>{t("employeeReg.colProfileStatus")}</TableHead><TableHead>{t("employeeReg.colStatus")}</TableHead><TableHead className="text-end">{t("employeeReg.colActions")}</TableHead></TableRow></TableHeader>
           <TableBody>
             {employees.length === 0 ? (
-              <TableRow><TableCell colSpan={8} className="h-32 text-center"><div className="flex flex-col items-center gap-2 text-muted-foreground"><UserRound className="size-6" /><span>{t("employeeReg.empty")}</span></div></TableCell></TableRow>
+              <TableRow><TableCell colSpan={9} className="h-32 text-center"><div className="flex flex-col items-center gap-2 text-muted-foreground"><UserRound className="size-6" /><span>{t("employeeReg.empty")}</span></div></TableCell></TableRow>
             ) : employees.map((employee) => (
-              <TableRow key={employee.id}><TableCell dir="ltr" className="font-mono text-xs">{employee.employeeId}</TableCell><TableCell className="font-medium">{employee.name}</TableCell><TableCell>{employee.designation || "-"}</TableCell><TableCell>{employee.department || "-"}</TableCell><TableCell>{employee.company || "MHS"}</TableCell><TableCell><Badge variant={employee.profileStatus === "complete" ? "outline" : "destructive"}>{employee.profileStatus === "complete" ? t("employeeReg.statusComplete") : t("employeeReg.statusIncomplete")}</Badge></TableCell><TableCell><Badge variant={employee.active ? "default" : "secondary"}>{employee.active ? t("employeeReg.statusActive") : t("employeeReg.statusInactive")}</Badge></TableCell><TableCell><div className="flex justify-end gap-1"><EmployeeDialog employee={employee} /><DeleteEmployeeButton employee={employee} /></div></TableCell></TableRow>
+              <TableRow key={employee.id}><TableCell dir="ltr" className="font-mono text-xs">{employee.employeeId}</TableCell><TableCell className="font-medium">{employee.name}</TableCell><TableCell dir="ltr" className="font-mono text-xs">{employee.uniformNumber ? <Badge variant="outline" className="font-mono">{employee.uniformNumber}</Badge> : <span className="text-muted-foreground">-</span>}</TableCell><TableCell>{employee.designation || "-"}</TableCell><TableCell>{employee.department || "-"}</TableCell><TableCell>{employee.company || "MHS"}</TableCell><TableCell><Badge variant={employee.profileStatus === "complete" ? "outline" : "destructive"}>{employee.profileStatus === "complete" ? t("employeeReg.statusComplete") : t("employeeReg.statusIncomplete")}</Badge></TableCell><TableCell><Badge variant={employee.active ? "default" : "secondary"}>{employee.active ? t("employeeReg.statusActive") : t("employeeReg.statusInactive")}</Badge></TableCell><TableCell><div className="flex justify-end gap-1"><EmployeeDialog employee={employee} /><DeleteEmployeeButton employee={employee} /></div></TableCell></TableRow>
             ))}
           </TableBody>
         </Table>
