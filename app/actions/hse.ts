@@ -580,6 +580,9 @@ function employeeValues(formData: FormData) {
     nationality: str(formData.get("nationality")).trim(),
     profileStatus: designation ? "complete" : "incomplete",
     cardCode: str(formData.get("cardCode")).trim(),
+    uniformNumber: str(formData.get("uniformNumber")).trim(),
+    phone: str(formData.get("phone")).trim(),
+    photoUrl: str(formData.get("photoUrl")).trim(),
     active: formData.get("active") !== "false",
     updatedAt: new Date(),
   }
@@ -1264,7 +1267,7 @@ export async function deleteObservation(id: number) {
     .limit(1)
   if (!rows[0]) throw new Error("الملاحظة غير موجودة")
   const canDelete = isManager || rows[0].userId === userId
-  if (!canDelete) throw new Error("غير مصرح لك بالحذف")
+  if (!canDelete) throw new Error("غير مص��ح لك بالحذف")
   await db.delete(observation).where(and(eq(observation.id, id), eq(observation.organizationId, organizationId)))
   revalidatePath("/")
   revalidatePath("/reports")

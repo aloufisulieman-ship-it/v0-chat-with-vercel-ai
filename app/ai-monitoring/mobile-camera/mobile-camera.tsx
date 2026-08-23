@@ -35,6 +35,7 @@ import { RECOGNITION_MODES, type RecognitionMode } from "@/lib/ai-recognition"
 import { useWebrtcBroadcaster } from "./use-webrtc-broadcaster"
 import { useI18n } from "@/lib/i18n/client"
 import { detectionTypeLabel, severityLabel } from "@/lib/i18n/labels"
+import { equipmentTypeLabels } from "@/lib/labels"
 
 // البث الحي الفعلي يذهب الآن عبر WebRTC (ندّ لِند) مباشرةً، فلم تعد لقطات Blob
 // تحمل الفيديو الحي. دورها اقتصر على: (1) صورة مصغّرة للجدار/اللوحة عندما لا يكون
@@ -49,8 +50,23 @@ const CONNECTED_THRESHOLD_MS = 6000
 const MAX_WIDTH = 640
 const JPEG_QUALITY = 0.45
 
-type PlateResult = { value: string; confidence: number }
-type EmployeeResult = { value: string; confidence: number; matched: boolean; name: string; department: string }
+type PlateResult = {
+  value: string
+  confidence: number
+  matched: boolean
+  equipmentType: string
+  ownerCompany: string
+  driverName: string
+}
+type EmployeeResult = {
+  value: string
+  confidence: number
+  matched: boolean
+  name: string
+  department: string
+  phone: string
+  photoUrl: string
+}
 type TuktukResult = {
   value: string
   confidence: number
@@ -60,10 +76,16 @@ type TuktukResult = {
 }
 type PrefillResult = {
   source: "employee_id" | "tuktuk" | "plate"
+  matched?: boolean
   employeeName?: string
   employeeNo?: string
+  phone?: string
+  photoUrl?: string
+  department?: string
   driverName?: string
   vehicleNo?: string
+  ownerCompany?: string
+  equipmentType?: string
 }
 
 type LastResult = {
@@ -331,7 +353,7 @@ export function MobileCamera() {
         const idx = Math.max(0, ids.indexOf(currentDeviceIdRef.current))
         videoConstraints.deviceId = { exact: ids[(idx + 1) % ids.length] }
       } else {
-        // جهاز واحد معروف: بدّل الاتجاه (أمامي/خلفي) كحل بديل.
+        // جهاز واحد معروف: بدّل الاتجاه (��مامي/خلفي) كحل بديل.
         videoConstraints.facingMode = {
           ideal: currentFacingRef.current === "user" ? "environment" : "user",
         }
@@ -481,7 +503,14 @@ export function MobileCamera() {
           count: data.violations?.count ?? 0,
           detections: data.violations?.detections ?? [],
           plate: data.plate
-            ? { value: data.plate.value, confidence: data.plate.confidence }
+            ? {
+                value: data.plate.value,
+                confidence: data.plate.confidence,
+                matched: Boolean(data.plate.matched),
+                equipmentType: data.plate.equipmentType ?? "",
+                ownerCompany: data.plate.ownerCompany ?? "",
+                driverName: data.plate.driverName ?? "",
+              }
             : undefined,
           employee: data.employee
             ? {
@@ -490,6 +519,8 @@ export function MobileCamera() {
                 matched: Boolean(data.employee.matched),
                 name: data.employee.name ?? "",
                 department: data.employee.department ?? "",
+                phone: data.employee.phone ?? "",
+                photoUrl: data.employee.photoUrl ?? "",
               }
             : undefined,
           tuktuk: data.tuktuk
@@ -701,11 +732,11 @@ export function MobileCamera() {
         const blob = new Blob(chunksRef.current, { type: baseMime })
         chunksRef.current = []
         recorderRef.current = null
-        // التقط المعاينة من الفيديو الحي قبل تحرير الكاميرا.
+        // التقط المعاينة من الفيديو ��لحي قبل تحرير الكاميرا.
         const poster = capturePosterDataUrl()
         if (blob.size > 0) void uploadRecording(blob, durationSeconds, poster)
         else setRecordError(t("aiMonitoring.cam.recordEmpty"))
-        // حرّر الكاميرا إن لم يكن البث الحي شغّالاً.
+        // حرّر الكام��را إن لم يكن البث الحي شغّالاً.
         releaseStreamIfIdle(uploadIntervalRef.current !== null, false)
       }
       recorder.start(1000) // تجميع البيانات كل ثانية
@@ -1138,7 +1169,7 @@ export function MobileCamera() {
         </Card>
       </div>
 
-      {/* آخر نتيجة تحليل */}
+      {/* آخر نتيجة ��حليل */}
       <Card className="flex flex-col gap-3 p-4">
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-foreground">{t("aiMonitoring.cam.lastAnalysis")}</span>
@@ -1173,33 +1204,61 @@ export function MobileCamera() {
           <div className="flex flex-col gap-2">
             {lastResult.plate && (
               <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
-                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <Car className="size-4 text-muted-foreground" />
-                  {t("aiMonitoring.cam.mode_plate")}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <Car className="size-4 text-muted-foreground" />
+                    <span className="font-mono font-semibold" dir="ltr">
+                      {lastResult.plate.value}
+                    </span>
+                  </div>
+                  <div className={cn("text-xs", lastResult.plate.matched ? "text-primary" : "text-muted-foreground")}>
+                    {lastResult.plate.matched
+                      ? [
+                          lastResult.plate.equipmentType && equipmentTypeLabels[lastResult.plate.equipmentType],
+                          lastResult.plate.ownerCompany,
+                          lastResult.plate.driverName,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")
+                      : t("aiMonitoring.cam.noEquipmentMatch")}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-sm font-semibold text-foreground" dir="ltr">
-                    {lastResult.plate.value}
-                  </span>
-                  <span className="font-mono text-xs text-muted-foreground" dir="ltr">
-                    {lastResult.plate.confidence}%
-                  </span>
-                </div>
+                <span className="font-mono text-xs text-muted-foreground" dir="ltr">
+                  {lastResult.plate.confidence}%
+                </span>
               </div>
             )}
             {lastResult.employee && (
               <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                    <IdCard className="size-4 text-muted-foreground" />
-                    <span className="font-mono" dir="ltr">
-                      {lastResult.employee.value}
+                <div className="flex min-w-0 items-center gap-3">
+                  {lastResult.employee.matched && lastResult.employee.photoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={lastResult.employee.photoUrl || "/placeholder.svg"}
+                      alt={lastResult.employee.name}
+                      className="size-10 shrink-0 rounded-full border border-border object-cover"
+                    />
+                  ) : (
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-dashed border-border text-muted-foreground">
+                      <IdCard className="size-4" />
                     </span>
-                  </div>
-                  <div className={cn("text-xs", lastResult.employee.matched ? "text-primary" : "text-muted-foreground")}>
-                    {lastResult.employee.matched
-                      ? `${lastResult.employee.name}${lastResult.employee.department ? ` · ${lastResult.employee.department}` : ""}`
-                      : t("aiMonitoring.cam.noEmployeeMatch")}
+                  )}
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                      <span className="font-mono" dir="ltr">
+                        {lastResult.employee.value}
+                      </span>
+                    </div>
+                    <div className={cn("text-xs", lastResult.employee.matched ? "text-primary" : "text-muted-foreground")}>
+                      {lastResult.employee.matched
+                        ? `${lastResult.employee.name}${lastResult.employee.department ? ` · ${lastResult.employee.department}` : ""}`
+                        : t("aiMonitoring.cam.noEmployeeMatch")}
+                    </div>
+                    {lastResult.employee.matched && lastResult.employee.phone && (
+                      <div className="font-mono text-xs text-muted-foreground" dir="ltr">
+                        {lastResult.employee.phone}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <span className="font-mono text-xs text-muted-foreground" dir="ltr">

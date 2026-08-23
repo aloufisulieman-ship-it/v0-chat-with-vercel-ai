@@ -11,6 +11,7 @@ import {
   saveEmployeeIdRead,
   saveTuktukRead,
   createExpiredPermitAlert,
+  getSafetyRulesForLocation,
 } from "@/app/actions/ai-recognition"
 import {
   detectionTypeOptions,
@@ -118,6 +119,20 @@ export async function POST(req: Request) {
     }
     const schema = z.object(shape)
 
+    // قواعد السلامة الخاصة بموقع الكاميرا (إن وُجدت) — تُمرَّر للنموذج ليحكم بدقة
+    // على السلوك الظاهر في الإطار حسب قوانين هذه المنطقة تحديداً.
+    const currentUser = await getCurrentUser()
+    const orgId = currentUser?.organizationId ?? ""
+    let locationRulesBlock = ""
+    if (modes.includes("violations") && orgId) {
+      const locationRules = await getSafetyRulesForLocation(orgId, (body.cameraLocation || "").toString())
+      if (locationRules.trim()) {
+        locationRulesBlock =
+          "\n\nقواعد السلامة المعتمدة في هذا الموقع (طبّقها بدقة عند الحكم على المخالفات):\n" +
+          locationRules
+      }
+    }
+
     const { object } = await generateObject({
       model: "anthropic/claude-sonnet-4.6",
       schema,
@@ -125,6 +140,7 @@ export async function POST(req: Request) {
         "أنت نظام رؤية حاسوبية لمراقبة السلامة في ساحات الرافعات الشوكية والمستودعات. " +
         "حلّل الإطار القادم من كاميرا مراقبة ونفّذ المهام المطلوبة التالية فقط:\n" +
         instructions.join("\n") +
+        locationRulesBlock +
         "\n\nكن دقيقاً وواقعياً في نسبة الثقة، ولا تخترع قيماً غير مؤكدة. " +
         "أعد null لأي حقل هوية لا يظهر بوضوح، وقائمة فارغة إذا لم تُرصد مخالفات.",
       messages: [
@@ -147,13 +163,23 @@ export async function POST(req: Request) {
 
     const result: {
       violations?: { count: number; detections: unknown[]; detectionDbId?: number }
-      plate?: { value: string; confidence: number; readId: number }
+      plate?: {
+        value: string
+        confidence: number
+        matched: boolean
+        equipmentType: string
+        ownerCompany: string
+        driverName: string
+        readId: number
+      }
       employee?: {
         value: string
         confidence: number
         matched: boolean
         name: string
         department: string
+        phone: string
+        photoUrl: string
         readId: number
       }
       tuktuk?: {
@@ -164,7 +190,19 @@ export async function POST(req: Request) {
         documentNo: string
         readId: number
       }
-      prefill?: { source: "employee_id" | "tuktuk" | "plate"; employeeName?: string; employeeNo?: string; driverName?: string; vehicleNo?: string }
+      prefill?: {
+        source: "employee_id" | "tuktuk" | "plate"
+        matched: boolean
+        employeeName?: string
+        employeeNo?: string
+        phone?: string
+        photoUrl?: string
+        department?: string
+        driverName?: string
+        vehicleNo?: string
+        ownerCompany?: string
+        equipmentType?: string
+      }
     } = {}
 
     // ---- وضع المخالفات ----
@@ -203,24 +241,41 @@ export async function POST(req: Request) {
     }
 
     // ---- وضع اللوحات ----
+    let equipmentMatch: { plate: string; equipmentType: string; ownerCompany: string; driverName: string } | null = null
     if (modes.includes("plate") && obj.plate) {
       const p = obj.plate as { plateNumber?: string; confidence?: number }
       const value = (p.plateNumber || "").trim()
       const confidence = normalizeConfidence(p.confidence)
       if (value && confidence >= MIN_STORE_CONFIDENCE) {
-        const { id } = await savePlateRead({
+        const { id, match } = await savePlateRead({
           plateNumber: value,
           confidence,
           imageUrl: image,
           cameraName: inspectorName,
           location: cameraLocation,
         })
-        result.plate = { value, confidence, readId: id }
+        result.plate = {
+          value,
+          confidence,
+          matched: Boolean(match),
+          equipmentType: match?.equipmentType || "",
+          ownerCompany: match?.ownerCompany || "",
+          driverName: match?.driverName || "",
+          readId: id,
+        }
+        if (match && confidence >= HIGH_CONFIDENCE) {
+          equipmentMatch = {
+            plate: match.plateNumber || value,
+            equipmentType: match.equipmentType,
+            ownerCompany: match.ownerCompany,
+            driverName: match.driverName,
+          }
+        }
       }
     }
 
     // ---- وضع الرقم الوظيفي ----
-    let employeeMatch: { name: string; employeeNo: string } | null = null
+    let employeeMatch: { name: string; employeeNo: string; department: string; phone: string; photoUrl: string } | null = null
     if (modes.includes("employee_id") && obj.employeeId) {
       const e = obj.employeeId as { employeeNumber?: string; confidence?: number }
       const value = (e.employeeNumber || "").trim()
@@ -239,10 +294,18 @@ export async function POST(req: Request) {
           matched: Boolean(match),
           name: match?.name || "",
           department: match?.department || "",
+          phone: match?.phone || "",
+          photoUrl: match?.photoUrl || "",
           readId: id,
         }
         if (match && confidence >= HIGH_CONFIDENCE) {
-          employeeMatch = { name: match.name, employeeNo: match.employeeId }
+          employeeMatch = {
+            name: match.name,
+            employeeNo: match.employeeId,
+            department: match.department || "",
+            phone: match.phone || "",
+            photoUrl: match.photoUrl || "",
+          }
         }
       }
     }
@@ -289,25 +352,46 @@ export async function POST(req: Request) {
       }
     }
 
-    // ---- الوضع المدمج: التعبئة التلقائية عند رصد مخالفة + مطابقة هوية في نفس الإطار ----
-    if (detectionRowId && (employeeMatch || tuktukMatch || result.plate)) {
+    // ---- الوضع المدمج: التعبئة التلقائية عند رصد مخالفة + هوية في نفس الإطار ----
+    // الأولوية: موظف مطابق ثم توك توك مطابق ثم معدة مطابقة باللوحة، وإلا احتياطياً
+    // نعبّئ رقم اللوحة/الرقم الوظيفي المقروء حتى دون مطابقة سجل (matched=false).
+    if (detectionRowId && (employeeMatch || tuktukMatch || result.plate || result.employee)) {
       let identityNote = ""
       if (employeeMatch) {
-        result.prefill = { source: "employee_id", employeeName: employeeMatch.name, employeeNo: employeeMatch.employeeNo }
+        result.prefill = {
+          source: "employee_id",
+          matched: true,
+          employeeName: employeeMatch.name,
+          employeeNo: employeeMatch.employeeNo,
+          department: employeeMatch.department,
+          phone: employeeMatch.phone,
+          photoUrl: employeeMatch.photoUrl,
+        }
         identityNote = `الموظف المطابق: ${employeeMatch.name} (${employeeMatch.employeeNo})`
       } else if (tuktukMatch) {
-        result.prefill = { source: "tuktuk", driverName: tuktukMatch.driverName, vehicleNo: tuktukMatch.vehicleNo }
+        result.prefill = { source: "tuktuk", matched: true, driverName: tuktukMatch.driverName, vehicleNo: tuktukMatch.vehicleNo }
         identityNote = `سائق التوك توك المطابق: ${tuktukMatch.driverName} (توك توك ${tuktukMatch.vehicleNo})`
+      } else if (equipmentMatch) {
+        result.prefill = {
+          source: "plate",
+          matched: true,
+          vehicleNo: equipmentMatch.plate,
+          ownerCompany: equipmentMatch.ownerCompany,
+          driverName: equipmentMatch.driverName,
+          equipmentType: equipmentMatch.equipmentType,
+        }
+        identityNote = `معدة مطابقة: لوحة ${equipmentMatch.plate}${equipmentMatch.driverName ? ` — السائق ${equipmentMatch.driverName}` : ""}`
       } else if (result.plate) {
-        result.prefill = { source: "plate", vehicleNo: result.plate.value }
-        identityNote = `لوحة المركبة: ${result.plate.value}`
+        result.prefill = { source: "plate", matched: false, vehicleNo: result.plate.value }
+        identityNote = `لوحة مقروءة (غير مطابقة للسجل): ${result.plate.value}`
+      } else if (result.employee) {
+        result.prefill = { source: "employee_id", matched: false, employeeNo: result.employee.value }
+        identityNote = `رقم وظيفي مقروء (غير مطابق للسجل): ${result.employee.value}`
       }
       // حفظ الهوية المطابقة ضمن ملاحظات الاكتشاف ليجدها المراجع عند تحويله إلى مخالفة.
       if (identityNote) {
         try {
           // نقيّد تحديث الملاحظة بمؤسسة المتصل حتى لا يُعدَّل اكتشاف مؤسسة أخرى.
-          const current = await getCurrentUser()
-          const orgId = current?.organizationId ?? ""
           const scoped = and(eq(aiDetection.id, detectionRowId), eq(aiDetection.organizationId, orgId))
           const rows = await db
             .select({ notes: aiDetection.notes })

@@ -217,6 +217,13 @@ export const employee = pgTable("employees", {
   nationality: text("nationality").notNull().default(""),
   profileStatus: text("profile_status").notNull().default("complete"),
   cardCode: text("card_code").default(""),
+  // الرقم التعريفي المطرّز على ظهر زيّ الموظف (تحت شعار MHS) — مرجع هوية الموظف عند
+  // رصد المخالفات. يُدخله المفتش يدوياً في المخالفة فيربطها النظام تلقائياً بملف الموظف.
+  uniformNumber: text("uniform_number").notNull().default(""),
+  // رقم هاتف الموظف — يظهر تلقائياً في نموذج المخالفة عند التعرّف على هويته.
+  phone: text("phone").notNull().default(""),
+  // الصورة الشخصية للموظف (data URL أو رابط Blob) — تظهر تلقائياً عند التعرّف.
+  photoUrl: text("photo_url").notNull().default(""),
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
@@ -555,6 +562,58 @@ export const employeeIdRead = pgTable("employee_id_reads", {
   location: text("location").notNull().default(""),
   capturedAt: timestamp("captured_at").notNull().defaultNow(),
 })
+
+// ---------- سجل المعدات المرجعي (رافعات شوكية / توك توك / مركبات / رافعات) ----------
+// المرجع الذي تُطابَق ضده لوحات المركبات المقروءة تلقائياً من الكاميرا. المُعرّف
+// الأساسي هو لوحة المركبة الرسمية (plateNumber). عند قراءة لوحة ومطابقتها هنا،
+// يعرض النظام تلقائياً نوع المعدة والشركة المسؤولة واسم السائق المخوّل في المخالفة.
+export const equipment = pgTable(
+  "equipment",
+  {
+    id: serial("id").primaryKey(),
+    userId: text("userId").notNull(),
+    organizationId: text("organizationId").notNull(),
+    // لوحة المركبة الرسمية — المُعرّف المستخدم للمطابقة مع القراءة البصرية.
+    plateNumber: text("plate_number").notNull().default(""),
+    // نوع المعدة: forklift | tuktuk | truck | crane | other.
+    equipmentType: text("equipment_type").notNull().default("forklift"),
+    // الشركة المالكة أو الجهة المسؤولة عن المعدة.
+    ownerCompany: text("owner_company").notNull().default(""),
+    // اسم السائق/المستخدم المخوّل بتشغيل المعدة.
+    driverName: text("driver_name").notNull().default(""),
+    // رقم داخلي/كود أصل اختياري (غير مستخدم في المطابقة، للعرض فقط).
+    internalCode: text("internal_code").notNull().default(""),
+    active: boolean("active").notNull().default(true),
+    notes: text("notes").notNull().default(""),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (t) => ({
+    plateIdx: index("equipment_plate_idx").on(t.organizationId, t.plateNumber),
+  }),
+)
+
+// ---------- قواعد السلامة حسب الموقع ----------
+// مجموعة قواعد سلامة قابلة للتحرير لكل موقع/منطقة كاميرا. تُمرَّر إلى نموذج الرؤية
+// الحاسوبية لتحكيم السلوك الظاهر في الإطار بدقة (لأن بعض القوانين تختلف حسب المنطقة).
+export const safetyRule = pgTable(
+  "safety_rules",
+  {
+    id: serial("id").primaryKey(),
+    userId: text("userId").notNull(),
+    organizationId: text("organizationId").notNull(),
+    // اسم الموقع/المنطقة كما يظهر في cameraLocation عند بدء جلسة الكاميرا.
+    location: text("location").notNull().default(""),
+    // نص القواعد (سطر لكل قاعدة) الخاص بهذا الموقع.
+    rules: text("rules").notNull().default(""),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (t) => ({
+    locationIdx: index("safety_rules_location_idx").on(t.organizationId, t.location),
+  }),
+)
 
 // قراءات رقم التوك توك (الوضع 4).
 // permitStatus: valid | expired | not_found — حالة مطابقة تصريح القيادة.

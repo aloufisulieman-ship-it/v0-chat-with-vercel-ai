@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useTransition, useEffect } from "react"
-import { FileWarning, PenLine, X, ChevronRight, ChevronLeft, Camera, FileText, Upload } from "lucide-react"
+import { FileWarning, PenLine, X, ChevronRight, ChevronLeft, Camera, FileText, Upload, BadgeCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -190,6 +190,29 @@ export function ViolationFormDialog({
   const [violatorSignature, setViolatorSignature] = useState("")
   const [managerSignature, setManagerSignature] = useState("")
 
+  // ربط سريع برقم اليونيفورم: يُدخل المفتش الرقم المطرّز على ظهر زيّ الموظف، فيبحث
+  // النظام في السجل ويربط المخالفة تلقائياً بملف الموظف صاحب هذا الرقم.
+  const [uniformLookup, setUniformLookup] = useState("")
+  const uniformMatch =
+    uniformLookup.trim() !== ""
+      ? employees.find((e) => (e.uniformNumber ?? "").trim() === uniformLookup.trim())
+      : undefined
+
+  function applyUniformLookup(value: string) {
+    setUniformLookup(value)
+    const match = employees.find((e) => (e.uniformNumber ?? "").trim() === value.trim())
+    if (match) {
+      setForm((current) => ({
+        ...current,
+        employeeRefId: String(match.id),
+        employeeName: match.name,
+        employeeNo: match.employeeId,
+        nationality: match.nationality,
+        companyName: match.company,
+      }))
+    }
+  }
+
   // تحويل رابط لقطة (Blob http) إلى data URL مضغوط لتضمينه ضمن أدلة المخالفة.
   useEffect(() => {
     if (!initialEvidence || isDataUrl(initialEvidence)) return
@@ -222,6 +245,7 @@ export function ViolationFormDialog({
     })
     setImages(isDataUrl(initialEvidence) ? [initialEvidence as string] : [])
     setManualDocs([])
+    setUniformLookup("")
     setEditorSignature("")
     setViolatorSignature("")
     setManagerSignature("")
@@ -379,6 +403,42 @@ export function ViolationFormDialog({
                 <option value="">{t("violationForm.manualEntry")}</option>
                 {employees.filter((item) => item.active).map((employee) => <option key={employee.id} value={employee.id}>{employee.name} — {employee.employeeId}</option>)}
               </select>
+            </div>
+            <div className="flex flex-col gap-1.5 sm:col-span-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 p-3">
+              <Label htmlFor="violation-uniform-lookup" className="flex items-center gap-1.5">
+                <BadgeCheck className="size-4 text-primary" /> {t("violationForm.uniformLookup")}
+              </Label>
+              <Input
+                id="violation-uniform-lookup"
+                value={uniformLookup}
+                onChange={(e) => applyUniformLookup(e.target.value)}
+                placeholder={t("violationForm.uniformPlaceholder")}
+                dir="ltr"
+                inputMode="numeric"
+                className="max-w-40 font-mono"
+              />
+              {uniformLookup.trim() !== "" && (
+                uniformMatch ? (
+                  <div className="flex items-center gap-3 rounded-md border border-primary/30 bg-background p-2">
+                    {uniformMatch.photoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={uniformMatch.photoUrl || "/placeholder.svg"} alt={uniformMatch.name} className="size-10 shrink-0 rounded-full border border-border object-cover" />
+                    ) : (
+                      <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-dashed border-border text-muted-foreground"><BadgeCheck className="size-4" /></span>
+                    )}
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-1.5 text-xs font-medium text-primary">
+                        <BadgeCheck className="size-3.5 shrink-0" />
+                        {t("violationForm.uniformMatched").replace("{name}", uniformMatch.name).replace("{id}", uniformMatch.employeeId)}
+                      </p>
+                      {uniformMatch.phone && <p className="font-mono text-xs text-muted-foreground" dir="ltr">{uniformMatch.phone}</p>}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-destructive">{t("violationForm.uniformNoMatch")}</p>
+                )
+              )}
+              <span className="text-xs text-muted-foreground">{t("violationForm.uniformHint")}</span>
             </div>
             <div className="flex flex-col gap-1">
               <Label>{t("violationForm.employeeName")} <span className="text-destructive">*</span></Label>

@@ -6,6 +6,8 @@ import {
   employeeIdRead,
   tuktukRead,
   employee,
+  equipment,
+  safetyRule,
   permit,
   user,
   aiMonitoringNotification,
@@ -24,8 +26,12 @@ export type EmployeeMatch = {
   employeeId: string
   name: string
   department: string
+  phone: string
+  photoUrl: string
 }
 
+// المطابقة تجري على الرقم الوظيفي، أو رقم البطاقة/الكود، أو الرقم المطرّز على اليونيفورم
+// (أياً منها يطابق القراءة البصرية). uniformNumber هو المرجع الأساسي لرصد المخالفات.
 export async function lookupEmployeeByNumber(organizationId: string, numberRaw: string): Promise<EmployeeMatch | null> {
   const target = normalizeCode(numberRaw)
   if (!target) return null
@@ -36,14 +42,87 @@ export async function lookupEmployeeByNumber(organizationId: string, numberRaw: 
       name: employee.name,
       department: employee.department,
       cardCode: employee.cardCode,
+      uniformNumber: employee.uniformNumber,
+      phone: employee.phone,
+      photoUrl: employee.photoUrl,
     })
     .from(employee)
     .where(eq(employee.organizationId, organizationId))
   const hit = rows.find(
-    (r) => normalizeCode(r.employeeId) === target || normalizeCode(r.cardCode || "") === target,
+    (r) =>
+      normalizeCode(r.uniformNumber || "") === target ||
+      normalizeCode(r.employeeId) === target ||
+      normalizeCode(r.cardCode || "") === target,
   )
   if (!hit) return null
-  return { id: hit.id, employeeId: hit.employeeId, name: hit.name, department: hit.department }
+  return {
+    id: hit.id,
+    employeeId: hit.employeeId,
+    name: hit.name,
+    department: hit.department,
+    phone: hit.phone || "",
+    photoUrl: hit.photoUrl || "",
+  }
+}
+
+/* ---------------- مطابقة سجل المعدات (عبر لوحة المركبة الرسمية) ---------------- */
+
+export type EquipmentMatch = {
+  id: number
+  plateNumber: string
+  equipmentType: string
+  ownerCompany: string
+  driverName: string
+  internalCode: string
+}
+
+export async function lookupEquipmentByPlate(organizationId: string, plateRaw: string): Promise<EquipmentMatch | null> {
+  const target = normalizeCode(plateRaw)
+  if (!target) return null
+  const rows = await db
+    .select({
+      id: equipment.id,
+      plateNumber: equipment.plateNumber,
+      equipmentType: equipment.equipmentType,
+      ownerCompany: equipment.ownerCompany,
+      driverName: equipment.driverName,
+      internalCode: equipment.internalCode,
+      active: equipment.active,
+    })
+    .from(equipment)
+    .where(eq(equipment.organizationId, organizationId))
+  const hit = rows.find(
+    (r) => normalizeCode(r.plateNumber) === target || normalizeCode(r.internalCode || "") === target,
+  )
+  if (!hit) return null
+  return {
+    id: hit.id,
+    plateNumber: hit.plateNumber,
+    equipmentType: hit.equipmentType,
+    ownerCompany: hit.ownerCompany || "",
+    driverName: hit.driverName || "",
+    internalCode: hit.internalCode || "",
+  }
+}
+
+/* ---------------- قواعد السلامة الخاصة بموقع الكاميرا ---------------- */
+// تُرجع نص القواعد الفعّالة المطابقة لاسم الموقع (تطابق جزئي غير حسّاس لحالة الأحرف)
+// لتُمرَّر إلى نموذج الرؤية الحاسوبية عند تحكيم السلوك في الإطار.
+export async function getSafetyRulesForLocation(organizationId: string, locationRaw: string): Promise<string> {
+  const loc = (locationRaw || "").trim().toLowerCase()
+  if (!loc) return ""
+  const rows = await db
+    .select({ location: safetyRule.location, rules: safetyRule.rules, active: safetyRule.active })
+    .from(safetyRule)
+    .where(and(eq(safetyRule.organizationId, organizationId), eq(safetyRule.active, true)))
+  const matches = rows.filter((r) => {
+    const rl = (r.location || "").trim().toLowerCase()
+    return rl && (rl === loc || loc.includes(rl) || rl.includes(loc))
+  })
+  return matches
+    .map((r) => (r.rules || "").trim())
+    .filter(Boolean)
+    .join("\n")
 }
 
 export type TuktukPermitMatch = {
@@ -121,9 +200,12 @@ type BaseReadInput = {
   location?: string
 }
 
-export async function savePlateRead(input: BaseReadInput & { plateNumber: string }): Promise<{ id: number }> {
+export async function savePlateRead(
+  input: BaseReadInput & { plateNumber: string },
+): Promise<{ id: number; match: EquipmentMatch | null }> {
   await assertWritable()
   const { id: userId, organizationId } = await requireUser()
+  const match = await lookupEquipmentByPlate(organizationId, input.plateNumber)
   const [row] = await db
     .insert(plateRead)
     .values({
@@ -136,7 +218,7 @@ export async function savePlateRead(input: BaseReadInput & { plateNumber: string
       location: (input.location || "").slice(0, 200),
     })
     .returning({ id: plateRead.id })
-  return { id: row.id }
+  return { id: row.id, match }
 }
 
 export async function saveEmployeeIdRead(

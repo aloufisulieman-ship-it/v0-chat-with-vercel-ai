@@ -23,6 +23,9 @@ export type EmployeeRecord = {
   nationality: string
   profileStatus: string
   cardCode: string | null
+  uniformNumber: string | null
+  phone: string | null
+  photoUrl: string | null
   active: boolean
 }
 
@@ -32,7 +35,16 @@ function EmployeeDialog({ employee }: { employee?: EmployeeRecord }) {
   const { t, dir } = useI18n()
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(employee?.active ?? true)
+  const [photo, setPhoto] = useState(employee?.photoUrl ?? "")
   const action: EmployeeAction = employee ? updateEmployee : createEmployee
+
+  function onPhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => setPhoto(String(reader.result || ""))
+    reader.readAsDataURL(file)
+  }
   const [, formAction, pending] = useActionState(async (_: null, formData: FormData) => {
     await action(formData)
     setOpen(false)
@@ -56,6 +68,7 @@ function EmployeeDialog({ employee }: { employee?: EmployeeRecord }) {
         <form action={formAction} className="flex flex-col gap-4">
           {employee && <input type="hidden" name="id" value={employee.id} />}
           <input type="hidden" name="active" value={String(active)} />
+          <input type="hidden" name="photoUrl" value={photo} />
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2"><Label htmlFor={`employee-id-${employee?.id ?? "new"}`}>{t("employeeReg.fEmployeeId")}</Label><Input id={`employee-id-${employee?.id ?? "new"}`} name="employeeId" defaultValue={employee?.employeeId} required /></div>
             <div className="flex flex-col gap-2"><Label htmlFor={`employee-name-${employee?.id ?? "new"}`}>{t("employeeReg.fName")}</Label><Input id={`employee-name-${employee?.id ?? "new"}`} name="name" defaultValue={employee?.name} required /></div>
@@ -64,6 +77,24 @@ function EmployeeDialog({ employee }: { employee?: EmployeeRecord }) {
             <div className="flex flex-col gap-2"><Label htmlFor={`employee-company-${employee?.id ?? "new"}`}>{t("employeeReg.fCompany")}</Label><Input id={`employee-company-${employee?.id ?? "new"}`} name="company" defaultValue={employee?.company || "MHS"} /></div>
             <div className="flex flex-col gap-2"><Label htmlFor={`employee-nationality-${employee?.id ?? "new"}`}>{t("employeeReg.fNationality")}</Label><Input id={`employee-nationality-${employee?.id ?? "new"}`} name="nationality" defaultValue={employee?.nationality} /></div>
             <div className="flex flex-col gap-2"><Label htmlFor={`employee-card-${employee?.id ?? "new"}`}>{t("employeeReg.fCardCode")}</Label><Input id={`employee-card-${employee?.id ?? "new"}`} name="cardCode" defaultValue={employee?.cardCode ?? ""} /></div>
+            <div className="flex flex-col gap-2 sm:col-span-2"><Label htmlFor={`employee-uniform-${employee?.id ?? "new"}`}>{t("employeeReg.fUniformNumber")}</Label><Input id={`employee-uniform-${employee?.id ?? "new"}`} name="uniformNumber" defaultValue={employee?.uniformNumber ?? ""} placeholder={t("employeeReg.fUniformPlaceholder")} dir="ltr" inputMode="numeric" /><span className="text-xs text-muted-foreground">{t("employeeReg.fUniformHint")}</span></div>
+            <div className="flex flex-col gap-2"><Label htmlFor={`employee-phone-${employee?.id ?? "new"}`}>{t("employeeReg.fPhone")}</Label><Input id={`employee-phone-${employee?.id ?? "new"}`} name="phone" defaultValue={employee?.phone ?? ""} dir="ltr" inputMode="tel" /></div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor={`employee-photo-${employee?.id ?? "new"}`}>{t("employeeReg.fPhotoUrl")}</Label>
+              <div className="flex items-center gap-3">
+                {photo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={photo || "/placeholder.svg"} alt={t("employeeReg.fPhotoUrl")} className="size-12 rounded-full border border-border object-cover" />
+                ) : (
+                  <span className="flex size-12 items-center justify-center rounded-full border border-dashed border-border text-muted-foreground"><UserRound className="size-5" /></span>
+                )}
+                <div className="flex flex-col gap-1">
+                  <Input id={`employee-photo-${employee?.id ?? "new"}`} type="file" accept="image/*" onChange={onPhotoChange} className="text-xs" />
+                  {photo && <button type="button" onClick={() => setPhoto("")} className="text-start text-xs text-destructive">{t("employeeReg.fPhotoRemove")}</button>}
+                </div>
+              </div>
+              <span className="text-xs text-muted-foreground">{t("employeeReg.fPhotoHint")}</span>
+            </div>
           </div>
           <div className="flex items-center justify-between rounded-lg border border-border p-3">
             <div className="flex flex-col gap-1"><Label htmlFor={`employee-active-${employee?.id ?? "new"}`}>{t("employeeReg.fStatus")}</Label><span className="text-sm text-muted-foreground">{t("employeeReg.activeHint")}</span></div>
@@ -102,12 +133,12 @@ export function EmployeeRegistry({ employees }: { employees: EmployeeRecord[] })
       </div>
       <div className="overflow-hidden rounded-lg border border-border">
         <Table>
-          <TableHeader><TableRow><TableHead>{t("employeeReg.colEmployeeId")}</TableHead><TableHead>{t("employeeReg.colName")}</TableHead><TableHead>{t("employeeReg.colDesignation")}</TableHead><TableHead>{t("employeeReg.colDepartment")}</TableHead><TableHead>{t("employeeReg.colCompany")}</TableHead><TableHead>{t("employeeReg.colProfileStatus")}</TableHead><TableHead>{t("employeeReg.colStatus")}</TableHead><TableHead className="text-end">{t("employeeReg.colActions")}</TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead>{t("employeeReg.colEmployeeId")}</TableHead><TableHead>{t("employeeReg.colName")}</TableHead><TableHead>{t("employeeReg.colUniform")}</TableHead><TableHead>{t("employeeReg.colDesignation")}</TableHead><TableHead>{t("employeeReg.colDepartment")}</TableHead><TableHead>{t("employeeReg.colCompany")}</TableHead><TableHead>{t("employeeReg.colProfileStatus")}</TableHead><TableHead>{t("employeeReg.colStatus")}</TableHead><TableHead className="text-end">{t("employeeReg.colActions")}</TableHead></TableRow></TableHeader>
           <TableBody>
             {employees.length === 0 ? (
-              <TableRow><TableCell colSpan={8} className="h-32 text-center"><div className="flex flex-col items-center gap-2 text-muted-foreground"><UserRound className="size-6" /><span>{t("employeeReg.empty")}</span></div></TableCell></TableRow>
+              <TableRow><TableCell colSpan={9} className="h-32 text-center"><div className="flex flex-col items-center gap-2 text-muted-foreground"><UserRound className="size-6" /><span>{t("employeeReg.empty")}</span></div></TableCell></TableRow>
             ) : employees.map((employee) => (
-              <TableRow key={employee.id}><TableCell dir="ltr" className="font-mono text-xs">{employee.employeeId}</TableCell><TableCell className="font-medium">{employee.name}</TableCell><TableCell>{employee.designation || "-"}</TableCell><TableCell>{employee.department || "-"}</TableCell><TableCell>{employee.company || "MHS"}</TableCell><TableCell><Badge variant={employee.profileStatus === "complete" ? "outline" : "destructive"}>{employee.profileStatus === "complete" ? t("employeeReg.statusComplete") : t("employeeReg.statusIncomplete")}</Badge></TableCell><TableCell><Badge variant={employee.active ? "default" : "secondary"}>{employee.active ? t("employeeReg.statusActive") : t("employeeReg.statusInactive")}</Badge></TableCell><TableCell><div className="flex justify-end gap-1"><EmployeeDialog employee={employee} /><DeleteEmployeeButton employee={employee} /></div></TableCell></TableRow>
+              <TableRow key={employee.id}><TableCell dir="ltr" className="font-mono text-xs">{employee.employeeId}</TableCell><TableCell className="font-medium">{employee.name}</TableCell><TableCell dir="ltr" className="font-mono text-xs">{employee.uniformNumber ? <Badge variant="outline" className="font-mono">{employee.uniformNumber}</Badge> : <span className="text-muted-foreground">-</span>}</TableCell><TableCell>{employee.designation || "-"}</TableCell><TableCell>{employee.department || "-"}</TableCell><TableCell>{employee.company || "MHS"}</TableCell><TableCell><Badge variant={employee.profileStatus === "complete" ? "outline" : "destructive"}>{employee.profileStatus === "complete" ? t("employeeReg.statusComplete") : t("employeeReg.statusIncomplete")}</Badge></TableCell><TableCell><Badge variant={employee.active ? "default" : "secondary"}>{employee.active ? t("employeeReg.statusActive") : t("employeeReg.statusInactive")}</Badge></TableCell><TableCell><div className="flex justify-end gap-1"><EmployeeDialog employee={employee} /><DeleteEmployeeButton employee={employee} /></div></TableCell></TableRow>
             ))}
           </TableBody>
         </Table>

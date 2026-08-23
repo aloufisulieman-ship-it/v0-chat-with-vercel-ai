@@ -119,6 +119,18 @@ export const violationStatusOptions = [
   { value: "closed", label: "مغلقة" },
 ]
 
+// أنواع المعدات في سجل المعدات المرجعي (المطابقة تتم عبر لوحة المركبة الرسمية).
+export const equipmentTypeOptions = [
+  { value: "forklift", label: "رافعة شوكية" },
+  { value: "tuktuk", label: "توك توك" },
+  { value: "truck", label: "شاحنة" },
+  { value: "crane", label: "رافعة" },
+  { value: "other", label: "أخرى" },
+]
+export const equipmentTypeLabels: Record<string, string> = Object.fromEntries(
+  equipmentTypeOptions.map((e) => [e.value, e.label]),
+)
+
 export const departmentOptions = [
   { value: "hr", label: "الموارد البشرية" },
   { value: "workshop", label: "الورشة" },
