@@ -217,6 +217,30 @@ async function nextDetectionId(organizationId: string): Promise<string> {
 // الموقع خلال هذه المدة، يُحدَّث السجل الموجود بدل إنشاء سجل جديد.
 const DEDUP_WINDOW_MINUTES = 15
 
+const SEVERITY_RANK: Record<string, number> = { low: 0, medium: 1, high: 2, critical: 3 }
+
+// اختيار المخالفة الأساسية الأشد خطورة بين القائمة والجديدة (لتصنيف السجل المدموج).
+function pickPrimary(
+  a: { type: string; severity: string },
+  b: { type: string; severity: string },
+): { type: string; severity: string } {
+  return (SEVERITY_RANK[b.severity] ?? 0) > (SEVERITY_RANK[a.severity] ?? 0) ? b : a
+}
+
+// دمج ملاحظات المخالفات (القديمة + الجديدة) في نص واحد يذكر كل المخالفات مرة واحدة،
+// مع إزالة التكرار حسب اسم المخالفة (الجزء قبل ":") حفاظاً على الوصف الأول لكل نوع.
+function mergeNotes(existing: string, incoming: string): string {
+  const parts = [...(existing || "").split(" • "), ...(incoming || "").split(" • ")]
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const seen = new Map<string, string>()
+  for (const p of parts) {
+    const label = (p.split(":")[0] || p).trim()
+    if (!seen.has(label)) seen.set(label, p)
+  }
+  return [...seen.values()].join(" • ").slice(0, 1000)
+}
+
 // حفظ كل مخالفات الإطار الواحد في سجل واحد فقط. يُستدعى مرة واحدة لكل لقطة من
 // مسار /api/ai-monitoring/analyze: إن رُصدت عدة مخالفات في نفس الإطار (مثل
 // عامل بلا خوذة وبلا سترة عاكسة) تُدمج جميعها في بند واحد بنفس اللقطة بدل تكرار
@@ -250,34 +274,47 @@ export async function saveFrameDetection(input: {
   const windowStart = new Date(now.getTime() - DEDUP_WINDOW_MINUTES * 60_000)
 
   // البحث عن سجل مفتوح مطابق ضمن النافذة الزمنية لدمج الرصد المتكرر فيه.
+  // عند وجود هوية معروفة (subjectKey غير فارغ) نُطابق بالشخص/المركبة فقط — لا بنوع
+  // المخالفة — حتى تُجمَّع كل مخالفات نفس الشخص في سجل واحد بصورة واحدة. أما عند غياب
+  // الهوية (اكتشاف مجهول) فنُبقي المطابقة على نفس النوع حتى لا تُدمج اكتشافات غير مرتبطة.
+  const matchConditions = [
+    eq(aiDetection.organizationId, organizationId),
+    eq(aiDetection.cameraLocation, cameraLocation),
+    eq(aiDetection.subjectKey, subjectKey),
+    inArray(aiDetection.status, ["new", "acknowledged"]),
+    gte(aiDetection.lastDetectedAt, windowStart),
+  ]
+  if (!subjectKey) {
+    matchConditions.push(eq(aiDetection.detectionType, merged.primaryType))
+  }
   const [existing] = await db
     .select()
     .from(aiDetection)
-    .where(
-      and(
-        eq(aiDetection.organizationId, organizationId),
-        eq(aiDetection.detectionType, merged.primaryType),
-        eq(aiDetection.cameraLocation, cameraLocation),
-        eq(aiDetection.subjectKey, subjectKey),
-        inArray(aiDetection.status, ["new", "acknowledged"]),
-        gte(aiDetection.lastDetectedAt, windowStart),
-      ),
-    )
+    .where(and(...matchConditions))
     .orderBy(desc(aiDetection.lastDetectedAt))
     .limit(1)
 
   if (existing) {
-    // تحديث السجل القائم: زيادة العدّاد، تحديث آخر وقت رصد وأحدث لقطة/ثقة/أنواع.
+    // تحديث السجل القائم: زيادة العدّاد، تحديث آخر وقت رصد وأحدث لقطة، وجمع كل أنواع
+    // المخالفات وملاحظاتها في نفس السجل، مع رفع التصنيف للأشد خطورة.
     const mergedTypes = Array.from(
       new Set([...parseDetectionTypes(existing.detectionTypes, existing.detectionType), ...merged.types]),
+    )
+    const primary = pickPrimary(
+      { type: existing.detectionType, severity: existing.severity },
+      { type: merged.primaryType, severity: merged.primarySeverity },
     )
     const [updated] = await db
       .update(aiDetection)
       .set({
         detectionCount: existing.detectionCount + 1,
         lastDetectedAt: now,
+        detectionType: primary.type,
         detectionTypes: JSON.stringify(mergedTypes),
+        severity: primary.severity,
         confidenceScore: Math.max(existing.confidenceScore, merged.primaryConfidence),
+        // نجمع كل المخالفات في نص ملاحظات واحد يذكرها جميعاً مرة واحدة.
+        notes: mergeNotes(existing.notes || "", merged.notes),
         // نحدّث اللقطة لأحدث دليل بصري إن توفّرت لقطة جديدة.
         snapshotUrl: input.snapshotUrl || existing.snapshotUrl,
       })
