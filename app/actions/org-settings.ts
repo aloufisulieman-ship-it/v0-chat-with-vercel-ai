@@ -101,6 +101,16 @@ export async function getOperationalSettings(): Promise<OperationalSettings> {
   }
 }
 
+// قراءة خفيفة لأعداد بوابات الدخول/الخروج فقط (تُستخدم في واجهة تتبع المركبات).
+export async function getOperationalGateCounts(): Promise<{ entryGateCount: number; exitGateCount: number }> {
+  const { organizationId } = await requireScope()
+  const [general] = await db.select().from(orgSettings).where(eq(orgSettings.organizationId, organizationId)).limit(1)
+  return {
+    entryGateCount: general ? general.entryGateCount : DEFAULT_ENTRY_GATE_COUNT,
+    exitGateCount: general ? general.exitGateCount : DEFAULT_EXIT_GATE_COUNT,
+  }
+}
+
 // حفظ إعدادات التشغيل: استبدال كامل لكل مجموعة ضمن المؤسسة. مقصور على مدير المؤسسة
 // (admin/manager)، وممنوع أثناء وضع عرض مسؤول المنصّة (assertWritable).
 export async function saveOperationalSettings(

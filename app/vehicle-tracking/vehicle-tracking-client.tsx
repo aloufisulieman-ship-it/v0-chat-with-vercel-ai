@@ -45,8 +45,8 @@ import {
   getGateSettings,
   setGateFrameSource,
 } from "@/app/actions/vehicle-tracking"
+import { getOperationalGateCounts } from "@/app/actions/org-settings"
 import {
-  GATE_COUNT,
   type GateActionResult,
   type VehicleDetailDto,
   type VehicleStatus,
@@ -122,6 +122,18 @@ export function VehicleTrackingClient({
   )
   const settings = gateSettings ?? []
 
+  // عدد بوابات الدخول/الخروج من إعدادات التشغيل لكل مؤسسة.
+  const { data: gateCounts } = useSWR<{ entry: number; exit: number }>(
+    "gate-counts",
+    async () => {
+      const s = await getOperationalGateCounts()
+      return { entry: s.entryGateCount, exit: s.exitGateCount }
+    },
+    { fallbackData: { entry: 1, exit: 1 } },
+  )
+  const entryGateCount = gateCounts?.entry ?? 1
+  const exitGateCount = gateCounts?.exit ?? 1
+
   return (
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -131,10 +143,14 @@ export function VehicleTrackingClient({
         <KpiCard label="خارج السوق" value={overview.outside} icon={CircleCheck} tone="accent" />
       </div>
 
-      <GateSettingsCard settings={settings} onChanged={() => mutateGates()} />
+      <GateSettingsCard
+        settings={settings}
+        onChanged={() => mutateGates()}
+        gateCount={Math.max(entryGateCount, exitGateCount)}
+      />
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <GatePanel settings={settings} />
+        <GatePanel settings={settings} entryGateCount={entryGateCount} exitGateCount={exitGateCount} />
         <VehicleSearch />
       </div>
 
@@ -629,9 +645,11 @@ function ExternalGate({ gate, setting }: { gate: number; setting?: GateSettingDt
 function GateSettingsCard({
   settings,
   onChanged,
+  gateCount,
 }: {
   settings: GateSettingDto[]
   onChanged: () => void
+  gateCount: number
 }) {
   const [pending, start] = useTransition()
   const [savingGate, setSavingGate] = useState<number | null>(null)
@@ -650,8 +668,8 @@ function GateSettingsCard({
     })
   }
 
-  // نضمن ترتيب البوابات 1..GATE_COUNT حتى قبل وصول بيانات SWR.
-  const rows: GateSettingDto[] = Array.from({ length: GATE_COUNT }, (_, i) => {
+  // نضمن ترتيب البوابات 1..gateCount حتى قبل وصول بيانات SWR.
+  const rows: GateSettingDto[] = Array.from({ length: Math.max(1, gateCount) }, (_, i) => {
     const n = i + 1
     return (
       settings.find((s) => s.gateNumber === n) ?? { gateNumber: n, frameSource: "device", lastFrameAt: null, lastPlate: null }
@@ -793,7 +811,7 @@ function VehicleDetail({ vehicle }: { vehicle: VehicleDetailDto }) {
       </div>
 
       <div className="flex flex-col gap-2">
-        <h3 className="text-sm font-semibold text-foreground">سجل الدخولات ({vehicle.entries.length})</h3>
+        <h3 className="text-sm font-semibold text-foreground">سجل ��لدخولات ({vehicle.entries.length})</h3>
         {vehicle.entries.length === 0 && (
           <p className="text-sm text-muted-foreground">لا توجد دخولات مسجّلة لهذه المركبة.</p>
         )}
