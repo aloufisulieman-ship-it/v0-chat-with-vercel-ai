@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import { Menu, Search, Bell } from "lucide-react"
 import { AppSidebar } from "@/components/app-sidebar"
 import { LanguageSwitcher } from "@/components/language-switcher"
+import { RaqeebLogo, RaqeebMark } from "@/components/raqeeb-logo"
 import { useI18n } from "@/lib/i18n/client"
 
 export function AppShell({
@@ -42,9 +43,23 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen bg-background">
+      {/* علامة مائية: شعار رقيب (الدرع + العين) بنسخة شفافة فعليًا (بلا خلفية بيضاء)،
+          ثابتة في منتصف الخلفية خلف كل المحتوى (z-0 أسفل عمود المحتوى z-10)، ولا تتفاعل
+          مع المؤشر. الشفافية تُطبَّق على الصورة نفسها فقط (0.04) فلا تؤثر على تباين النصوص. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 z-0 flex items-center justify-center overflow-hidden bg-transparent"
+      >
+        <img
+          src="/raqeeb-watermark.png"
+          alt=""
+          className="h-[400px] w-[400px] max-w-[70vw] object-contain opacity-[0.04]"
+        />
+      </div>
+
       <AppSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} />
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-border bg-card/80 px-4 py-3 backdrop-blur md:px-6">
           <button
             onClick={() => setSidebarOpen(true)}
@@ -53,6 +68,9 @@ export function AppShell({
           >
             <Menu className="size-5" />
           </button>
+
+          {/* أيقونة رقيب ثابتة في بداية الهيدر (مقابلة لاسم المستخدم/الإشعارات في النهاية) */}
+          <RaqeebMark className="size-8 shrink-0" />
 
           <div className="relative hidden flex-1 max-w-md md:block">
             <Search className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -87,6 +105,15 @@ export function AppShell({
           </div>
           {children}
         </main>
+
+        <footer className="mt-auto border-t border-border px-4 py-6 md:px-6 lg:px-8">
+          <div className="flex flex-col items-center gap-2 text-center sm:flex-row sm:items-center sm:justify-between sm:text-start">
+            <RaqeebLogo />
+            <p className="text-xs text-muted-foreground">
+              © {new Date().getFullYear()} رقيب — لأنظمة السلامة والصحة المهنية
+            </p>
+          </div>
+        </footer>
       </div>
     </div>
   )

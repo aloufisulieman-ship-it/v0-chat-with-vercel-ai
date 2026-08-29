@@ -157,6 +157,7 @@ export function ViolationFormDialog({
   initialEvidence,
   initialDetectedBy = "",
   autoOpen = false,
+  violationTypes,
 }: {
   employees?: EmployeeRecord[]
   // صورة إثبات مبدئية (data URL) تُحمّل مسبقاً — مثلاً لقطة من تسجيل فيديو.
@@ -165,7 +166,11 @@ export function ViolationFormDialog({
   initialDetectedBy?: string
   // فتح النموذج تلقائياً عند التحميل (عند القدوم من صفحة التسجيلات).
   autoOpen?: boolean
+  // أنواع المخالفات المخصّصة للمؤسسة (من إعدادات التشغيل). عند غيابها نرجع للقائمة الافتراضية.
+  violationTypes?: string[]
 }) {
+  // القائمة الفعّالة: إعدادات المؤسسة إن وُجدت وإلا الافتراضية المدمجة.
+  const violationTypeList = violationTypes && violationTypes.length > 0 ? violationTypes : VIOLATION_TYPES
   const { t, dir } = useI18n()
   const [open, setOpen] = useState(autoOpen)
   const [step, setStep] = useState(1)
@@ -506,7 +511,7 @@ export function ViolationFormDialog({
               >
                 <SelectTrigger><SelectValue placeholder={t("violationForm.violationTypePlaceholder")} /></SelectTrigger>
                 <SelectContent className="max-h-72">
-                  {VIOLATION_TYPES.map(vt => <SelectItem key={vt} value={vt}>{violationTypeLabel(t, vt)}</SelectItem>)}
+                  {violationTypeList.map(vt => <SelectItem key={vt} value={vt}>{violationTypeLabel(t, vt)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

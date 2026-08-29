@@ -317,7 +317,7 @@ export const violation = pgTable("violation", {
   category: text("category").default("internal"),
   // مصدر إدخال المخالفة: electronic (عبر النظام) | manual (نموذج ورقي ممسوح).
   entryMode: text("entry_mode").notNull().default("electronic"),
-  // اسم المفتش/الموظف الذي رصد المخالفة (يُعبّأ تلقائياً عند الرصد بالذكاء الاصطناعي).
+  // اسم المفتش/الموظف الذ�������� رصد المخالفة (يُعبّأ تلقائياً عند الرصد بالذكاء الاصطناعي).
   detectedBy: text("detected_by").default(""),
   internalAction: text("internal_action").default(""),
   violationDate: date("violationDate"),
@@ -347,6 +347,9 @@ export const violation = pgTable("violation", {
   paymentReceiptUrl: text("payment_receipt_url").default(""),
   financeClosedBy: text("finance_closed_by").default(""),
   financeClosedAt: timestamp("finance_closed_at"),
+  // ربط المخالفة بدخول مركبة مفتوح في موديول تتبع المركبات (nullable). يُستخدم لحجب
+  // خروج المركبة طالما هناك مخالفة مرتبطة بدخولها الحالي.
+  entryId: integer("entry_id"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
@@ -639,3 +642,144 @@ export const tuktukRead = pgTable("tuktuk_reads", {
   location: text("location").notNull().default(""),
   capturedAt: timestamp("captured_at").notNull().defaultNow(),
 })
+
+// ---------- موديول تتبع المركبات (Vehicle Tracking) ----------
+// سجل رئيسي واحد لكل مركبة داخل المؤسسة. المُعرّف التشغيلي هو اللوحة (plateNumber)،
+// وplateKey هو اللوحة مطبّعة (حروف+أرقام موحّدة) للمطابقة الموثوقة مع القراءة البصرية.
+// currentStatus يعكس الحالة اللحظية: outside (خارج السوق) | inside (داخله) | blocked
+// (محجوبة عن الخروج بسبب مخالفة مرتبطة بدخولها الحالي).
+export const vehicle = pgTable(
+  "vehicles",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: text("organizationId").notNull(),
+    plateNumber: text("plate_number").notNull().default(""),
+    plateKey: text("plate_key").notNull().default(""),
+    vehicleType: text("vehicle_type").notNull().default("truck"),
+    currentStatus: text("current_status").notNull().default("outside"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    plateKeyIdx: uniqueIndex("vehicles_org_platekey_idx").on(t.organizationId, t.plateKey),
+  }),
+)
+
+// سجل دخولات المركبة — عدة سجلات لكل مركبة. status: open (لا تزال داخل السوق) |
+// closed (خرجت). id هو المرجع (entryId) الذي تُربط به المشاهدات والمخالفات لهذه الزيارة.
+export const vehicleEntry = pgTable(
+  "vehicle_entries",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: text("organizationId").notNull(),
+    vehicleId: integer("vehicle_id").notNull(),
+    entryGateId: integer("entry_gate_id").notNull().default(1),
+    entryTime: timestamp("entry_time").notNull().defaultNow(),
+    exitTime: timestamp("exit_time"),
+    exitGateId: integer("exit_gate_id"),
+    status: text("status").notNull().default("open"),
+    // مصدر التسجيل: auto (قراءة كاميرا تلقائية) أو manual (إدخال موظف يدوي).
+    entryMethod: text("entry_method").notNull().default("manual"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    vehicleIdx: index("vehicle_entries_vehicle_idx").on(t.organizationId, t.vehicleId),
+    openIdx: index("vehicle_entries_open_idx").on(t.organizationId, t.vehicleId, t.status),
+  }),
+)
+
+// إعدادات البوابات لكل مؤسسة. frameSource يحدّد مصدر فريمات الوضع التلقائي لكل بوابة:
+// device (كاميرا جهاز المتصفح) أو external (بث خارجي يصل عبر POST /api/camera-feed من
+// خادم جسر مرتبط بكاميرات NVR). lastFrameAt/lastPlate تُحدَّث عند وصول فريم خارجي لعرض
+// حالة البث حيّاً. لا علاقة لهذا الجدول بمنطق القراءة/التسجيل — هو إعدادات ومصدر فقط.
+export const gate = pgTable(
+  "gates",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: text("organizationId").notNull(),
+    gateNumber: integer("gate_number").notNull(),
+    frameSource: text("frame_source").notNull().default("device"),
+    lastFrameAt: timestamp("last_frame_at"),
+    lastPlate: text("last_plate"),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    gateIdx: uniqueIndex("gates_org_number_idx").on(t.organizationId, t.gateNumber),
+  }),
+)
+
+// كل مرة تُرصد فيها المركبة بأي كاميرا داخل السوق، مرتبطة بالدخول المفتوح الحالي.
+export const vehicleSighting = pgTable(
+  "vehicle_sightings",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: text("organizationId").notNull(),
+    entryId: integer("entry_id").notNull(),
+    cameraId: text("camera_id").notNull().default(""),
+    locationName: text("location_name").notNull().default(""),
+    // مصدر المشاهدة: auto (كاميرا) أو manual (موظف).
+    entryMethod: text("entry_method").notNull().default("manual"),
+    timestamp: timestamp("timestamp").notNull().defaultNow(),
+  },
+  (t) => ({
+    entryIdx: index("vehicle_sightings_entry_idx").on(t.entryId),
+  }),
+)
+
+// ---------- إعدادات التشغيل لكل مؤسسة ----------
+// قيم كانت مثبّتة في الكود وأصبحت قابلة للتخصيص لكل مؤسسة. العزل عبر organizationId.
+// صف واحد لكل مؤسسة يحمل الأعداد العامة (بوابات الدخول/الخروج).
+export const orgSettings = pgTable("org_settings", {
+  organizationId: text("organizationId").primaryKey(),
+  entryGateCount: integer("entry_gate_count").notNull().default(1),
+  exitGateCount: integer("exit_gate_count").notNull().default(1),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+})
+
+// أنواع المركبات المتاحة للمؤسسة (نص عربي حر). sortOrder يحفظ ترتيب العرض.
+export const vehicleType = pgTable(
+  "vehicle_types",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: text("organizationId").notNull(),
+    label: text("label").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    orgIdx: index("vehicle_types_org_idx").on(t.organizationId),
+  }),
+)
+
+// أنواع المخالفات المتاحة للمؤسسة (نص عربي حر + شدة افتراضية اختيارية).
+export const violationType = pgTable(
+  "violation_types",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: text("organizationId").notNull(),
+    label: text("label").notNull(),
+    severity: text("severity").notNull().default("medium"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    orgIdx: index("violation_types_org_idx").on(t.organizationId),
+  }),
+)
+
+// فئات الجولة التفتيشية للمؤسسة (نص عربي حر + أيقونة + لون من مجموعة جاهزة).
+export const inspectionCategory = pgTable(
+  "inspection_categories",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: text("organizationId").notNull(),
+    label: text("label").notNull(),
+    icon: text("icon").notNull().default("clipboard-check"),
+    color: text("color").notNull().default("blue"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    orgIdx: index("inspection_categories_org_idx").on(t.organizationId),
+  }),
+)

@@ -6,19 +6,21 @@ import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { authClient } from "@/lib/auth-client"
-import { registerOrganization } from "@/app/actions/auth-register"
+import { joinOrganization } from "@/app/actions/auth-register"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card } from "@/components/ui/card"
-import { ShieldCheck } from "lucide-react"
+import { RaqeebLogo } from "@/components/raqeeb-logo"
+import { OrgAutocomplete } from "@/components/org-autocomplete"
+import type { OrgOption } from "@/app/actions/org-directory"
 import { useI18n } from "@/lib/i18n/client"
 
 export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
   const { t } = useI18n()
   const router = useRouter()
   const [name, setName] = useState("")
-  const [companyName, setCompanyName] = useState("")
+  const [org, setOrg] = useState<OrgOption | null>(null)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -32,19 +34,28 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
     setLoading(true)
 
     if (isSignUp) {
+      // يجب اختيار مؤسسة معتمدة من نتائج البحث قبل إنشاء الحساب.
+      if (!org) {
+        setLoading(false)
+        setError(t("auth.orgRequired"))
+        return
+      }
       const { error } = await authClient.signUp.email({ email, password, name })
       if (error) {
         setLoading(false)
         setError(error.message ?? t("auth.genericError"))
         return
       }
-      // تهيئة المؤسسة وترقية المُسجِّل إلى أول admin لها مباشرةً بعد إنشاء الحساب.
-      const provisioned = await registerOrganization({ companyName })
-      setLoading(false)
-      if (provisioned.error) {
-        setError(provisioned.error)
+      // ربط العضو بالمؤسسة المعتمدة (بحالة قيد المراجعة حتى يعتمده مدير مؤسسته).
+      // يُعاد التحقق على الخادم؛ عند الفشل يُحذف الحساب اليتيم ونُسجّل الخروج.
+      const joined = await joinOrganization({ organizationId: org.id })
+      if (joined.error) {
+        await authClient.signOut().catch(() => {})
+        setLoading(false)
+        setError(joined.error)
         return
       }
+      setLoading(false)
     } else {
       const { error } = await authClient.signIn.email({ email, password })
       setLoading(false)
@@ -62,12 +73,7 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
     <main className="min-h-svh bg-background flex items-center justify-center px-4">
       <Card className="w-full max-w-sm p-6">
         <div className="mb-6 flex flex-col items-center text-center">
-          <div className="flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground mb-3">
-            <ShieldCheck className="size-6" />
-          </div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground text-balance">
-            {isSignUp ? t("auth.signUpTitle") : t("auth.signInTitle")}
-          </h1>
+          <RaqeebLogo className="mb-4 flex-col gap-3 text-center [&>div]:items-center" />
           <p className="text-sm text-muted-foreground mt-1">
             {isSignUp ? t("auth.signUpSubtitle") : t("auth.signInSubtitle")}
           </p>
@@ -81,14 +87,8 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
                 <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name" />
               </div>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="companyName">{t("auth.companyName")}</Label>
-                <Input
-                  id="companyName"
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  autoComplete="organization"
-                  placeholder={t("auth.companyNamePlaceholder")}
-                />
+                <Label htmlFor="organization">{t("auth.organization")}</Label>
+                <OrgAutocomplete onSelect={setOrg} disabled={loading} />
               </div>
             </>
           )}
@@ -138,6 +138,18 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
             {isSignUp ? t("auth.signInLink") : t("auth.signUpLink")}
           </Link>
         </p>
+
+        {isSignUp && (
+          <p className="text-xs text-muted-foreground text-center mt-3 border-t border-border pt-4">
+            {t("auth.newOrgPrompt")}{" "}
+            <Link
+              href="/register-organization"
+              className="text-foreground font-medium underline-offset-4 hover:underline"
+            >
+              {t("auth.newOrgLink")}
+            </Link>
+          </p>
+        )}
       </Card>
     </main>
   )

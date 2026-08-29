@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, createContext, useContext } from "react"
 import { useRouter } from "next/navigation"
 import dynamic from "next/dynamic"
 import {
@@ -106,6 +106,60 @@ const VIOLATION_CATEGORIES: {
   { value: "shoes", labelKey: "patrol.categories.shoes", icon: HardHat, color: "#b45309", bg: "#fefce8" },
   { value: "other", labelKey: "patrol.categories.other", icon: ShieldAlert, color: "#6b7280", bg: "#f9fafb" },
 ]
+
+// تخصيص الفئات من إعدادات المؤسسة (label/icon/color) دون المساس بمنطق القوالب المرتبط
+// بمفتاح value الثابت. التخصيص يُطابَق بالترتيب مع الفئات المدمجة.
+export type PatrolCategoryOverride = { label: string; icon: string; color: string }
+const PatrolCategoriesContext = createContext<PatrolCategoryOverride[] | null>(null)
+
+// خريطة اسم اللون (من الإعدادات) إلى (color/bg) بصيغة hex متوافقة مع أنماط الجولة.
+const PATROL_COLOR_HEX: Record<string, { color: string; bg: string }> = {
+  red: { color: "#dc2626", bg: "#fef2f2" },
+  orange: { color: "#ea580c", bg: "#fff7ed" },
+  amber: { color: "#d97706", bg: "#fffbeb" },
+  yellow: { color: "#b45309", bg: "#fefce8" },
+  green: { color: "#059669", bg: "#f0fdf4" },
+  emerald: { color: "#059669", bg: "#ecfdf5" },
+  teal: { color: "#0d9488", bg: "#f0fdfa" },
+  sky: { color: "#0284c7", bg: "#f0f9ff" },
+  blue: { color: "#2563eb", bg: "#eff6ff" },
+  indigo: { color: "#4f46e5", bg: "#eef2ff" },
+  violet: { color: "#7c3aed", bg: "#f5f3ff" },
+  purple: { color: "#9333ea", bg: "#faf5ff" },
+  pink: { color: "#db2777", bg: "#fdf2f8" },
+  gray: { color: "#6b7280", bg: "#f9fafb" },
+}
+
+// hook عرض الفئة: يدمج تخصيص المؤسسة (إن وُجد) فوق القيم المدمجة، ويرجع النص/الأيقونة/اللون.
+function useCatDisplay() {
+  const overrides = useContext(PatrolCategoriesContext)
+  const { t } = useI18n()
+  return (cat: (typeof VIOLATION_CATEGORIES)[number]) => {
+    const idx = VIOLATION_CATEGORIES.findIndex((c) => c.value === cat.value)
+    const ov = overrides && idx >= 0 ? overrides[idx] : undefined
+    const label = ov?.label?.trim() ? ov.label : t(cat.labelKey)
+    const icon = ov ? iconFromName(ov.icon) : cat.icon
+    const palette = ov ? PATROL_COLOR_HEX[ov.color] : undefined
+    return { label, icon, color: palette?.color ?? cat.color, bg: palette?.bg ?? cat.bg }
+  }
+}
+
+// خريطة اسم الأيقونة النصي إلى مكوّن lucide المستخدم في الجولة (نفس مجموعة الإعدادات).
+function iconFromName(name: string): typeof Truck {
+  const map: Record<string, typeof Truck> = {
+    truck: Truck,
+    users: Users,
+    "person-standing": PersonStanding,
+    "hard-hat": HardHat,
+    footprints: Footprints,
+    "shield-alert": ShieldAlert,
+    "alert-triangle": AlertTriangle,
+    eye: Eye,
+    "check-circle": CheckCircle,
+    "file-text": FileText,
+  }
+  return map[name] ?? ShieldAlert
+}
 
 // كل قالب يحمل textKey (مفتاح الترجمة). النص المخزَّن في الحالة/قاعدة البيانات
 // يُشتق بترجمة textKey لحظة الإضافة (بلغة العرض الحالية) لضمان قيمة نصية ثابتة.
@@ -362,8 +416,10 @@ function EntryCard({
   onRetry?: () => void
 }) {
   const { t } = useI18n()
+  const catDisplay = useCatDisplay()
   const [open, setOpen] = useState(false)
-  const catInfo = VIOLATION_CATEGORIES.find((c) => c.value === entry.category)
+  const catBase = VIOLATION_CATEGORIES.find((c) => c.value === entry.category)
+  const catInfo = catBase ? catDisplay(catBase) : null
   const sevInfo = entry.severity ? SEVERITY_STYLES[entry.severity] : null
   const borderColor =
     entry.type === "violation" ? "#ef4444" : entry.type === "observation" ? "#f59e0b" : "#22c55e"
@@ -376,7 +432,10 @@ function EntryCard({
       <div className="flex items-start gap-3 p-3 cursor-pointer" onClick={() => setOpen(!open)}>
         {catInfo && (
           <div className="rounded-xl p-2 flex-shrink-0" style={{ background: catInfo.bg }}>
-            <catInfo.icon size={17} style={{ color: catInfo.color }} />
+            {(() => {
+              const CatIcon = catInfo.icon
+              return <CatIcon size={17} style={{ color: catInfo.color }} />
+            })()}
           </div>
         )}
         {!catInfo && (
@@ -398,7 +457,7 @@ function EntryCard({
                 className="text-xs font-bold px-2 py-0.5 rounded-full"
                 style={{ background: catInfo.bg, color: catInfo.color }}
               >
-                {t(catInfo.labelKey)}
+                {catInfo.label}
               </span>
             )}
             {sevInfo && entry.severity && (
@@ -522,6 +581,7 @@ function AddEntryModal({
   officerName: string
 }) {
   const { t } = useI18n()
+  const catDisplay = useCatDisplay()
   const [step, setStep] = useState<"type" | "category" | "template" | "details">("type")
   const [entryType, setEntryType] = useState<EntryType>("violation")
   const [category, setCategory] = useState<ViolationCategory>("forklift")
@@ -670,23 +730,27 @@ function AddEntryModal({
 
           {step === "category" && (
             <div className="grid grid-cols-2 gap-3">
-              {VIOLATION_CATEGORIES.map((cat) => (
-                <button
-                  key={cat.value}
-                  onClick={() => {
-                    setCategory(cat.value)
-                    setTemplate(null)
-                    setStep("template")
-                  }}
-                  className="flex flex-col items-center gap-2 py-4 rounded-2xl border-2"
-                  style={{ background: cat.bg, borderColor: `${cat.color}30` }}
-                >
-                  <cat.icon size={26} style={{ color: cat.color }} />
-                  <span className="text-sm font-bold" style={{ color: cat.color }}>
-                    {t(cat.labelKey)}
-                  </span>
-                </button>
-              ))}
+              {VIOLATION_CATEGORIES.map((cat) => {
+                const d = catDisplay(cat)
+                const CatIcon = d.icon
+                return (
+                  <button
+                    key={cat.value}
+                    onClick={() => {
+                      setCategory(cat.value)
+                      setTemplate(null)
+                      setStep("template")
+                    }}
+                    className="flex flex-col items-center gap-2 py-4 rounded-2xl border-2"
+                    style={{ background: d.bg, borderColor: `${d.color}30` }}
+                  >
+                    <CatIcon size={26} style={{ color: d.color }} />
+                    <span className="text-sm font-bold" style={{ color: d.color }}>
+                      {d.label}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
           )}
 
@@ -1046,6 +1110,7 @@ function SummarySheet({
   onFinish: () => void
 }) {
   const { t } = useI18n()
+  const catDisplay = useCatDisplay()
   const [saving, setSaving] = useState(false)
   const violations = session.entries.filter((e) => e.type === "violation")
   const observations = session.entries.filter((e) => e.type === "observation")
@@ -1082,10 +1147,16 @@ function SummarySheet({
     window.print()
   }
 
-  const catStats = VIOLATION_CATEGORIES.map((cat) => ({
-    ...cat,
-    count: violations.filter((v) => v.category === cat.value).length,
-  })).filter((c) => c.count > 0)
+  const catStats = VIOLATION_CATEGORIES.map((cat) => {
+    const d = catDisplay(cat)
+    return {
+      value: cat.value,
+      label: d.label,
+      icon: d.icon,
+      color: d.color,
+      count: violations.filter((v) => v.category === cat.value).length,
+    }
+  }).filter((c) => c.count > 0)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.6)" }}>
@@ -1184,10 +1255,12 @@ function SummarySheet({
           {catStats.length > 0 && (
             <div className="rounded-2xl p-3 space-y-2" style={{ background: "#f8fafc" }}>
               <p className="text-xs font-black text-gray-500 mb-2">{t("patrol.distribution")}</p>
-              {catStats.map((c) => (
+              {catStats.map((c) => {
+                const CIcon = c.icon
+                return (
                 <div key={c.value} className="flex items-center gap-2">
-                  <c.icon size={13} style={{ color: c.color }} />
-                  <span className="text-sm text-gray-700 flex-1">{t(c.labelKey)}</span>
+                  <CIcon size={13} style={{ color: c.color }} />
+                  <span className="text-sm text-gray-700 flex-1">{c.label}</span>
                   <div className="flex-1 bg-gray-200 rounded-full h-1.5">
                     <div
                       className="h-1.5 rounded-full"
@@ -1198,7 +1271,8 @@ function SummarySheet({
                     {c.count}
                   </span>
                 </div>
-              ))}
+                )
+              })}
             </div>
           )}
 
@@ -1244,7 +1318,16 @@ function SummarySheet({
 
 // ── Main Component ───────────────────────────────────────────────────────────────
 
-export function PatrolClient() {
+// الغلاف: يوفّر تخصيص فئات المؤسسة عبر السياق ثم يعرض الواجهة الداخلية.
+export function PatrolClient({ categoryOverrides }: { categoryOverrides?: PatrolCategoryOverride[] }) {
+  return (
+    <PatrolCategoriesContext.Provider value={categoryOverrides ?? null}>
+      <PatrolClientInner />
+    </PatrolCategoriesContext.Provider>
+  )
+}
+
+function PatrolClientInner() {
   const router = useRouter()
   const { toast } = useToast()
   const { t } = useI18n()

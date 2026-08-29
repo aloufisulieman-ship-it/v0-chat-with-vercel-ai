@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/app-shell"
 import { requireHseReviewer } from "@/lib/session"
 import { getDetections } from "@/app/actions/ai-monitoring"
+import { getTrackingOverview, getVehiclesInside } from "@/app/actions/vehicle-tracking"
 import { MonitoringDashboard, type DetectionDto } from "./monitoring-dashboard"
 import { getServerT } from "@/lib/i18n/server"
 import Link from "next/link"
@@ -8,10 +9,19 @@ import { Smartphone, Video, LayoutGrid } from "lucide-react"
 
 export const dynamic = "force-dynamic"
 
-export default async function AiMonitoringPage() {
+export default async function AiMonitoringPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>
+}) {
   const user = await requireHseReviewer()
   const rows = await getDetections()
+  // بيانات نظام تتبع المركبات الكامل لعرضها داخل تبويب "تتبع المركبات".
+  const [trackingOverview, trackingInside] = await Promise.all([getTrackingOverview(), getVehiclesInside()])
   const { t } = await getServerT()
+  // التبويب الابتدائي مدفوع بالرابط: /ai-monitoring?tab=vehicle-tracking يفتح تبويب المركبات.
+  const sp = await searchParams
+  const initialTab = sp?.tab === "vehicle-tracking" ? "vehicles" : "live"
 
   // تحويل التواريخ إلى نصوص لتتوافق مع بيانات الـ API أثناء التحديث الحي.
   const initial: DetectionDto[] = rows.map((r) => ({
@@ -68,7 +78,13 @@ export default async function AiMonitoringPage() {
         </div>
       }
     >
-      <MonitoringDashboard initial={initial} isAdmin={user.role === "admin"} />
+      <MonitoringDashboard
+        initial={initial}
+        isAdmin={user.role === "admin"}
+        trackingOverview={trackingOverview}
+        trackingInside={trackingInside}
+        initialTab={initialTab}
+      />
     </AppShell>
   )
 }
