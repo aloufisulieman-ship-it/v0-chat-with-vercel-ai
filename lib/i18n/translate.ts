@@ -3,7 +3,7 @@
 
 import { ar, type Dictionary } from "./dictionaries/ar"
 import { en } from "./dictionaries/en"
-import { type Locale, localeBcp47, defaultLocale } from "./config"
+import { type Locale, localeBcp47, defaultLocale, APP_TIME_ZONE } from "./config"
 
 const dictionaries: Record<Locale, Dictionary> = { ar, en }
 
@@ -41,7 +41,9 @@ export function formatDate(
 ): string {
   const date = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(date.getTime())) return ""
-  return new Intl.DateTimeFormat(localeBcp47[locale], options).format(date)
+  // منطقة زمنية ثابتة دائمًا (ما لم يُمرَّر خلاف ذلك صراحةً) كي يتطابق ناتج
+  // الخادم والعميل ولا يقع خطأ عدم تطابق الترطيب.
+  return new Intl.DateTimeFormat(localeBcp47[locale], { timeZone: APP_TIME_ZONE, ...options }).format(date)
 }
 
 // تنسيق تاريخ ووقت معًا.
