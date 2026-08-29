@@ -43,9 +43,23 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen bg-background">
+      {/* علامة مائية: شعار رقيب (الدرع + العين) ثابتة في منتصف الخلفية، خلف كل المحتوى،
+          بشفافية منخفضة جدًا ولا تتفاعل مع المؤشر. mix-blend يُخفي خلفية الأيقونة البيضاء
+          فيظهر الدرع فقط في الوضعين الفاتح والداكن. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 z-0 flex items-center justify-center overflow-hidden"
+      >
+        <img
+          src="/raqeeb-icon.png"
+          alt=""
+          className="h-[460px] w-[460px] max-w-[80vw] object-contain opacity-[0.05] mix-blend-multiply dark:opacity-[0.06] dark:mix-blend-screen"
+        />
+      </div>
+
       <AppSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} />
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-border bg-card/80 px-4 py-3 backdrop-blur md:px-6">
           <button
             onClick={() => setSidebarOpen(true)}
