@@ -43,12 +43,12 @@ const nav: { href: string; labelKey: string; icon: typeof LayoutDashboard; modul
   { href: "/risks", labelKey: "modules.risks", icon: ShieldAlert, module: "risks" },
   { href: "/permits", labelKey: "modules.permits", icon: FileSignature, module: "permits" },
   { href: "/training", labelKey: "modules.training", icon: GraduationCap, module: "training" },
-  { href: "/employees", labelKey: "nav.employees", icon: Users, module: "training" },
+  { href: "/employees", labelKey: "nav.employees", icon: Users, module: "employees" },
   { href: "/violations", labelKey: "modules.violations", icon: Ban, module: "violations" },
-  { href: "/patrol", labelKey: "nav.patrol", icon: Footprints, module: "violations" },
+  { href: "/patrol", labelKey: "nav.patrol", icon: Footprints, module: "patrol" },
   { href: "/ai-monitoring", labelKey: "modules.ai_monitoring", icon: Cctv, module: "ai_monitoring" },
-  { href: "/equipment", labelKey: "nav.equipment", icon: Truck, module: "ai_monitoring" },
-  { href: "/safety-rules", labelKey: "nav.safetyRules", icon: ScrollText, module: "ai_monitoring" },
+  { href: "/equipment", labelKey: "nav.equipment", icon: Truck, module: "equipment" },
+  { href: "/safety-rules", labelKey: "nav.safetyRules", icon: ScrollText, module: "safety_rules" },
   { href: "/hr", labelKey: "modules.hr", icon: UserCog, module: "hr" },
   { href: "/finance", labelKey: "modules.finance", icon: Banknote, module: "finance" },
   { href: "/actions", labelKey: "modules.actions", icon: CheckSquare, module: "actions" },
@@ -77,14 +77,14 @@ export function AppSidebar({
   const router = useRouter()
   const { t } = useI18n()
 
-  // Dashboard and settings are always available so no user gets locked out (settings holds password change).
-  const alwaysOn: ModuleKey[] = ["dashboard", "settings"]
-  // صفحات المراقبة الذكية (المراجعة) مقصورة على مسؤول HSE: admin أو manager.
-  const isReviewer = user?.role === "admin" || user?.role === "manager"
-  const visible = nav.filter((item) => {
-    if (item.href === "/ai-monitoring") return isReviewer
-    return alwaysOn.includes(item.module) || hasModuleAccess(user?.role, user?.permissions, item.module)
-  })
+  // لوحة التحكم فقط هي الصفحة الأساسية الدائمة كي لا يُقفل أي مستخدم خارج النظام.
+  // كل صفحة أخرى (بما فيها المراقبة الذكية والإعدادات والصفحات التي كانت "عامة")
+  // تخضع لنظام الصلاحيات: تظهر فقط إذا مُنحت الوحدة صراحةً، أو كان الدور admin/manager.
+  const alwaysOn: ModuleKey[] = ["dashboard"]
+  const visible = nav.filter(
+    (item) =>
+      alwaysOn.includes(item.module) || hasModuleAccess(user?.role, user?.permissions, item.module),
+  )
   const items =
     user?.role === "admin"
       ? [...visible, { href: "/users", labelKey: "nav.users", icon: Users }]

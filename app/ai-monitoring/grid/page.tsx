@@ -1,5 +1,5 @@
 import { AppShell } from "@/components/app-shell"
-import { requireHseReviewer } from "@/lib/session"
+import { requireModule } from "@/lib/session"
 import { getActiveCameraStreams } from "@/app/actions/ai-monitoring"
 import Link from "next/link"
 import { ArrowRight } from "lucide-react"
@@ -10,7 +10,7 @@ import { getServerT } from "@/lib/i18n/server"
 export const dynamic = "force-dynamic"
 
 export default async function CameraGridPage() {
-  const user = await requireHseReviewer()
+  const user = await requireModule("ai_monitoring")
   const rows = await getActiveCameraStreams()
   const { t } = await getServerT()
 

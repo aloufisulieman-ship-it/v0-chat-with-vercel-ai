@@ -26,7 +26,6 @@ import { revalidatePath } from "next/cache"
 import {
   requireModuleScope,
   requireScope,
-  requireHseReviewerScope,
   requireUser,
   assertWritable,
   type ModuleScope,
@@ -1020,7 +1019,7 @@ export async function acceptDetectionAsViolation(
   category: "internal" | "external",
   ) {
   await assertWritable()
-  const { userId, organizationId } = await requireHseReviewerScope()
+  const { userId, organizationId } = await requireModuleScope("ai_monitoring")
   if (category !== "internal" && category !== "external") {
     throw new Error("يجب تحديد تصنيف المخالفة: داخلية أو خارجية")
   }

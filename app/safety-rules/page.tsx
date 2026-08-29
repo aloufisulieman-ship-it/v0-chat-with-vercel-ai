@@ -5,7 +5,7 @@ import { SafetyRulesRegistry } from "@/app/safety-rules/safety-rules-registry"
 import { getServerT } from "@/lib/i18n/server"
 
 export default async function SafetyRulesPage() {
-  const user = await requireModule("ai_monitoring")
+  const user = await requireModule("safety_rules")
   const items = await getSafetyRules()
   const { t } = await getServerT()
 

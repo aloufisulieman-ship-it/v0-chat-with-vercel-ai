@@ -8,7 +8,7 @@ import { EquipmentRegistry } from "@/app/equipment/equipment-registry"
 import { getServerT } from "@/lib/i18n/server"
 
 export default async function EquipmentPage() {
-  const user = await requireModule("ai_monitoring")
+  const user = await requireModule("equipment")
   const [items, operational] = await Promise.all([getEquipment(), getOperationalSettings()])
   const vehicleTypes = operational.vehicleTypes.map((v) => v.label)
   const active = items.filter((i) => i.active).length

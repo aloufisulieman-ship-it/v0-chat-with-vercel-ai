@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { put } from "@vercel/blob"
-import { getCurrentUser, isHseReviewer } from "@/lib/session"
+import { getCurrentUser } from "@/lib/session"
+import { hasModuleAccess } from "@/lib/permissions"
 
 export const runtime = "nodejs"
 export const maxDuration = 30
@@ -13,9 +14,9 @@ export async function POST(req: Request) {
   if (!user) {
     return NextResponse.json({ error: "يجب تسجيل الدخول لالتقاط لقطة." }, { status: 401 })
   }
-  if (!isHseReviewer(user.role)) {
+  if (!hasModuleAccess(user.role, user.permissions, "ai_monitoring")) {
     return NextResponse.json(
-      { error: "التقاط اللقطات وإنشاء المخالفات مقصور على مسؤول HSE (مدير/أدمن)." },
+      { error: "التقاط اللقطات وإنشاء المخالفات مقصور على من يملك صلاحية المراقبة الذكية." },
       { status: 403 },
     )
   }

@@ -2,7 +2,8 @@ import { type NextRequest, NextResponse } from "next/server"
 import { and, asc, eq, gt, lt } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { webrtcSignal, activeCameraStream } from "@/lib/db/schema"
-import { getCurrentUser, isHseReviewer } from "@/lib/session"
+import { getCurrentUser } from "@/lib/session"
+import { hasModuleAccess } from "@/lib/permissions"
 import { sessionCameraId } from "@/lib/camera-session"
 
 // قناة إشارات WebRTC عبر قاعدة البيانات (لا تستخدم LiveKit ولا أي خدمة خارجية).
@@ -49,9 +50,10 @@ async function resolveCameraId(role: string, params: { cameraId?: string; inspec
     return sessionCameraId(user.id, params.inspectorName || "")
   }
 
-  // المُشاهد: مقصور على المدير/المراجع، ويمرّر معرّف الكاميرا الهدف مباشرةً.
-  if (!isHseReviewer(user.role)) {
-    throw new AuthError("مشاهدة البث المباشر مقصورة على مسؤول HSE (مدير أو أدمن).", 403)
+  // المُشاهد: مقصور على من يملك صلاحية المراقبة الذكية (admin/manager تلقائياً، أو أي
+  // مستخدم مُنح وحدة ai_monitoring صراحةً)، ويمرّر معرّف الكاميرا الهدف مباشرةً.
+  if (!hasModuleAccess(user.role, user.permissions, "ai_monitoring")) {
+    throw new AuthError("مشاهدة البث المباشر مقصورة على من يملك صلاحية المراقبة الذكية.", 403)
   }
   const targetCameraId = (params.cameraId || "").trim()
   if (!targetCameraId) return ""

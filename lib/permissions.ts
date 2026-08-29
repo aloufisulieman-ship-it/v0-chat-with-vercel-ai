@@ -41,12 +41,13 @@ export function serializePermissions(modules: string[]): string {
   return JSON.stringify(unique)
 }
 
-// Admins always have full access. Everyone else must have the module in their list.
+// admin و manager يملكان وصولاً تلقائياً كاملاً لكل الوحدات (حمايةً من قفلهم خارجاً)،
+// وأي دور آخر (مثل "user") يجب أن تكون الوحدة ضمن قائمة صلاحياته الصريحة.
 export function hasModuleAccess(
   role: string | null | undefined,
   permissionsRaw: string | null | undefined,
   module: ModuleKey,
 ): boolean {
-  if (role === "admin") return true
+  if (role === "admin" || role === "manager") return true
   return parsePermissions(permissionsRaw).includes(module)
 }

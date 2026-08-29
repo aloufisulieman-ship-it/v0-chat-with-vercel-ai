@@ -7,7 +7,7 @@ import { EmployeeRegistry } from "@/app/training/employee-registry"
 import { getServerT } from "@/lib/i18n/server"
 
 export default async function EmployeesPage() {
-  const user = await requireModule("training")
+  const user = await requireModule("employees")
   const employees = await getEmployees()
   const active = employees.filter((item) => item.active).length
   const incomplete = employees.filter((item) => item.profileStatus !== "complete").length
