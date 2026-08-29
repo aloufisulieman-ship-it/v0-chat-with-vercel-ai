@@ -1,7 +1,8 @@
 import Image from "next/image"
 import { cn } from "@/lib/utils"
 
-// الأيقونة فقط (الدرع + العين) بخلفية شفافة — تصلح للمساحات الضيقة وللخلفيات الفاتحة والداكنة.
+// الأيقونة فقط (الدرع + العين) على خلفية بيضاء — تصلح للمساحات الضيقة. على الخلفيات
+// الداكنة تُغلَّف بـ bg-white ورأس دائري (كما في القائمة الجانبية) لتبدو كشارة نظيفة.
 export function RaqeebMark({ className, priority }: { className?: string; priority?: boolean }) {
   return (
     <Image
