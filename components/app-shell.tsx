@@ -43,23 +43,27 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen bg-background">
-      {/* علامة مائية: شعار رقيب (الدرع + العين) بنسخة شفافة فعليًا (بلا خلفية بيضاء)،
-          ثابتة في منتصف الخلفية خلف كل المحتوى (z-0 أسفل عمود المحتوى z-10)، ولا تتفاعل
-          مع المؤشر. الشفافية تُطبَّق على الصورة نفسها فقط (0.04) فلا تؤثر على تباين النصوص. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none fixed inset-0 z-0 flex items-center justify-center overflow-hidden bg-transparent"
-      >
-        <img
-          src="/raqeeb-watermark.png"
-          alt=""
-          className="h-[400px] w-[400px] max-w-[70vw] object-contain opacity-[0.04]"
-        />
-      </div>
-
       <AppSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} />
 
       <div className="relative z-10 flex min-w-0 flex-1 flex-col">
+        {/* علامة مائية: شعار رقيب (الدرع + العين) بنسخة شفافة فعليًا (بلا خلفية بيضاء).
+            الحاوية fixed ومحصورة على منطقة المحتوى فقط: تمتد من حافة النافذة في جهة البداية
+            وحتى مكان القائمة الجانبية في الشاشات الكبيرة (lg:end-72 = عرض القائمة w-72)،
+            فيتوسّط الشعار منتصف منطقة المحتوى أفقيًا وعموديًا عبر top/left 50% + translate،
+            ويبقى ثابتًا في منتصف الشاشة المرئية أثناء التمرير (fixed) بلا تكرار. z-0 يضعها
+            خلف كل المحتوى (العمود z-10 والهيدر z-30)، مع pointer-events:none وخلفية شفافة
+            تمامًا. الشفافية 0.06 على الصورة نفسها فقط فلا تؤثر على وضوح النصوص والبطاقات. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none fixed inset-y-0 start-0 end-0 z-0 overflow-hidden bg-transparent lg:end-72"
+        >
+          <img
+            src="/raqeeb-watermark.png"
+            alt=""
+            className="absolute left-1/2 top-1/2 h-[380px] w-[380px] max-w-[80vw] -translate-x-1/2 -translate-y-1/2 object-contain opacity-[0.06]"
+          />
+        </div>
+
         <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-border bg-card/80 px-4 py-3 backdrop-blur md:px-6">
           <button
             onClick={() => setSidebarOpen(true)}
