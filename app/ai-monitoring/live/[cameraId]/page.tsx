@@ -1,5 +1,5 @@
 import { AppShell } from "@/components/app-shell"
-import { requireHseReviewer } from "@/lib/session"
+import { requireModule } from "@/lib/session"
 import { getCameraLiveStatus } from "@/app/actions/ai-monitoring"
 import { LiveView } from "./live-view"
 import { getServerT } from "@/lib/i18n/server"
@@ -11,7 +11,7 @@ export default async function LiveCameraPage({
 }: {
   params: Promise<{ cameraId: string }>
 }) {
-  const user = await requireHseReviewer()
+  const user = await requireModule("ai_monitoring")
   const { cameraId: raw } = await params
   const cameraId = decodeURIComponent(raw)
   const { t } = await getServerT()

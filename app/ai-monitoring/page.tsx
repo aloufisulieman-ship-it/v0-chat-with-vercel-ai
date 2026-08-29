@@ -1,5 +1,5 @@
 import { AppShell } from "@/components/app-shell"
-import { requireHseReviewer } from "@/lib/session"
+import { requireModule } from "@/lib/session"
 import { getDetections } from "@/app/actions/ai-monitoring"
 import { getTrackingOverview, getVehiclesInside } from "@/app/actions/vehicle-tracking"
 import { MonitoringDashboard, type DetectionDto } from "./monitoring-dashboard"
@@ -14,7 +14,7 @@ export default async function AiMonitoringPage({
 }: {
   searchParams: Promise<{ tab?: string }>
 }) {
-  const user = await requireHseReviewer()
+  const user = await requireModule("ai_monitoring")
   const rows = await getDetections()
   // بيانات نظام تتبع المركبات الكامل لعرضها داخل تبويب "تتبع المركبات".
   const [trackingOverview, trackingInside] = await Promise.all([getTrackingOverview(), getVehiclesInside()])

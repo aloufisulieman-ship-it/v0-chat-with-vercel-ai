@@ -6,7 +6,7 @@ import { PatrolClient } from "./patrol-client"
 // أثناء الجولة، والمخالفات تُحفظ تلقائياً في سجل المخالفات الرسمي عبر /api/patrol-violation.
 // الوصول مقيّد بصلاحية وحدة المخالفات.
 export default async function PatrolPage() {
-  await requireModule("violations")
+  await requireModule("patrol")
   const operational = await getOperationalSettings()
   // تخصيص فئات الجولة (label/icon/color) بالترتيب فوق الفئات المدمجة.
   const categoryOverrides = operational.inspectionCategories.map((c) => ({

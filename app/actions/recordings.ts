@@ -5,7 +5,7 @@ import { videoRecording, videoScreenshot } from "@/lib/db/schema"
 import { and, desc, eq } from "drizzle-orm"
 import { put, del } from "@vercel/blob"
 import { revalidatePath } from "next/cache"
-import { requireUser, requireHseReviewerScope, assertWritable } from "@/lib/session"
+import { requireUser, requireModuleScope, assertWritable } from "@/lib/session"
 
 export type VideoRecordingDto = {
   id: number
@@ -106,7 +106,7 @@ async function screenshotCounts(organizationId: string, userId: string): Promise
 
 // قائمة التسجيلات كاملة — مقصورة على المراجع وعلى حسابه داخل مؤسسته (للتحميل المبدئي).
 export async function getRecordings(): Promise<VideoRecordingDto[]> {
-  const { userId, organizationId } = await requireHseReviewerScope()
+    const { userId, organizationId } = await requireModuleScope("ai_monitoring")
   const rows = await db
     .select()
     .from(videoRecording)
@@ -118,7 +118,7 @@ export async function getRecordings(): Promise<VideoRecordingDto[]> {
 
 // قائمة مصفّاة ومُقسّمة لصفحات — تصفية بالكاميرا ونطاق التاريخ.
 export async function getRecordingsPage(filter: RecordingsFilter = {}): Promise<RecordingsPage> {
-  const { userId, organizationId } = await requireHseReviewerScope()
+    const { userId, organizationId } = await requireModuleScope("ai_monitoring")
   const page = Math.max(1, Math.round(filter.page ?? 1))
   const pageSize = Math.min(48, Math.max(6, Math.round(filter.pageSize ?? 12)))
 
@@ -158,7 +158,7 @@ export async function getRecordingsPage(filter: RecordingsFilter = {}): Promise<
 
 // لقطات تسجيل معيّن — للمراجع صاحب الحساب فقط.
 export async function getRecordingScreenshots(recordingId: number): Promise<VideoScreenshotDto[]> {
-  const { userId, organizationId } = await requireHseReviewerScope()
+    const { userId, organizationId } = await requireModuleScope("ai_monitoring")
   const rows = await db
     .select()
     .from(videoScreenshot)
@@ -182,7 +182,7 @@ export async function saveScreenshot(input: {
   atSeconds: number
 }): Promise<VideoScreenshotDto> {
   await assertWritable()
-  const { userId, organizationId } = await requireHseReviewerScope()
+    const { userId, organizationId } = await requireModuleScope("ai_monitoring")
 
   // التأكد من ملكية التسجيل قبل ربط اللقطة به.
   const rec = (
@@ -235,7 +235,7 @@ export async function saveScreenshot(input: {
 // مقصور على المراجع صاحب الحساب.
 export async function deleteRecording(id: number): Promise<void> {
   await assertWritable()
-  const { userId, organizationId } = await requireHseReviewerScope()
+    const { userId, organizationId } = await requireModuleScope("ai_monitoring")
   const rec = (
     await db
       .select()
@@ -270,7 +270,7 @@ export async function deleteRecording(id: number): Promise<void> {
 // حذف لقطة واحدة (من Blob والقاعدة).
 export async function deleteScreenshot(id: number): Promise<void> {
   await assertWritable()
-  const { userId, organizationId } = await requireHseReviewerScope()
+    const { userId, organizationId } = await requireModuleScope("ai_monitoring")
   const shot = (
     await db
       .select()
@@ -291,7 +291,7 @@ export async function deleteScreenshot(id: number): Promise<void> {
 // ربط لقطة بمخالفة أُنشئت منها (لأغراض العرض فقط).
 export async function linkScreenshotToViolation(screenshotId: number): Promise<void> {
   await assertWritable()
-  const { userId, organizationId } = await requireHseReviewerScope()
+    const { userId, organizationId } = await requireModuleScope("ai_monitoring")
   // نضع علامة الربط دون تخزين معرّف حقيقي (المخالفة تُنشأ عبر نظام المخالفات المستقل).
   await db
     .update(videoScreenshot)

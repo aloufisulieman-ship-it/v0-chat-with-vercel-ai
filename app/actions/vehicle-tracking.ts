@@ -4,7 +4,7 @@ import { db } from "@/lib/db"
 import { vehicle, vehicleEntry, vehicleSighting, violation, aiDetection, gate } from "@/lib/db/schema"
 import { and, desc, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
-import { requireHseReviewerScope, assertWritable } from "@/lib/session"
+import { requireModuleScope, assertWritable } from "@/lib/session"
 import { normalizePlate } from "@/lib/ai-recognition"
 import {
   GATE_COUNT,
@@ -72,7 +72,7 @@ export async function recordVehicleEntry(
   entryMethod: "auto" | "manual" = "manual",
 ): Promise<GateActionResult> {
   await assertWritable()
-  const { organizationId } = await requireHseReviewerScope()
+    const { organizationId } = await requireModuleScope("ai_monitoring")
   const plate = (plateRaw || "").trim()
   if (!plate) return { ok: false, action: "error", message: "رقم اللوحة مطلوب", plate }
 
@@ -119,7 +119,7 @@ export async function recordVehicleSighting(
   entryMethod: "auto" | "manual" = "manual",
 ): Promise<GateActionResult> {
   await assertWritable()
-  const { organizationId } = await requireHseReviewerScope()
+    const { organizationId } = await requireModuleScope("ai_monitoring")
   const plate = (plateRaw || "").trim()
   if (!plate) return { ok: false, action: "error", message: "رقم اللوحة مطلوب", plate }
 
@@ -159,7 +159,7 @@ export async function autoGateRead(plateRaw: string, gateId: number): Promise<Ga
   const plate = (plateRaw || "").trim()
   if (!plate) return { ok: false, action: "error", message: "لم تُقرأ لوحة صالحة", plate }
   await assertWritable()
-  const { organizationId } = await requireHseReviewerScope()
+    const { organizationId } = await requireModuleScope("ai_monitoring")
   const v = await findOrCreateVehicle(organizationId, plate)
   const open = await findOpenEntry(organizationId, v.id)
   if (open) {
@@ -172,7 +172,7 @@ export async function autoGateRead(plateRaw: string, gateId: number): Promise<Ga
 
 // إعدادات كل البوابات للمؤسسة، مع تعبئة الافتراضي (device) للبوابات غير المحفوظة بعد.
 export async function getGateSettings(): Promise<GateSettingDto[]> {
-  const { organizationId } = await requireHseReviewerScope()
+    const { organizationId } = await requireModuleScope("ai_monitoring")
   const rows = await db.select().from(gate).where(eq(gate.organizationId, organizationId))
   const byNumber = new Map(rows.map((r) => [r.gateNumber, r]))
   const out: GateSettingDto[] = []
@@ -191,7 +191,7 @@ export async function getGateSettings(): Promise<GateSettingDto[]> {
 // تحديد مصدر الفريمات لبوابة معيّنة (upsert على مفتاح المؤسسة + رقم البوابة).
 export async function setGateFrameSource(gateNumber: number, source: FrameSource): Promise<{ ok: boolean }> {
   await assertWritable()
-  const { organizationId } = await requireHseReviewerScope()
+    const { organizationId } = await requireModuleScope("ai_monitoring")
   const n = Math.trunc(Number(gateNumber))
   if (!Number.isFinite(n) || n < 1 || n > GATE_COUNT) return { ok: false }
   const frameSource: FrameSource = source === "external" ? "external" : "device"
@@ -209,7 +209,7 @@ export async function setGateFrameSource(gateNumber: number, source: FrameSource
 // يُستدعى من POST /api/camera-feed عند وصول فريم خارجي — يسجّل آخر نشاط للبث لعرض حالته
 // حيّاً في الواجهة. لا يمسّ منطق القراءة/التسجيل؛ يحدّث حقول العرض فقط.
 export async function recordExternalFrame(gateNumber: number, plate: string): Promise<void> {
-  const { organizationId } = await requireHseReviewerScope()
+    const { organizationId } = await requireModuleScope("ai_monitoring")
   const n = Math.trunc(Number(gateNumber))
   if (!Number.isFinite(n) || n < 1 || n > GATE_COUNT) return
   const now = new Date()
@@ -289,7 +289,7 @@ async function getBlockingViolations(organizationId: string, entryId: number, pl
 /* ---------------- محاولة خروج مركبة من بوابة ---------------- */
 export async function attemptVehicleExit(plateRaw: string, gateId: number): Promise<GateActionResult> {
   await assertWritable()
-  const { organizationId } = await requireHseReviewerScope()
+    const { organizationId } = await requireModuleScope("ai_monitoring")
   const plate = (plateRaw || "").trim()
   if (!plate) return { ok: false, action: "error", message: "رقم اللوحة مطلوب", plate }
 
@@ -353,7 +353,7 @@ export async function attemptVehicleExit(plateRaw: string, gateId: number): Prom
 
 // البحث عن مركبة برقم لوحتها وإرجاع سجلها الكامل: كل الدخولات + مشاهدات ومخالفات كل دخول.
 export async function searchVehicle(plateRaw: string): Promise<VehicleDetailDto | null> {
-  const { organizationId } = await requireHseReviewerScope()
+    const { organizationId } = await requireModuleScope("ai_monitoring")
   const plateKey = normalizePlate(plateRaw)
   if (!plateKey) return null
   const [v] = await db
@@ -440,7 +440,7 @@ export async function searchVehicle(plateRaw: string): Promise<VehicleDetailDto 
 
 // خلاصة لبطاقات الحالة أعلى الصفحة.
 export async function getTrackingOverview(): Promise<TrackingOverview> {
-  const { organizationId } = await requireHseReviewerScope()
+    const { organizationId } = await requireModuleScope("ai_monitoring")
   const rows = await db.select().from(vehicle).where(eq(vehicle.organizationId, organizationId))
   return {
     total: rows.length,
@@ -500,7 +500,7 @@ export async function autoTrackVehicleDetection(input: {
 }
 
 export async function getVehiclesInside(): Promise<PresentVehicleDto[]> {
-  const { organizationId } = await requireHseReviewerScope()
+    const { organizationId } = await requireModuleScope("ai_monitoring")
   const rows = await db
     .select({
       id: vehicle.id,

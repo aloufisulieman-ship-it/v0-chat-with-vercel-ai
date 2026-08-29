@@ -4,7 +4,7 @@ import { db } from "@/lib/db"
 import { aiDetection, activeCameraStream, aiMonitoringNotification, user, equipment } from "@/lib/db/schema"
 import { and, desc, eq, gte, isNull, inArray, or } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
-import { requireUser, requireHseReviewerScope, assertWritable } from "@/lib/session"
+import { requireUser, requireModuleScope, assertWritable } from "@/lib/session"
 import type { DetectionStatus, FrameViolation } from "@/lib/ai-monitoring"
 import { mergeFrameViolations } from "@/lib/ai-monitoring"
 import { normalizePlate, normalizeCode } from "@/lib/ai-recognition"
@@ -49,7 +49,7 @@ function toListItem(row: AiDetection): AiDetectionListItem {
 
 // قائمة الاكتشافات مرتبة بالأحدث (بدون base64 الثقيل — انظر toListItem).
 export async function getDetections(): Promise<AiDetectionListItem[]> {
-  const { userId, organizationId, isManager } = await requireHseReviewerScope()
+    const { userId, organizationId, isManager } = await requireModuleScope("ai_monitoring")
   const where = isManager
     ? eq(aiDetection.organizationId, organizationId)
     : and(eq(aiDetection.organizationId, organizationId), eq(aiDetection.userId, userId))
@@ -60,7 +60,7 @@ export async function getDetections(): Promise<AiDetectionListItem[]> {
 // لقطة إثبات اكتشاف واحد عند الطلب (base64 كامل). تحترم نطاق الرؤية نفسه داخل المؤسسة:
 // المدير يرى كل اللقطات، وغيره يرى لقطات اكتشافات أجهزته فقط.
 export async function getDetectionSnapshot(id: number): Promise<string> {
-  const { userId, organizationId, isManager } = await requireHseReviewerScope()
+    const { userId, organizationId, isManager } = await requireModuleScope("ai_monitoring")
   const where = isManager
     ? and(eq(aiDetection.organizationId, organizationId), eq(aiDetection.id, id))
     : and(eq(aiDetection.organizationId, organizationId), eq(aiDetection.id, id), eq(aiDetection.userId, userId))
@@ -114,7 +114,7 @@ export async function touchCameraStream(input: {
 
 // الكاميرات المتصلة حالياً (آخر إرسال خلال نافذة الاعتبار)، الأحدث أولاً.
 export async function getActiveCameraStreams(): Promise<ActiveCameraStream[]> {
-  const { userId, organizationId, isManager } = await requireHseReviewerScope()
+    const { userId, organizationId, isManager } = await requireModuleScope("ai_monitoring")
   const since = new Date(Date.now() - ACTIVE_WINDOW_SECONDS * 1000)
   const base = db
     .select()
@@ -148,7 +148,7 @@ export type CameraLiveStatus = {
 // حالة كاميرا واحدة للعرض المباشر: آخر إطار من Blob + آخر نتيجة تحليل AI.
 // تحترم نطاق الرؤية نفسه (المدير يرى الكل، وغيره يرى كاميرات أجهزته فقط).
 export async function getCameraLiveStatus(cameraId: string): Promise<CameraLiveStatus> {
-  const { userId, organizationId, isManager } = await requireHseReviewerScope()
+    const { userId, organizationId, isManager } = await requireModuleScope("ai_monitoring")
   const id = (cameraId || "").slice(0, 120)
 
   const camWhere = isManager
@@ -229,7 +229,7 @@ function pickPrimary(
 }
 
 // دمج ملاحظات المخالفات (القديمة + الجديدة) في نص واحد يذكر كل المخالفات مرة واحدة،
-// مع إزالة التكرار حسب اسم المخالفة (الجزء قبل ":") حفاظاً على الوصف الأول لكل نوع.
+// مع إزالة التكرار حسب اسم المخالفة (الجزء قبل ":") حفاظاً على الو��ف الأول لكل نوع.
 function mergeNotes(existing: string, incoming: string): string {
   const parts = [...(existing || "").split(" • "), ...(incoming || "").split(" • ")]
     .map((s) => s.trim())
@@ -434,7 +434,7 @@ export async function markAiNotificationsRead() {
 // تحديث حالة اكتشاف (اطّلاع / معالجة / إنذار خاطئ).
 export async function updateDetectionStatus(id: number, status: string, notes?: string) {
   await assertWritable()
-  const { userId, organizationId, isManager } = await requireHseReviewerScope()
+    const { userId, organizationId, isManager } = await requireModuleScope("ai_monitoring")
   if (!(VALID_STATUS as string[]).includes(status)) throw new Error("حالة غير صالحة")
 
   const rows = await db
@@ -459,7 +459,7 @@ export async function updateDetectionStatus(id: number, status: string, notes?: 
 
 export async function deleteDetection(id: number) {
   await assertWritable()
-  const { userId, organizationId, isManager } = await requireHseReviewerScope()
+    const { userId, organizationId, isManager } = await requireModuleScope("ai_monitoring")
   const where = isManager
     ? and(eq(aiDetection.organizationId, organizationId), eq(aiDetection.id, id))
     : and(eq(aiDetection.organizationId, organizationId), eq(aiDetection.id, id), eq(aiDetection.userId, userId))
@@ -505,7 +505,7 @@ const OPEN_STATUSES = new Set(["new", "acknowledged"])
 // عبر اللوحة المطبّعة، فيعرض لكل مركبة آخر ظهور وموقعه وعدد الرصدات والمخالفات المفتوحة
 // وسجل ظهورها. يشمل المركبات المسجّلة (حتى بلا رصدات) والمركبات المرصودة غير المسجّلة.
 export async function getVehicleTracking(): Promise<TrackedVehicle[]> {
-  const { userId, organizationId, isManager } = await requireHseReviewerScope()
+    const { userId, organizationId, isManager } = await requireModuleScope("ai_monitoring")
 
   const detWhere = isManager
     ? and(eq(aiDetection.organizationId, organizationId), eq(aiDetection.subjectType, "vehicle"))
