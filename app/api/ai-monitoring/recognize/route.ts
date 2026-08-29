@@ -86,32 +86,22 @@ const tuktukPart = z
   .nullable()
   .describe("رقم توك توك واضح على الهيكل، أو null إذا لم يظهر")
 
-export async function POST(req: Request) {
-  try {
-    const body = (await req.json()) as {
-      image?: string
-      inspectorName?: string
-      cameraLocation?: string
-      modes?: unknown
-    }
+// النوع الموحّد لمدخلات التعرّف على إطار.
+export type RecognizeFrameInput = {
+  image: string
+  mediaType: string
+  inspectorName?: string
+  cameraLocation?: string
+  modes: RecognitionMode[]
+}
 
-    const image = body.image
-    if (!image || typeof image !== "string" || !image.startsWith("data:image")) {
-      return NextResponse.json({ error: "صورة غير صالحة" }, { status: 400 })
-    }
-    const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,.+$/.exec(image)
-    if (!match) {
-      return NextResponse.json({ error: "تنسيق صورة غير مدعوم" }, { status: 400 })
-    }
-    const mediaType = match[1]
-
-    // الأوضاع المطلوبة (يجب أن يكون واحداً على الأقل صالحاً).
-    const modes: RecognitionMode[] = Array.isArray(body.modes)
-      ? [...new Set(body.modes.filter(isRecognitionMode))]
-      : []
-    if (modes.length === 0) {
-      return NextResponse.json({ error: "لم يُحدَّد أي وضع تعرّف" }, { status: 400 })
-    }
+// منطق التعرّف الأساسي (مشترك): يُستدعى مباشرةً من مسار /api/ai-monitoring/recognize
+// ومن مسار /api/camera-feed بنفس القراءة والتسجيل تماماً — دون أي فرق أو دورة HTTP.
+export async function recognizeFrame(input: RecognizeFrameInput) {
+  {
+    const { image, mediaType, modes } = input
+    // نعيد بناء body بحقلي الوصف فقط حتى تبقى مراجع body.* أدناه كما هي دون تغيير المنطق.
+    const body = { inspectorName: input.inspectorName, cameraLocation: input.cameraLocation }
 
     // بناء المخطط والتوجيه ديناميكياً حسب الأوضاع المطلوبة.
     const shape: Record<string, z.ZodTypeAny> = {}
@@ -359,7 +349,7 @@ export async function POST(req: Request) {
 
     // ---- حفظ المخالفة مع مفتاح الهوية لمنع التكرار ----
     // نشت��ّ هوية موحّدة: الموظف (الرقم الوظيفي المطابق أو المقروء) له الأولوية، ثم
-    // المركبة (اللوحة الكاملة حروف+أرقام)، ثم التوك توك. تُطبَّع بنفس منطق المطابقة
+    // المركبة (اللوحة الكاملة حروف+أرقام)، ثم التوك توك. تُطبَّع بنفس منطق المطاب��ة
     // حتى يُدمج الرصد المتكرر لنفس الشخص/المركبة في سجل واحد بعدّاد بدل صفوف مكررة.
     if (modes.includes("violations") && frameDetections.length > 0) {
       let subjectKey = ""
@@ -469,6 +459,44 @@ export async function POST(req: Request) {
       }
     }
 
+    return result
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const body = (await req.json()) as {
+      image?: string
+      inspectorName?: string
+      cameraLocation?: string
+      modes?: unknown
+    }
+
+    const image = body.image
+    if (!image || typeof image !== "string" || !image.startsWith("data:image")) {
+      return NextResponse.json({ error: "صورة غير صالحة" }, { status: 400 })
+    }
+    const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,.+$/.exec(image)
+    if (!match) {
+      return NextResponse.json({ error: "تنسيق صورة غير مدعوم" }, { status: 400 })
+    }
+    const mediaType = match[1]
+
+    // الأوضاع المطلوبة (يجب أن يكون واحداً على الأقل صالحاً).
+    const modes: RecognitionMode[] = Array.isArray(body.modes)
+      ? [...new Set(body.modes.filter(isRecognitionMode))]
+      : []
+    if (modes.length === 0) {
+      return NextResponse.json({ error: "لم يُحدَّد أي وضع تعرّف" }, { status: 400 })
+    }
+
+    const result = await recognizeFrame({
+      image,
+      mediaType,
+      inspectorName: body.inspectorName,
+      cameraLocation: body.cameraLocation,
+      modes,
+    })
     return NextResponse.json(result)
   } catch (err) {
     console.log("[v0] recognize route error:", err instanceof Error ? err.message : String(err))

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { autoGateRead, recordExternalFrame } from "@/app/actions/vehicle-tracking"
+import { recognizeFrame } from "@/app/api/ai-monitoring/recognize/route"
 
 export const runtime = "nodejs"
 export const maxDuration = 60
@@ -29,9 +30,11 @@ export async function POST(req: Request) {
     }
 
     const image = typeof body.image === "string" ? body.image : ""
-    if (!image.startsWith("data:image")) {
+    const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,.+$/.exec(image)
+    if (!match) {
       return NextResponse.json({ ok: false, error: "صورة غير صالحة (يُتوقّع data URL)" }, { status: 400 })
     }
+    const mediaType = match[1]
 
     const gateRaw = body.gate_id ?? body.gateId
     const gateId = Math.trunc(Number(gateRaw))
@@ -39,33 +42,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "gate_id مطلوب ورقم صحيح" }, { status: 400 })
     }
 
-    // تمرير الفريم إلى مسار التعرّف الحالي دون أي تعديل في منطق القراءة، مع إعادة توجيه
-    // كوكي الجلسة الواردة حتى يُحلّ سياق المؤسسة كما في نداء الكاميرا من المتصفح.
-    const origin = new URL(req.url).origin
-    const recognizeRes = await fetch(`${origin}/api/ai-monitoring/recognize`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        cookie: req.headers.get("cookie") ?? "",
-      },
-      body: JSON.stringify({
-        image,
-        inspectorName: `بوابة خارجية ${gateId}`,
-        cameraLocation: `بوابة ${gateId}`,
-        modes: ["plate"],
-      }),
+    // تمرير الفريم إلى نفس منطق التعرّف الحالي مباشرةً (دون دورة HTTP) — قراءة اللوحة فقط.
+    const recognized = await recognizeFrame({
+      image,
+      mediaType,
+      inspectorName: `بوابة خارجية ${gateId}`,
+      cameraLocation: `بوابة ${gateId}`,
+      modes: ["plate"],
     })
-
-    if (!recognizeRes.ok) {
-      const status = recognizeRes.status === 401 || recognizeRes.status === 403 ? recognizeRes.status : 502
-      return NextResponse.json({ ok: false, error: "تعذّر تحليل الفريم عبر مسار التعرّف" }, { status })
-    }
-
-    const recognized = (await recognizeRes.json().catch(() => null)) as
-      | { plate?: { value?: string; confidence?: number } }
-      | null
-    const plate = recognized?.plate?.value?.trim() ?? ""
-    const confidence = recognized?.plate?.confidence ?? 0
+    const plate = recognized.plate?.value?.trim() ?? ""
+    const confidence = recognized.plate?.confidence ?? 0
 
     // تسجيل آخر نشاط للبث الخارجي لهذه البوابة (لعرض حالته في الواجهة) — لا يؤثّر على المنطق.
     try {
