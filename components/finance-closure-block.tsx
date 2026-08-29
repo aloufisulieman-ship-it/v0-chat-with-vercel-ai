@@ -22,10 +22,11 @@ export function FinanceClosureBlock({
   closedAt: Date | string | null | undefined
   receiptUrl: string | null | undefined
 }) {
-  const { t, locale } = useI18n()
+  const { t, formatDateTime } = useI18n()
   const status = normalizeFinanceStatus(financeStatus)
   const isClosed = status === "closed"
-  const closedAtStr = closedAt ? new Date(closedAt).toLocaleString(locale === "en" ? "en-US" : "ar") : ""
+  // منسّق مركزي بمنطقة زمنية ثابتة لتجنّب عدم تطابق الترطيب بين الخادم والعميل.
+  const closedAtStr = closedAt ? formatDateTime(new Date(closedAt)) : ""
   const hasReceipt = !!receiptUrl && receiptUrl.length > 0
   const isImage = hasReceipt && receiptUrl!.startsWith("data:image")
 

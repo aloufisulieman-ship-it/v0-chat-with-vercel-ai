@@ -24,11 +24,12 @@ export function HrClosureBlock({
   closedAt: Date | string | null | undefined
   attachmentsRaw: string | null | undefined
 }) {
-  const { t, locale } = useI18n()
+  const { t, formatDateTime } = useI18n()
   const status = normalizeHrStatus(hrStatus)
   const isClosed = status === "closed"
   const attachments = parseHrAttachments(attachmentsRaw)
-  const closedAtStr = closedAt ? new Date(closedAt).toLocaleString(locale === "en" ? "en-US" : "ar") : ""
+  // منسّق مركزي بمنطقة زمنية ثابتة لتجنّب عدم تطابق الترطيب بين الخادم والعميل.
+  const closedAtStr = closedAt ? formatDateTime(new Date(closedAt)) : ""
 
   return (
     <section className="flex flex-col gap-3 rounded-lg border border-border p-4">

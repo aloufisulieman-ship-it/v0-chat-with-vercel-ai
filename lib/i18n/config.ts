@@ -21,6 +21,11 @@ export const localeBcp47: Record<Locale, string> = {
   en: "en-US",
 }
 
+// المنطقة الزمنية الثابتة للتطبيق (خليجي/عُمان UTC+4). تُستخدم في كل تنسيقات
+// التاريخ والوقت لضمان تطابق ما يُصيَّر على الخادم (UTC افتراضًا) مع ما يُصيَّر
+// في متصفح المستخدم، فلا يحدث خطأ عدم تطابق الترطيب (hydration mismatch).
+export const APP_TIME_ZONE = "Asia/Muscat"
+
 // الاسم المعروض لكل لغة في قائمة الاختيار (كل لغة باسمها الأصلي).
 export const localeLabels: Record<Locale, string> = {
   ar: "العربية",
