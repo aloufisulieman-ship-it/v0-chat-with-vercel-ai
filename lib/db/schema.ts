@@ -317,7 +317,7 @@ export const violation = pgTable("violation", {
   category: text("category").default("internal"),
   // مصدر إدخال المخالفة: electronic (عبر النظام) | manual (نموذج ورقي ممسوح).
   entryMode: text("entry_mode").notNull().default("electronic"),
-  // اسم المفتش/الموظف الذي رصد المخالفة (يُعبّأ تلقائياً عند الرصد بالذكاء الاصطناعي).
+  // اسم المفتش/الموظف الذ�� رصد المخالفة (يُعبّأ تلقائياً عند الرصد بالذكاء الاصطناعي).
   detectedBy: text("detected_by").default(""),
   internalAction: text("internal_action").default(""),
   violationDate: date("violationDate"),
@@ -347,6 +347,9 @@ export const violation = pgTable("violation", {
   paymentReceiptUrl: text("payment_receipt_url").default(""),
   financeClosedBy: text("finance_closed_by").default(""),
   financeClosedAt: timestamp("finance_closed_at"),
+  // ربط المخالفة بدخول مركبة مفتوح في موديول تتبع المركبات (nullable). يُستخدم لحجب
+  // خروج المركبة طالما هناك مخالفة مرتبطة بدخولها الحالي.
+  entryId: integer("entry_id"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
@@ -639,3 +642,62 @@ export const tuktukRead = pgTable("tuktuk_reads", {
   location: text("location").notNull().default(""),
   capturedAt: timestamp("captured_at").notNull().defaultNow(),
 })
+
+// ---------- موديول تتبع المركبات (Vehicle Tracking) ----------
+// سجل رئيسي واحد لكل مركبة داخل المؤسسة. المُعرّف التشغيلي هو اللوحة (plateNumber)،
+// وplateKey هو اللوحة مطبّعة (حروف+أرقام موحّدة) للمطابقة الموثوقة مع القراءة البصرية.
+// currentStatus يعكس الحالة اللحظية: outside (خارج السوق) | inside (داخله) | blocked
+// (محجوبة عن الخروج بسبب مخالفة مرتبطة بدخولها الحالي).
+export const vehicle = pgTable(
+  "vehicles",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: text("organizationId").notNull(),
+    plateNumber: text("plate_number").notNull().default(""),
+    plateKey: text("plate_key").notNull().default(""),
+    vehicleType: text("vehicle_type").notNull().default("truck"),
+    currentStatus: text("current_status").notNull().default("outside"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    plateKeyIdx: uniqueIndex("vehicles_org_platekey_idx").on(t.organizationId, t.plateKey),
+  }),
+)
+
+// سجل دخولات المركبة — عدة سجلات لكل مركبة. status: open (لا تزال داخل السوق) |
+// closed (خرجت). id هو المرجع (entryId) الذي تُربط به المشاهدات والمخالفات لهذه الزيارة.
+export const vehicleEntry = pgTable(
+  "vehicle_entries",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: text("organizationId").notNull(),
+    vehicleId: integer("vehicle_id").notNull(),
+    entryGateId: integer("entry_gate_id").notNull().default(1),
+    entryTime: timestamp("entry_time").notNull().defaultNow(),
+    exitTime: timestamp("exit_time"),
+    exitGateId: integer("exit_gate_id"),
+    status: text("status").notNull().default("open"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    vehicleIdx: index("vehicle_entries_vehicle_idx").on(t.organizationId, t.vehicleId),
+    openIdx: index("vehicle_entries_open_idx").on(t.organizationId, t.vehicleId, t.status),
+  }),
+)
+
+// كل مرة تُرصد فيها المركبة بأي كاميرا داخل السوق، مرتبطة بالدخول المفتوح الحالي.
+export const vehicleSighting = pgTable(
+  "vehicle_sightings",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: text("organizationId").notNull(),
+    entryId: integer("entry_id").notNull(),
+    cameraId: text("camera_id").notNull().default(""),
+    locationName: text("location_name").notNull().default(""),
+    timestamp: timestamp("timestamp").notNull().defaultNow(),
+  },
+  (t) => ({
+    entryIdx: index("vehicle_sightings_entry_idx").on(t.entryId),
+  }),
+)

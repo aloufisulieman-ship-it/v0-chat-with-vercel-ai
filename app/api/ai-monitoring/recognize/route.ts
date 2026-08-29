@@ -6,6 +6,7 @@ import { aiDetection } from "@/lib/db/schema"
 import { and, eq } from "drizzle-orm"
 import { getCurrentUser } from "@/lib/session"
 import { saveFrameDetection, touchCameraStream } from "@/app/actions/ai-monitoring"
+import { autoTrackVehicleDetection } from "@/app/actions/vehicle-tracking"
 import {
   savePlateRead,
   saveEmployeeIdRead,
@@ -357,7 +358,7 @@ export async function POST(req: Request) {
     }
 
     // ---- حفظ المخالفة مع مفتاح الهوية لمنع التكرار ----
-    // نشتقّ هوية موحّدة: الموظف (الرقم الوظيفي المطابق أو المقروء) له الأولوية، ثم
+    // نشت��ّ هوية موحّدة: الموظف (الرقم الوظيفي المطابق أو المقروء) له الأولوية، ثم
     // المركبة (اللوحة الكاملة حروف+أرقام)، ثم التوك توك. تُطبَّع بنفس منطق المطابقة
     // حتى يُدمج الرصد المتكرر لنفس الشخص/المركبة في سجل واحد بعدّاد بدل صفوف مكررة.
     if (modes.includes("violations") && frameDetections.length > 0) {
@@ -398,6 +399,18 @@ export async function POST(req: Request) {
         }
       } else {
         result.violations = { count: 0, detections: [] }
+      }
+
+      // ربط تلقائي بموديول تتبع المركبات: عند رصد مخالفة لمركبة (لوحة)، نسجّل مشاهدة
+      // على دخولها المفتوح ونحجب خروجها. لا يُفشل استجابة التعرّف عند أي خطأ.
+      if (subjectType === "vehicle" && result.plate?.value && row) {
+        await autoTrackVehicleDetection({
+          organizationId: orgId,
+          plate: equipmentMatch?.plate || result.plate.value,
+          location: cameraLocation,
+          cameraId: inspectorName,
+          hasViolation: true,
+        })
       }
     }
 
