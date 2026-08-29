@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card } from "@/components/ui/card"
-import { ShieldCheck } from "lucide-react"
+import { RaqeebLogo } from "@/components/raqeeb-logo"
 import { useI18n } from "@/lib/i18n/client"
 
 export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
@@ -62,12 +62,7 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
     <main className="min-h-svh bg-background flex items-center justify-center px-4">
       <Card className="w-full max-w-sm p-6">
         <div className="mb-6 flex flex-col items-center text-center">
-          <div className="flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground mb-3">
-            <ShieldCheck className="size-6" />
-          </div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground text-balance">
-            {isSignUp ? t("auth.signUpTitle") : t("auth.signInTitle")}
-          </h1>
+          <RaqeebLogo className="mb-4 flex-col gap-3 text-center [&>div]:items-center" />
           <p className="text-sm text-muted-foreground mt-1">
             {isSignUp ? t("auth.signUpSubtitle") : t("auth.signInSubtitle")}
           </p>

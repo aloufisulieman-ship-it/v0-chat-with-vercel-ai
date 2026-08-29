@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import { Menu, Search, Bell } from "lucide-react"
 import { AppSidebar } from "@/components/app-sidebar"
 import { LanguageSwitcher } from "@/components/language-switcher"
+import { RaqeebLogo, RaqeebMark } from "@/components/raqeeb-logo"
 import { useI18n } from "@/lib/i18n/client"
 
 export function AppShell({
@@ -54,6 +55,9 @@ export function AppShell({
             <Menu className="size-5" />
           </button>
 
+          {/* أيقونة رقيب ثابتة في بداية الهيدر (مقابلة لاسم المستخدم/الإشعارات في النهاية) */}
+          <RaqeebMark className="size-8 shrink-0" />
+
           <div className="relative hidden flex-1 max-w-md md:block">
             <Search className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -87,6 +91,15 @@ export function AppShell({
           </div>
           {children}
         </main>
+
+        <footer className="mt-auto border-t border-border px-4 py-6 md:px-6 lg:px-8">
+          <div className="flex flex-col items-center gap-2 text-center sm:flex-row sm:items-center sm:justify-between sm:text-start">
+            <RaqeebLogo />
+            <p className="text-xs text-muted-foreground">
+              © {new Date().getFullYear()} رقيب — لأنظمة السلامة والصحة المهنية
+            </p>
+          </div>
+        </footer>
       </div>
     </div>
   )

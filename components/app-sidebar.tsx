@@ -21,13 +21,13 @@ import {
   CheckSquare,
   BarChart3,
   Settings,
-  ShieldCheck,
   Users,
   UserCog,
   LogOut,
   X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { RaqeebMark } from "@/components/raqeeb-logo"
 import { authClient } from "@/lib/auth-client"
 import { hasModuleAccess, type ModuleKey } from "@/lib/permissions"
 import { useI18n } from "@/lib/i18n/client"
@@ -136,11 +136,9 @@ export function AppSidebar({
       >
         <div className="flex items-center justify-between gap-2 border-b border-sidebar-border px-5 py-4">
           <div className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground">
-              <ShieldCheck className="size-6" />
-            </div>
+            <RaqeebMark className="size-10 shrink-0 rounded-lg bg-white" />
             <div className="flex flex-col">
-              <span className="text-sm font-bold leading-tight">{t("nav.brandTitle")}</span>
+              <span className="text-lg font-extrabold leading-tight">رقيب</span>
               <span className="text-xs text-sidebar-foreground/60">{t("nav.brandSubtitle")}</span>
             </div>
           </div>

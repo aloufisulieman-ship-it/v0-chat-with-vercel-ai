@@ -18,7 +18,7 @@ const cairo = Cairo({
 })
 
 export const metadata: Metadata = {
-  title: "نظام إدارة الصحة والسلامة والبيئة | HSE",
+  title: "رقيب | RAQEEB - لأنظمة السلامة والصحة المهنية",
   description: "منصة متكاملة لإدارة الصحة والسلامة المهنية والبيئة - الحوادث، التفتيش، تقييم المخاطر، التدريب والتقارير",
   generator: "v0.app",
 }
