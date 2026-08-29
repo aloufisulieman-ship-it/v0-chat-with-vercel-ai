@@ -1600,7 +1600,7 @@ export const en: Dictionary = {
   violationTypes: {
     "عدم ارتداء خوذة السلامة": "Not wearing a safety helmet",
     "عدم ارتداء حذاء السلامة": "Not wearing safety shoes",
-    "عدم ارتداء سترة عاكس������": "Not wearing a reflective vest",
+    "عدم ارتداء سترة عاكسة": "Not wearing a reflective vest",
     "عدم ارتداء قفازات واقية": "Not wearing protective gloves",
     "عدم ارتداء نظارات واقية": "Not wearing protective goggles",
     "عدم ارتداء كمامة أو جهاز تنفس": "Not wearing a mask or respirator",
