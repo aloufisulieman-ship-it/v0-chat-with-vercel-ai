@@ -66,6 +66,7 @@ export async function recordVehicleEntry(
   plateRaw: string,
   gateId: number,
   vehicleType?: string,
+  entryMethod: "auto" | "manual" = "manual",
 ): Promise<GateActionResult> {
   await assertWritable()
   const { organizationId } = await requireHseReviewerScope()
@@ -90,6 +91,7 @@ export async function recordVehicleEntry(
     vehicleId: v.id,
     entryGateId: gateId,
     status: "open",
+    entryMethod,
   })
   await db
     .update(vehicle)
@@ -111,6 +113,7 @@ export async function recordVehicleSighting(
   plateRaw: string,
   cameraId: string,
   locationName: string,
+  entryMethod: "auto" | "manual" = "manual",
 ): Promise<GateActionResult> {
   await assertWritable()
   const { organizationId } = await requireHseReviewerScope()
@@ -133,6 +136,7 @@ export async function recordVehicleSighting(
     entryId: open.id,
     cameraId: cameraId || "",
     locationName: locationName || "",
+    entryMethod,
   })
   revalidatePath("/vehicle-tracking")
   return {
@@ -142,6 +146,23 @@ export async function recordVehicleSighting(
     plate: v.plateNumber,
     status: v.currentStatus as VehicleStatus,
   }
+}
+
+/* ---------------- قراءة كاميرا تلقائية عند بوابة (الوضع التلقائي) ---------------- */
+// يُستدعى من واجهة "الوضع التلقائي" بعد أن تقرأ الكاميرا لوحةً بدرجة ثقة كافية.
+// المنطق: إن لم يكن للمركبة دخول مفتوح فهي قادمة من الخارج → نسجّل دخولاً تلقائياً؛
+// وإن كان لها دخول مفتوح فهي داخل السوق → نسجّل مشاهدة تلقائية على مسارها. المصدر auto.
+export async function autoGateRead(plateRaw: string, gateId: number): Promise<GateActionResult> {
+  const plate = (plateRaw || "").trim()
+  if (!plate) return { ok: false, action: "error", message: "لم تُقرأ لوحة صالحة", plate }
+  await assertWritable()
+  const { organizationId } = await requireHseReviewerScope()
+  const v = await findOrCreateVehicle(organizationId, plate)
+  const open = await findOpenEntry(organizationId, v.id)
+  if (open) {
+    return recordVehicleSighting(plate, `بوابة-${gateId}`, `منطقة البوابة ${gateId}`, "auto")
+  }
+  return recordVehicleEntry(plate, gateId, undefined, "auto")
 }
 
 /* ---------------- ربط مخالفة بالدخول المفتوح + حجب الخروج ---------------- */
@@ -339,11 +360,13 @@ export async function searchVehicle(plateRaw: string): Promise<VehicleDetailDto 
       exitTime: e.exitTime ? iso(e.exitTime) : null,
       exitGateId: e.exitGateId ?? null,
       status: e.status,
+      method: (e.entryMethod === "auto" ? "auto" : "manual"),
       sightings: sightings.map((s) => ({
         id: s.id,
         cameraId: s.cameraId,
         location: s.locationName,
         at: iso(s.timestamp),
+        method: (s.entryMethod === "auto" ? "auto" : "manual"),
       })),
       violations: violDtos,
     })
@@ -392,7 +415,7 @@ export async function autoTrackVehicleDetection(input: {
     if (!open) {
       const [created] = await db
         .insert(vehicleEntry)
-        .values({ organizationId, vehicleId: v.id, entryGateId: 0, status: "open" })
+        .values({ organizationId, vehicleId: v.id, entryGateId: 0, status: "open", entryMethod: "auto" })
         .returning()
       open = created
       await db
@@ -405,6 +428,7 @@ export async function autoTrackVehicleDetection(input: {
       entryId: open.id,
       cameraId: input.cameraId || "",
       locationName: input.location || "",
+      entryMethod: "auto",
     })
     if (input.hasViolation) {
       await db

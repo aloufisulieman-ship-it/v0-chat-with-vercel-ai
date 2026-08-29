@@ -16,7 +16,9 @@ export type GateActionResult = {
   blockingViolations?: { id: number; type: string; severity: string; at: string }[]
 }
 
-export type EntrySightingDto = { id: number; cameraId: string; location: string; at: string }
+// مصدر التسجيل: تلقائي بالكاميرا أو يدوي بواسطة موظف.
+export type EntryMethod = "auto" | "manual"
+export type EntrySightingDto = { id: number; cameraId: string; location: string; at: string; method: EntryMethod }
 export type EntryViolationDto = { id: number; type: string; severity: string; at: string; source: string }
 export type VehicleEntryDto = {
   id: number
@@ -25,6 +27,7 @@ export type VehicleEntryDto = {
   exitTime: string | null
   exitGateId: number | null
   status: string
+  method: EntryMethod
   sightings: EntrySightingDto[]
   violations: EntryViolationDto[]
 }

@@ -317,7 +317,7 @@ export const violation = pgTable("violation", {
   category: text("category").default("internal"),
   // مصدر إدخال المخالفة: electronic (عبر النظام) | manual (نموذج ورقي ممسوح).
   entryMode: text("entry_mode").notNull().default("electronic"),
-  // اسم المفتش/الموظف الذ�� رصد المخالفة (يُعبّأ تلقائياً عند الرصد بالذكاء الاصطناعي).
+  // اسم المفتش/الموظف الذ���� رصد المخالفة (يُعبّأ تلقائياً عند الرصد بالذكاء الاصطناعي).
   detectedBy: text("detected_by").default(""),
   internalAction: text("internal_action").default(""),
   violationDate: date("violationDate"),
@@ -678,6 +678,8 @@ export const vehicleEntry = pgTable(
     exitTime: timestamp("exit_time"),
     exitGateId: integer("exit_gate_id"),
     status: text("status").notNull().default("open"),
+    // مصدر التسجيل: auto (قراءة كاميرا تلقائية) أو manual (إدخال موظف يدوي).
+    entryMethod: text("entry_method").notNull().default("manual"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => ({
@@ -695,6 +697,8 @@ export const vehicleSighting = pgTable(
     entryId: integer("entry_id").notNull(),
     cameraId: text("camera_id").notNull().default(""),
     locationName: text("location_name").notNull().default(""),
+    // مصدر المشاهدة: auto (كاميرا) أو manual (موظف).
+    entryMethod: text("entry_method").notNull().default("manual"),
     timestamp: timestamp("timestamp").notNull().defaultNow(),
   },
   (t) => ({
