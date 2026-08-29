@@ -1,20 +1,23 @@
 "use server"
 
 import { db } from "@/lib/db"
-import { vehicle, vehicleEntry, vehicleSighting, violation, aiDetection } from "@/lib/db/schema"
+import { vehicle, vehicleEntry, vehicleSighting, violation, aiDetection, gate } from "@/lib/db/schema"
 import { and, desc, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { requireHseReviewerScope, assertWritable } from "@/lib/session"
 import { normalizePlate } from "@/lib/ai-recognition"
-import type {
-  VehicleStatus,
-  GateActionResult,
-  EntrySightingDto,
-  EntryViolationDto,
-  VehicleEntryDto,
-  VehicleDetailDto,
-  TrackingOverview,
-  PresentVehicleDto,
+import {
+  GATE_COUNT,
+  type VehicleStatus,
+  type GateActionResult,
+  type EntrySightingDto,
+  type EntryViolationDto,
+  type VehicleEntryDto,
+  type VehicleDetailDto,
+  type TrackingOverview,
+  type PresentVehicleDto,
+  type FrameSource,
+  type GateSettingDto,
 } from "@/lib/vehicle-tracking-shared"
 
 /* ============================================================
@@ -163,6 +166,60 @@ export async function autoGateRead(plateRaw: string, gateId: number): Promise<Ga
     return recordVehicleSighting(plate, `بوابة-${gateId}`, `منطقة البوابة ${gateId}`, "auto")
   }
   return recordVehicleEntry(plate, gateId, undefined, "auto")
+}
+
+/* ---------------- إعدادات مصدر فريمات البوابات (تلقائي: جهاز/بث خارجي) ---------------- */
+
+// إعدادات كل البوابات للمؤسسة، مع تعبئة الافتراضي (device) للبوابات غير المحفوظة بعد.
+export async function getGateSettings(): Promise<GateSettingDto[]> {
+  const { organizationId } = await requireHseReviewerScope()
+  const rows = await db.select().from(gate).where(eq(gate.organizationId, organizationId))
+  const byNumber = new Map(rows.map((r) => [r.gateNumber, r]))
+  const out: GateSettingDto[] = []
+  for (let n = 1; n <= GATE_COUNT; n++) {
+    const r = byNumber.get(n)
+    out.push({
+      gateNumber: n,
+      frameSource: r?.frameSource === "external" ? "external" : "device",
+      lastFrameAt: r?.lastFrameAt ? r.lastFrameAt.toISOString() : null,
+      lastPlate: r?.lastPlate ?? null,
+    })
+  }
+  return out
+}
+
+// تحديد مصدر الفريمات لبوابة معيّنة (upsert على مفتاح المؤسسة + رقم البوابة).
+export async function setGateFrameSource(gateNumber: number, source: FrameSource): Promise<{ ok: boolean }> {
+  await assertWritable()
+  const { organizationId } = await requireHseReviewerScope()
+  const n = Math.trunc(Number(gateNumber))
+  if (!Number.isFinite(n) || n < 1 || n > GATE_COUNT) return { ok: false }
+  const frameSource: FrameSource = source === "external" ? "external" : "device"
+  await db
+    .insert(gate)
+    .values({ organizationId, gateNumber: n, frameSource })
+    .onConflictDoUpdate({
+      target: [gate.organizationId, gate.gateNumber],
+      set: { frameSource, updatedAt: new Date() },
+    })
+  revalidatePath("/ai-monitoring")
+  return { ok: true }
+}
+
+// يُستدعى من POST /api/camera-feed عند وصول فريم خارجي — يسجّل آخر نشاط للبث لعرض حالته
+// حيّاً في الواجهة. لا يمسّ منطق القراءة/التسجيل؛ يحدّث حقول العرض فقط.
+export async function recordExternalFrame(gateNumber: number, plate: string): Promise<void> {
+  const { organizationId } = await requireHseReviewerScope()
+  const n = Math.trunc(Number(gateNumber))
+  if (!Number.isFinite(n) || n < 1 || n > GATE_COUNT) return
+  const now = new Date()
+  await db
+    .insert(gate)
+    .values({ organizationId, gateNumber: n, frameSource: "external", lastFrameAt: now, lastPlate: plate || null })
+    .onConflictDoUpdate({
+      target: [gate.organizationId, gate.gateNumber],
+      set: { lastFrameAt: now, lastPlate: plate || null, updatedAt: now },
+    })
 }
 
 /* ---------------- ربط مخالفة بالدخول المفتوح + حجب الخروج ---------------- */
@@ -397,7 +454,7 @@ export async function getTrackingOverview(): Promise<TrackingOverview> {
 // يُستدعى من مسار التعرّف (/api/ai-monitoring/recognize) عند قراءة لوحة مركبة داخل
 // السوق. المؤسسة تُمرَّر مباشرةً (المسار موثّق مسبقاً). المنطق: إن لم يوجد دخول مفتوح
 // للمركبة نفتح واحداً تلقائياً (تُعتبر داخل السوق)، ثم نسجّل مشاهدة مربوطة بالدخول
-// الحالي، وإذا رافق القراءةَ رصدُ مخالفة نحوّل حالة المركبة إلى blocked. لا يرمي أخطاء
+// الحالي، وإذا رافق القراءةَ رصدُ مخالفة نحوّل حالة المر��بة إلى blocked. لا يرمي أخطاء
 // حتى لا يُفشل استجابة التعرّف.
 export async function autoTrackVehicleDetection(input: {
   organizationId: string

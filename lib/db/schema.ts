@@ -317,7 +317,7 @@ export const violation = pgTable("violation", {
   category: text("category").default("internal"),
   // مصدر إدخال المخالفة: electronic (عبر النظام) | manual (نموذج ورقي ممسوح).
   entryMode: text("entry_mode").notNull().default("electronic"),
-  // اسم المفتش/الموظف الذ���� رصد المخالفة (يُعبّأ تلقائياً عند الرصد بالذكاء الاصطناعي).
+  // اسم المفتش/الموظف الذ������ رصد المخالفة (يُعبّأ تلقائياً عند الرصد بالذكاء الاصطناعي).
   detectedBy: text("detected_by").default(""),
   internalAction: text("internal_action").default(""),
   violationDate: date("violationDate"),
@@ -685,6 +685,26 @@ export const vehicleEntry = pgTable(
   (t) => ({
     vehicleIdx: index("vehicle_entries_vehicle_idx").on(t.organizationId, t.vehicleId),
     openIdx: index("vehicle_entries_open_idx").on(t.organizationId, t.vehicleId, t.status),
+  }),
+)
+
+// إعدادات البوابات لكل مؤسسة. frameSource يحدّد مصدر فريمات الوضع التلقائي لكل بوابة:
+// device (كاميرا جهاز المتصفح) أو external (بث خارجي يصل عبر POST /api/camera-feed من
+// خادم جسر مرتبط بكاميرات NVR). lastFrameAt/lastPlate تُحدَّث عند وصول فريم خارجي لعرض
+// حالة البث حيّاً. لا علاقة لهذا الجدول بمنطق القراءة/التسجيل — هو إعدادات ومصدر فقط.
+export const gate = pgTable(
+  "gates",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: text("organizationId").notNull(),
+    gateNumber: integer("gate_number").notNull(),
+    frameSource: text("frame_source").notNull().default("device"),
+    lastFrameAt: timestamp("last_frame_at"),
+    lastPlate: text("last_plate"),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    gateIdx: uniqueIndex("gates_org_number_idx").on(t.organizationId, t.gateNumber),
   }),
 )
 

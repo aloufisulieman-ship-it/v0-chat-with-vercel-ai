@@ -38,6 +38,15 @@ export type VehicleDetailDto = {
   currentStatus: VehicleStatus
   entries: VehicleEntryDto[]
 }
+// مصدر فريمات الوضع التلقائي لبوابة: كاميرا جهاز المتصفح أو بث خارجي من خادم جسر.
+export type FrameSource = "device" | "external"
+export type GateSettingDto = {
+  gateNumber: number
+  frameSource: FrameSource
+  lastFrameAt: string | null
+  lastPlate: string | null
+}
+
 export type TrackingOverview = { inside: number; outside: number; blocked: number; total: number }
 export type PresentVehicleDto = {
   id: number

@@ -22,12 +22,17 @@ import {
   Loader2,
   Hand,
   Cpu,
+  Settings2,
+  Server,
+  Wifi,
+  WifiOff,
 } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { KpiCard } from "@/components/kpi-card"
 import { cn } from "@/lib/utils"
 import { equipmentTypeLabels } from "@/lib/labels"
@@ -37,6 +42,8 @@ import {
   attemptVehicleExit,
   searchVehicle,
   autoGateRead,
+  getGateSettings,
+  setGateFrameSource,
 } from "@/app/actions/vehicle-tracking"
 import {
   GATE_COUNT,
@@ -46,6 +53,8 @@ import {
   type TrackingOverview,
   type PresentVehicleDto,
   type EntryMethod,
+  type FrameSource,
+  type GateSettingDto,
 } from "@/lib/vehicle-tracking-shared"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
@@ -105,6 +114,14 @@ export function VehicleTrackingClient({
   const overview = data?.overview ?? initialOverview
   const inside = data?.inside ?? initialInside
 
+  // إعدادات مصدر الفريمات لكل بوابة (تُحدَّث دورياً لعكس حالة البث الخارجي حيّاً).
+  const { data: gateSettings, mutate: mutateGates } = useSWR<GateSettingDto[]>(
+    "gate-settings",
+    () => getGateSettings(),
+    { refreshInterval: 12000, fallbackData: [] },
+  )
+  const settings = gateSettings ?? []
+
   return (
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -114,8 +131,10 @@ export function VehicleTrackingClient({
         <KpiCard label="خارج السوق" value={overview.outside} icon={CircleCheck} tone="accent" />
       </div>
 
+      <GateSettingsCard settings={settings} onChanged={() => mutateGates()} />
+
       <div className="grid gap-6 lg:grid-cols-2">
-        <GatePanel />
+        <GatePanel settings={settings} />
         <VehicleSearch />
       </div>
 
@@ -192,9 +211,12 @@ function GateSelector({ gate, setGate }: { gate: number; setGate: (g: number) =>
 }
 
 /* ---------------- لوحة البوابات: وضعان دائمان (تلقائي / يدوي) ---------------- */
-function GatePanel() {
+function GatePanel({ settings }: { settings: GateSettingDto[] }) {
   const [mode, setMode] = useState<"auto" | "manual">("auto")
   const [gate, setGate] = useState(1)
+
+  const current = settings.find((s) => s.gateNumber === gate)
+  const frameSource: FrameSource = current?.frameSource ?? "device"
 
   return (
     <Card className="flex flex-col gap-4 p-5">
@@ -226,7 +248,7 @@ function GatePanel() {
         <GateSelector gate={gate} setGate={setGate} />
 
         <TabsContent value="auto" className="m-0">
-          <AutoGate gate={gate} />
+          <AutoGate gate={gate} frameSource={frameSource} setting={current} />
         </TabsContent>
         <TabsContent value="manual" className="m-0">
           <ManualGate gate={gate} />
@@ -297,13 +319,33 @@ function ManualGate({ gate }: { gate: number }) {
   )
 }
 
-/* ---------------- الوضع التلقائي: كاميرا ANPR تقرأ اللوحة وتسجّل تلقائياً ---------------- */
+/* ---------------- الوضع التلقائي (ANPR): مصدر الفريمات جهاز أو بث خارجي ---------------- */
 // عتبة الثقة الدنيا لقبول القراءة، وفترة المسح، ومهلة تجاهل تكرار نفس اللوحة.
 const AUTO_CONFIDENCE_MIN = 55
 const AUTO_SCAN_MS = 5000
 const AUTO_COOLDOWN_MS = 12000
 
-function AutoGate({ gate }: { gate: number }) {
+// مبدّل مصدر الفريمات: كاميرا الجهاز (الوضع الحالي) أو بث خارجي من خادم جسر. الاختيار
+// يأتي من إعدادات البوابة المحفوظة في جدول gates. تقسيم المكوّن يضمن إيقاف كاميرا الجهاز
+// (عبر تنظيف useEffect) تلقائياً عند التحويل إلى البث الخارجي والعكس.
+function AutoGate({
+  gate,
+  frameSource,
+  setting,
+}: {
+  gate: number
+  frameSource: FrameSource
+  setting?: GateSettingDto
+}) {
+  return frameSource === "external" ? (
+    <ExternalGate gate={gate} setting={setting} />
+  ) : (
+    <DeviceCameraGate gate={gate} />
+  )
+}
+
+/* ---------------- الوضع التلقائي · مصدر: كاميرا الجهاز (getUserMedia) ---------------- */
+function DeviceCameraGate({ gate }: { gate: number }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -419,7 +461,7 @@ function AutoGate({ gate }: { gate: number }) {
   return (
     <div className="flex flex-col gap-4">
       <p className="rounded-lg border border-border bg-muted/40 p-2.5 text-xs text-muted-foreground">
-        الوضع الافتراضي: وجّه كاميرا البوابة نحو لوحة المركبة، ويتولّى النظام قراءتها وتسجيل الدخول/المشاهدة تلقائياً عند
+        الوضع الافتراضي: وجّه كاميرا البوابة نحو لوحة المركبة، ويتولّى النظام قر��ءتها وتسجيل الدخول/المشاهدة تلقائياً عند
         البوابة {gate}.
       </p>
 
@@ -481,6 +523,173 @@ function AutoGate({ gate }: { gate: number }) {
 
       <GateResult result={result} />
     </div>
+  )
+}
+
+/* ---------------- الوضع التلقائي · مصدر: بث خارجي (خادم جسر) ---------------- */
+// لا يلتقط المتصفح فريمات هنا: الفريمات تصل من خادم خارجي إلى POST /api/camera-feed
+// الذي يمرّرها لنفس منطق التعرّف والتسجيل. هذه اللوحة تعرض حالة البث وآخر قراءة فقط.
+function ExternalGate({ gate, setting }: { gate: number; setting?: GateSettingDto }) {
+  const lastAt = setting?.lastFrameAt ?? null
+  const lastPlate = setting?.lastPlate ?? null
+  // يُعتبر البث "متصلاً" إذا وصل فريم خلال آخر 30 ثانية.
+  const isLive = Boolean(lastAt && Date.now() - Date.parse(lastAt) < 30000)
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="rounded-lg border border-border bg-muted/40 p-2.5 text-xs text-muted-foreground">
+        مصدر الفريمات لهذه البوابة هو بث خارجي: يرسل خادم الجسر (المرتبط بكاميرات NVR) الفريمات إلى نقطة الاستقبال، ويتولّى
+        النظام قراءتها وتسجيل الدخول/المشاهدة تلقائياً — بنفس منطق كاميرا الجهاز.
+      </p>
+
+      {/* مؤشّر حالة البث الخارجي لهذه البوابة */}
+      <div
+        className={cn(
+          "flex items-center justify-between gap-3 rounded-lg border p-3",
+          isLive ? "border-primary/30 bg-primary/5" : "border-border bg-muted/30",
+        )}
+      >
+        <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+          {isLive ? (
+            <Wifi className="size-4 text-primary" />
+          ) : (
+            <WifiOff className="size-4 text-muted-foreground" />
+          )}
+          {isLive ? "البث متصل" : "بانتظار فريمات من الخادم الخارجي"}
+        </span>
+        <Badge variant={isLive ? "default" : "secondary"}>بوابة {gate}</Badge>
+      </div>
+
+      {lastAt && (
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <ScanLine className="size-4" />
+            آخر فريم مُستقبَل
+          </span>
+          <span className="flex items-center gap-2">
+            {lastPlate ? (
+              <span className="font-mono font-bold text-foreground" dir="ltr">
+                {lastPlate}
+              </span>
+            ) : (
+              <span className="text-xs text-muted-foreground">دون لوحة مقروءة</span>
+            )}
+            <span className="text-xs text-muted-foreground" dir="ltr">
+              {fmt(lastAt)}
+            </span>
+          </span>
+        </div>
+      )}
+
+      {/* مواصفات نقطة الاستقبال ليستخدمها خادم الجسر الخارجي */}
+      <div className="flex flex-col gap-2 rounded-lg border border-border bg-background p-3">
+        <span className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+          <Server className="size-3.5 text-muted-foreground" />
+          نقطة استقبال الفريمات
+        </span>
+        <code className="rounded bg-muted px-2 py-1 text-xs text-foreground" dir="ltr">
+          POST /api/camera-feed
+        </code>
+        <span className="text-[11px] text-muted-foreground" dir="ltr">
+          {`{ image: dataURL, gate_id: ${gate}, timestamp }`}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+/* ---------------- إعدادات مصدر الفريمات لكل بوابة ---------------- */
+function GateSettingsCard({
+  settings,
+  onChanged,
+}: {
+  settings: GateSettingDto[]
+  onChanged: () => void
+}) {
+  const [pending, start] = useTransition()
+  const [savingGate, setSavingGate] = useState<number | null>(null)
+
+  function change(gateNumber: number, source: FrameSource) {
+    setSavingGate(gateNumber)
+    start(async () => {
+      const res = await setGateFrameSource(gateNumber, source)
+      if (res.ok) {
+        toast.success(`تم ضبط مصدر فريمات البوابة ${gateNumber}`)
+        onChanged()
+      } else {
+        toast.error("تعذّر حفظ الإعداد")
+      }
+      setSavingGate(null)
+    })
+  }
+
+  // نضمن ترتيب البوابات 1..GATE_COUNT حتى قبل وصول بيانات SWR.
+  const rows: GateSettingDto[] = Array.from({ length: GATE_COUNT }, (_, i) => {
+    const n = i + 1
+    return (
+      settings.find((s) => s.gateNumber === n) ?? { gateNumber: n, frameSource: "device", lastFrameAt: null, lastPlate: null }
+    )
+  })
+
+  return (
+    <Card className="flex flex-col gap-4 p-5">
+      <div className="flex items-center gap-2">
+        <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Settings2 className="size-5" />
+        </div>
+        <div>
+          <h2 className="font-bold text-foreground">مصدر الفريمات لكل بوابة</h2>
+          <p className="text-xs text-muted-foreground">
+            حدّد مصدر فريمات الوضع التلقائي لكل بوابة: كاميرا الجهاز (للاختبار) أو بث خارجي من خادم الجسر
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        {rows.map((s) => {
+          const isExternalLive = Boolean(
+            s.frameSource === "external" && s.lastFrameAt && Date.now() - Date.parse(s.lastFrameAt) < 30000,
+          )
+          return (
+            <div
+              key={s.gateNumber}
+              className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background p-2.5"
+            >
+              <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <span className="flex size-8 items-center justify-center rounded-md bg-muted text-xs font-bold">
+                  {s.gateNumber}
+                </span>
+                بوابة {s.gateNumber}
+                {isExternalLive && <Wifi className="size-3.5 text-primary" aria-label="البث متصل" />}
+              </span>
+              <Select
+                value={s.frameSource}
+                onValueChange={(v) => change(s.gateNumber, v as FrameSource)}
+                disabled={pending && savingGate === s.gateNumber}
+              >
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="device">
+                    <span className="flex items-center gap-2">
+                      <Camera className="size-3.5" />
+                      كاميرا الجهاز
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="external">
+                    <span className="flex items-center gap-2">
+                      <Server className="size-3.5" />
+                      بث خارجي
+                    </span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )
+        })}
+      </div>
+    </Card>
   )
 }
 
