@@ -1,6 +1,5 @@
 "use client"
 
-import Link from "next/link"
 import { useMemo, useState } from "react"
 import useSWR, { mutate } from "swr"
 import {
@@ -17,8 +16,6 @@ import {
   CircleX,
   Trash2,
   Truck,
-  Radar,
-  ArrowLeft,
   type LucideIcon,
 } from "lucide-react"
 import { Card } from "@/components/ui/card"
@@ -31,8 +28,8 @@ import {
 } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
-import { VehicleTracking } from "./vehicle-tracking"
-import type { TrackedVehicle } from "@/app/actions/ai-monitoring"
+import { VehicleTrackingClient } from "@/app/vehicle-tracking/vehicle-tracking-client"
+import type { TrackingOverview, PresentVehicleDto } from "@/lib/vehicle-tracking-shared"
 import {
   detectionTypeOptions,
   detectionStatusOptions,
@@ -219,13 +216,28 @@ function SnapshotDialog({
 export function MonitoringDashboard({
   initial,
   isAdmin,
-  vehicleTracking,
+  trackingOverview,
+  trackingInside,
+  initialTab = "live",
 }: {
   initial: DetectionDto[]
   isAdmin: boolean
-  vehicleTracking: TrackedVehicle[]
+  trackingOverview: TrackingOverview
+  trackingInside: PresentVehicleDto[]
+  initialTab?: string
 }) {
   const { t, locale, dir } = useI18n()
+  // التبويب النشط مدفوع بالرابط: نبدأ من القيمة الآتية من الخادم لتفادي عدم تطابق الترطيب،
+  // ونحدّث ?tab في الرابط عند التبديل حتى تبقى الروابط قابلة للمشاركة.
+  const [tab, setTab] = useState(initialTab)
+  function onTabChange(v: string) {
+    setTab(v)
+    if (typeof window === "undefined") return
+    const url = new URL(window.location.href)
+    if (v === "vehicles") url.searchParams.set("tab", "vehicle-tracking")
+    else url.searchParams.delete("tab")
+    window.history.replaceState(null, "", url.toString())
+  }
   const { data } = useSWR<{ detections: DetectionDto[] }>(
     DETECTIONS_KEY,
     fetcher,
@@ -338,7 +350,7 @@ export function MonitoringDashboard({
     "rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
 
   return (
-    <Tabs defaultValue="live" dir={dir} className="gap-6">
+    <Tabs value={tab} onValueChange={onTabChange} dir={dir} className="gap-6">
       <TabsList>
         <TabsTrigger value="live" className="gap-1.5">
           <Radio className="size-4" />
@@ -675,24 +687,9 @@ export function MonitoringDashboard({
       </div>
       </TabsContent>
 
-      <TabsContent value="vehicles" className="flex flex-col gap-6">
-        {/* رابط للنظام الكامل: لوحة تحكم البوابات (دخول/خروج/حجب) في صفحة مستقلة. */}
-        <Link
-          href="/vehicle-tracking"
-          className="flex items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 px-5 py-4 transition-colors hover:bg-primary/10"
-        >
-          <span className="flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <Radar className="size-5" />
-            </span>
-            <span className="flex flex-col">
-              <span className="text-sm font-bold">{t("aiMonitoring.gateSystemTitle")}</span>
-              <span className="text-xs text-muted-foreground">{t("aiMonitoring.gateSystemDesc")}</span>
-            </span>
-          </span>
-          <ArrowLeft className="size-5 shrink-0 text-primary rtl:rotate-0 ltr:rotate-180" />
-        </Link>
-        <VehicleTracking initial={vehicleTracking} />
+      <TabsContent value="vehicles">
+        {/* النظام الكامل لتتبع المركبات: بحث باللوحة، لوحة البوابات، والمركبات داخل السوق. */}
+        <VehicleTrackingClient initialOverview={trackingOverview} initialInside={trackingInside} />
       </TabsContent>
     </Tabs>
   )

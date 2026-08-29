@@ -1162,7 +1162,7 @@ export const en: Dictionary = {
     clearFilters: "Clear filters",
     autoRefresh: "Auto-refresh every 10 seconds",
     detectionsCount: "detections",
-    tabLive: "Live Monitoring",
+    tabLive: "Field Detection",
     tabVehicles: "Vehicle Tracking",
     gateSystemTitle: "Full Gate System",
     gateSystemDesc: "Entry/exit across 7 gates, sighting tracking, and exit blocking when a violation exists",

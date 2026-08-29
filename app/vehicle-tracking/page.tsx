@@ -1,21 +1,7 @@
-import { getTrackingOverview, getVehiclesInside } from "@/app/actions/vehicle-tracking"
-import { AppShell } from "@/components/app-shell"
-import { requireModule } from "@/lib/session"
-import { getServerT } from "@/lib/i18n/server"
-import { VehicleTrackingClient } from "./vehicle-tracking-client"
+import { redirect } from "next/navigation"
 
-export default async function VehicleTrackingPage() {
-  const user = await requireModule("ai_monitoring")
-  const [overview, inside] = await Promise.all([getTrackingOverview(), getVehiclesInside()])
-  const { t } = await getServerT()
-
-  return (
-    <AppShell
-      title={t("pageHeaders.vehicleTrackingTitle")}
-      subtitle={t("pageHeaders.vehicleTrackingSubtitle")}
-      user={user}
-    >
-      <VehicleTrackingClient initialOverview={overview} initialInside={inside} />
-    </AppShell>
-  )
+// دُمجت صفحة تتبع المركبات داخل صفحة المراقبة الذكية كتبويب. نُبقي هذا المسار كإعادة
+// توجيه دائم حتى لا تنكسر أي روابط سابقة كانت تشير إلى /vehicle-tracking.
+export default function VehicleTrackingRedirect() {
+  redirect("/ai-monitoring?tab=vehicle-tracking")
 }
