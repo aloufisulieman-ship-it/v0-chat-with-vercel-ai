@@ -33,11 +33,11 @@ export type EquipmentRecord = {
 
 type EquipmentAction = (formData: FormData) => Promise<void>
 
-function EquipmentDialog({ item }: { item?: EquipmentRecord }) {
+function EquipmentDialog({ item, typeOptions }: { item?: EquipmentRecord; typeOptions: { value: string; label: string }[] }) {
   const { t, dir } = useI18n()
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(item?.active ?? true)
-  const [type, setType] = useState(item?.equipmentType ?? "forklift")
+  const [type, setType] = useState(item?.equipmentType ?? typeOptions[0]?.value ?? "forklift")
   const action: EquipmentAction = item ? updateEquipment : createEquipment
   const [, formAction, pending] = useActionState(async (_: null, formData: FormData) => {
     await action(formData)
@@ -74,7 +74,7 @@ function EquipmentDialog({ item }: { item?: EquipmentRecord }) {
               <Select value={type} onValueChange={setType}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {equipmentTypeOptions.map((o) => (
+                  {typeOptions.map((o) => (
                     <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                   ))}
                 </SelectContent>
@@ -127,13 +127,27 @@ function DeleteEquipmentButton({ item }: { item: EquipmentRecord }) {
   )
 }
 
-export function EquipmentRegistry({ items }: { items: EquipmentRecord[] }) {
+export function EquipmentRegistry({
+  items,
+  vehicleTypes,
+}: {
+  items: EquipmentRecord[]
+  // أنواع المركبات من إعدادات المؤسسة (القيمة = التسمية العربية). عند غيابها نرجع للافتراضية.
+  vehicleTypes?: string[]
+}) {
   const { t, dir } = useI18n()
+  const typeOptions =
+    vehicleTypes && vehicleTypes.length > 0
+      ? vehicleTypes.map((label) => ({ value: label, label }))
+      : equipmentTypeOptions
+  // خريطة عرض: مفاتيح المعدات القديمة (forklift...) + التسميات المخصّصة الحالية.
+  const typeLabelMap: Record<string, string> = { ...equipmentTypeLabels }
+  for (const o of typeOptions) typeLabelMap[o.value] = o.label
   return (
     <section className="flex flex-col gap-4" dir={dir}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div><h2 className="text-lg font-semibold text-foreground">{t("equipmentReg.heading")}</h2><p className="text-sm text-muted-foreground">{t("equipmentReg.subtitle")}</p></div>
-        <EquipmentDialog />
+        <EquipmentDialog typeOptions={typeOptions} />
       </div>
       <div className="overflow-hidden rounded-lg border border-border">
         <Table>
@@ -142,7 +156,7 @@ export function EquipmentRegistry({ items }: { items: EquipmentRecord[] }) {
             {items.length === 0 ? (
               <TableRow><TableCell colSpan={7} className="h-32 text-center"><div className="flex flex-col items-center gap-2 text-muted-foreground"><Truck className="size-6" /><span>{t("equipmentReg.empty")}</span></div></TableCell></TableRow>
             ) : items.map((item) => (
-              <TableRow key={item.id}><TableCell dir="ltr" className="font-mono text-xs"><Badge variant="outline" className="font-mono">{item.plateNumber}</Badge></TableCell><TableCell>{equipmentTypeLabels[item.equipmentType] || item.equipmentType}</TableCell><TableCell>{item.ownerCompany || "-"}</TableCell><TableCell>{item.driverName || "-"}</TableCell><TableCell dir="ltr" className="font-mono text-xs">{item.internalCode || "-"}</TableCell><TableCell><Badge variant={item.active ? "default" : "secondary"}>{item.active ? t("equipmentReg.statusActive") : t("equipmentReg.statusInactive")}</Badge></TableCell><TableCell><div className="flex justify-end gap-1"><EquipmentDialog item={item} /><DeleteEquipmentButton item={item} /></div></TableCell></TableRow>
+              <TableRow key={item.id}><TableCell dir="ltr" className="font-mono text-xs"><Badge variant="outline" className="font-mono">{item.plateNumber}</Badge></TableCell><TableCell>{typeLabelMap[item.equipmentType] || item.equipmentType}</TableCell><TableCell>{item.ownerCompany || "-"}</TableCell><TableCell>{item.driverName || "-"}</TableCell><TableCell dir="ltr" className="font-mono text-xs">{item.internalCode || "-"}</TableCell><TableCell><Badge variant={item.active ? "default" : "secondary"}>{item.active ? t("equipmentReg.statusActive") : t("equipmentReg.statusInactive")}</Badge></TableCell><TableCell><div className="flex justify-end gap-1"><EquipmentDialog item={item} typeOptions={typeOptions} /><DeleteEquipmentButton item={item} /></div></TableCell></TableRow>
             ))}
           </TableBody>
         </Table>

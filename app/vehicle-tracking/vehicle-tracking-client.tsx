@@ -183,12 +183,22 @@ function GateResult({ result }: { result: GateActionResult | null }) {
 }
 
 /* ---------------- اختيار البوابة (مشترك) ---------------- */
-function GateSelector({ gate, setGate }: { gate: number; setGate: (g: number) => void }) {
+function GateSelector({
+  gate,
+  setGate,
+  count,
+  label = "البوابة",
+}: {
+  gate: number
+  setGate: (g: number) => void
+  count: number
+  label?: string
+}) {
   return (
     <div className="flex flex-col gap-2">
-      <label className="text-sm font-medium text-foreground">البوابة</label>
+      <label className="text-sm font-medium text-foreground">{label}</label>
       <div className="flex flex-wrap gap-2">
-        {Array.from({ length: GATE_COUNT }, (_, i) => i + 1).map((g) => (
+        {Array.from({ length: Math.max(1, count) }, (_, i) => i + 1).map((g) => (
           <button
             key={g}
             type="button"
@@ -211,7 +221,15 @@ function GateSelector({ gate, setGate }: { gate: number; setGate: (g: number) =>
 }
 
 /* ---------------- لوحة البوابات: وضعان دائمان (تلقائي / يدوي) ---------------- */
-function GatePanel({ settings }: { settings: GateSettingDto[] }) {
+function GatePanel({
+  settings,
+  entryGateCount,
+  exitGateCount,
+}: {
+  settings: GateSettingDto[]
+  entryGateCount: number
+  exitGateCount: number
+}) {
   const [mode, setMode] = useState<"auto" | "manual">("auto")
   const [gate, setGate] = useState(1)
 
@@ -227,7 +245,7 @@ function GatePanel({ settings }: { settings: GateSettingDto[] }) {
         <div>
           <h2 className="font-bold text-foreground">محاكاة البوابات (ANPR)</h2>
           <p className="text-xs text-muted-foreground">
-            تسجيل دخول/مشاهدة ومحاولة خروج المركبات عبر البوابات الـ {GATE_COUNT}
+            تسجيل دخول/مشاهدة عبر {entryGateCount} بوابة دخول، ومحاولة خروج عبر {exitGateCount} بوابة خروج
           </p>
         </div>
       </div>
@@ -245,13 +263,14 @@ function GatePanel({ settings }: { settings: GateSettingDto[] }) {
           </TabsTrigger>
         </TabsList>
 
-        <GateSelector gate={gate} setGate={setGate} />
+        {/* الوضع التلقائي يقرأ عند بوابات الدخول */}
+        <GateSelector gate={gate} setGate={setGate} count={entryGateCount} label="بوابة الدخول" />
 
         <TabsContent value="auto" className="m-0">
           <AutoGate gate={gate} frameSource={frameSource} setting={current} />
         </TabsContent>
         <TabsContent value="manual" className="m-0">
-          <ManualGate gate={gate} />
+          <ManualGate entryGate={gate} exitGateCount={exitGateCount} />
         </TabsContent>
       </Tabs>
     </Card>
@@ -259,8 +278,11 @@ function GatePanel({ settings }: { settings: GateSettingDto[] }) {
 }
 
 /* ---------------- الوضع اليدوي: إدخال رقم اللوحة + أزرار دخول/مشاهدة/خروج ---------------- */
-function ManualGate({ gate }: { gate: number }) {
+// بوابة الدخول (للدخول/المشاهدة) تأتي من مُنتقي اللوحة أعلاه؛ وبوابة الخروج مستقلّة
+// تماماً بقائمتها الخاصة (عدد بوابات الخروج قد يختلف عن الدخول).
+function ManualGate({ entryGate, exitGateCount }: { entryGate: number; exitGateCount: number }) {
   const [plate, setPlate] = useState("")
+  const [exitGate, setExitGate] = useState(1)
   const [pending, start] = useTransition()
   const [result, setResult] = useState<GateActionResult | null>(null)
 
@@ -276,7 +298,7 @@ function ManualGate({ gate }: { gate: number }) {
   return (
     <div className="flex flex-col gap-4">
       <p className="rounded-lg border border-border bg-muted/40 p-2.5 text-xs text-muted-foreground">
-        استخدم الإدخال اليدوي عند تعذّر القراءة التلقائية: تعطّل الكاميرا، لوحة غير واضحة، مركبة بلا لوحة (رافعة شوكية)، أو
+        استخدم الإدخال اليدوي عند تعذّر القراءة التلقائية: تعطّل الكاميرا، لوحة غير واضحة, مركبة بلا لوحة (رافعة شوكية)، أو
         لتصحيح قراءة تلقائية خاطئة.
       </p>
 
@@ -291,26 +313,31 @@ function ManualGate({ gate }: { gate: number }) {
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <Button disabled={pending || !plate.trim()} onClick={() => run(() => recordVehicleEntry(plate, gate))}>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <Button disabled={pending || !plate.trim()} onClick={() => run(() => recordVehicleEntry(plate, entryGate))}>
           <LogIn data-icon="inline-start" />
-          دخول
+          دخول (بوابة {entryGate})
         </Button>
         <Button
           variant="secondary"
           disabled={pending || !plate.trim()}
-          onClick={() => run(() => recordVehicleSighting(plate, `بوابة-${gate}`, `منطقة البوابة ${gate}`))}
+          onClick={() => run(() => recordVehicleSighting(plate, `بوابة-${entryGate}`, `منطقة البوابة ${entryGate}`))}
         >
           <Radar data-icon="inline-start" />
-          مشاهدة
+          مشاهدة (بوابة {entryGate})
         </Button>
+      </div>
+
+      {/* الخروج ببوابة مستقلّة */}
+      <div className="flex flex-col gap-3 rounded-lg border border-border bg-muted/20 p-3">
+        <GateSelector gate={exitGate} setGate={setExitGate} count={exitGateCount} label="بوابة الخروج" />
         <Button
           variant="outline"
           disabled={pending || !plate.trim()}
-          onClick={() => run(() => attemptVehicleExit(plate, gate))}
+          onClick={() => run(() => attemptVehicleExit(plate, exitGate))}
         >
           <LogOut data-icon="inline-start" />
-          خروج
+          خروج (بوابة {exitGate})
         </Button>
       </div>
 

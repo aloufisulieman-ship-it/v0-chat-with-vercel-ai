@@ -1,4 +1,5 @@
 import { getEquipment } from "@/app/actions/equipment"
+import { getOperationalSettings } from "@/app/actions/org-settings"
 import { AppShell } from "@/components/app-shell"
 import { KpiCard } from "@/components/kpi-card"
 import { requireModule } from "@/lib/session"
@@ -8,7 +9,8 @@ import { getServerT } from "@/lib/i18n/server"
 
 export default async function EquipmentPage() {
   const user = await requireModule("ai_monitoring")
-  const items = await getEquipment()
+  const [items, operational] = await Promise.all([getEquipment(), getOperationalSettings()])
+  const vehicleTypes = operational.vehicleTypes.map((v) => v.label)
   const active = items.filter((i) => i.active).length
   const forklifts = items.filter((i) => i.equipmentType === "forklift").length
   const { t } = await getServerT()
@@ -20,7 +22,7 @@ export default async function EquipmentPage() {
         <KpiCard label={t("equipmentReg.kpiActive")} value={active} icon={CheckCircle2} tone="primary" />
         <KpiCard label={t("equipmentReg.kpiForklifts")} value={forklifts} icon={Forklift} tone="accent" />
       </div>
-      <EquipmentRegistry items={items} />
+      <EquipmentRegistry items={items} vehicleTypes={vehicleTypes} />
     </AppShell>
   )
 }

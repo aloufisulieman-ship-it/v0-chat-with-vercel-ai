@@ -6,6 +6,7 @@ import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { requireModule } from "@/lib/session"
 import { getViolations, getEmployees, deleteViolation } from "@/app/actions/hse"
+import { getOperationalSettings } from "@/app/actions/org-settings"
 import { getServerT } from "@/lib/i18n/server"
 import { statusLabel, categoryLabel } from "@/lib/i18n/labels"
 import { effectiveViolationStatus, isViolationClosed } from "@/lib/violation-status"
@@ -32,7 +33,12 @@ export default async function ViolationsPage({
   searchParams: Promise<{ evidence?: string; from?: string; detectedBy?: string }>
 }) {
   const user = await requireModule("violations")
-  const [violations, employees] = await Promise.all([getViolations(), getEmployees()])
+  const [violations, employees, operational] = await Promise.all([
+    getViolations(),
+    getEmployees(),
+    getOperationalSettings(),
+  ])
+  const violationTypeLabels = operational.violationTypes.map((v) => v.label)
   const { t } = await getServerT()
   const isAdmin = user.role === "admin"
   const NOT_IN_SOURCE = t("violations.notInSource")
@@ -131,12 +137,13 @@ export default async function ViolationsPage({
       subtitle={t("pageHeaders.violationsSubtitle")}
       user={user}
       action={
-        <ViolationFormDialog
-          employees={employees}
-          initialEvidence={initialEvidence}
-          initialDetectedBy={initialDetectedBy}
-          autoOpen={autoOpen}
-        />
+          <ViolationFormDialog
+            employees={employees}
+            initialEvidence={initialEvidence}
+            initialDetectedBy={initialDetectedBy}
+            autoOpen={autoOpen}
+            violationTypes={violationTypeLabels}
+          />
       }
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
