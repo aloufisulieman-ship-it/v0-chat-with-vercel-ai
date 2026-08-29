@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { LogIn, Loader2, Check, X, Pencil } from "lucide-react"
+import { LogIn, Loader2, Check, X, Pencil, Unlock } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -28,6 +28,7 @@ import {
   approveOrganization,
   rejectOrganization,
   updateOrganizationName,
+  unlockOrganizationSettings,
 } from "@/app/actions/platform"
 
 type Status = "pending" | "approved" | "rejected"
@@ -38,10 +39,14 @@ export function OrganizationActions({
   orgId,
   status,
   name,
+  settingsLocked,
+  settingsUnlockRequested,
 }: {
   orgId: string
   status: Status
   name: string
+  settingsLocked: boolean
+  settingsUnlockRequested: boolean
 }) {
   const [pending, startTransition] = useTransition()
   const [rejectOpen, setRejectOpen] = useState(false)
@@ -132,6 +137,21 @@ export function OrganizationActions({
         <Pencil className="size-4" />
         تعديل
       </Button>
+
+      {settingsLocked && (
+        <Button
+          size="sm"
+          variant={settingsUnlockRequested ? "default" : "outline"}
+          className="gap-2"
+          disabled={pending}
+          onClick={() =>
+            run(() => unlockOrganizationSettings(orgId), "تم فتح تعديل الإعدادات للمؤسسة")
+          }
+        >
+          <Unlock className="size-4" />
+          {settingsUnlockRequested ? "فتح التعديل (مطلوب)" : "فتح تعديل الإعدادات"}
+        </Button>
+      )}
 
       <Button
         size="sm"

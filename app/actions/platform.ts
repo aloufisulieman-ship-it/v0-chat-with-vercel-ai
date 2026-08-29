@@ -17,6 +17,9 @@ export type OrganizationSummary = {
   approvedUserCount: number
   registeredAt: string
   status: "pending" | "approved" | "rejected"
+  // قفل الإعداد الأولي لهذه المؤسسة، وهل طلب مديرها فتح التعديل (يحتاج إجراءً).
+  settingsLocked: boolean
+  settingsUnlockRequested: boolean
 }
 
 // ترتيب عرض الحالات: المؤسسات قيد المراجعة أولاً (تحتاج إجراءً)، ثم المعتمدة، ثم المرفوضة.
@@ -77,6 +80,8 @@ export async function listOrganizations(): Promise<OrganizationSummary[]> {
         approvedUserCount: cnt.approved,
         registeredAt: o.createdAt.toISOString(),
         status: normalizeOrgStatus(o.status),
+        settingsLocked: o.settingsLocked ?? false,
+        settingsUnlockRequested: o.settingsUnlockRequested ?? false,
       }
     })
     .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status])
@@ -159,6 +164,20 @@ export async function updateOrganizationName(orgId: string, name: string): Promi
   await db
     .update(organization)
     .set({ name: trimmed.slice(0, 200), updatedAt: new Date() })
+    .where(eq(organization.id, orgId))
+  revalidatePath("/admin/organizations")
+  return { success: true }
+}
+
+// فتح تعديل الإعدادات لمؤسسة بعد قفلها (استجابةً لطلب مديرها). يعيد settingsLocked إلى
+// false فيتمكّن مدير المؤسسة من تعديل المعلومات والإعدادات مجدداً (ويُقفل تلقائياً بعد
+// أول حفظ لاحق). يمسح علامة الطلب. حصري لمسؤول المنصّة.
+export async function unlockOrganizationSettings(orgId: string): Promise<{ success: true }> {
+  await requirePlatformAdmin()
+  await assertOrgExists(orgId)
+  await db
+    .update(organization)
+    .set({ settingsLocked: false, settingsUnlockRequested: false, updatedAt: new Date() })
     .where(eq(organization.id, orgId))
   revalidatePath("/admin/organizations")
   return { success: true }

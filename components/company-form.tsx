@@ -39,43 +39,50 @@ export function CompanyForm({ company, readOnly = false }: { company: Company; r
 
   return (
     <form action={handleSubmit} className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="name">{t("companyForm.name")}</Label>
-        <Input id="name" name="name" defaultValue={company?.name ?? ""} placeholder={t("companyForm.namePlaceholder")} required />
-      </div>
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="industry">{t("companyForm.industry")}</Label>
-        <Input id="industry" name="industry" defaultValue={company?.industry ?? ""} placeholder={t("companyForm.industryPlaceholder")} />
-      </div>
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="address">{t("companyForm.address")}</Label>
-        <Input id="address" name="address" defaultValue={company?.address ?? ""} placeholder={t("companyForm.addressPlaceholder")} />
-      </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      {/* في وضع العرض فقط (بعد قفل الإعداد الأولي) نعطّل كل حقل صراحةً — إضافةً إلى إخفاء
+          زر الحفظ — فيصبح النموذج للقراءة فقط لمدير المؤسسة. */}
+      <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
-          <Label htmlFor="phone">{t("companyForm.phone")}</Label>
-          <Input id="phone" name="phone" defaultValue={company?.phone ?? ""} dir="ltr" placeholder="+966..." />
+          <Label htmlFor="name">{t("companyForm.name")}</Label>
+          <Input id="name" name="name" defaultValue={company?.name ?? ""} placeholder={t("companyForm.namePlaceholder")} required disabled={readOnly} />
         </div>
         <div className="flex flex-col gap-2">
-          <Label htmlFor="email">{t("companyForm.email")}</Label>
-          <Input id="email" name="email" type="email" defaultValue={company?.email ?? ""} dir="ltr" placeholder="info@company.com" />
-        </div>
-      </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="employeeCount">{t("companyForm.employeeCount")}</Label>
-          <Input id="employeeCount" name="employeeCount" type="number" min="0" defaultValue={company?.employeeCount ?? 0} />
+          <Label htmlFor="industry">{t("companyForm.industry")}</Label>
+          <Input id="industry" name="industry" defaultValue={company?.industry ?? ""} placeholder={t("companyForm.industryPlaceholder")} disabled={readOnly} />
         </div>
         <div className="flex flex-col gap-2">
-          <Label htmlFor="hseManager">{t("companyForm.hseManager")}</Label>
-          <Input id="hseManager" name="hseManager" defaultValue={company?.hseManager ?? ""} placeholder={t("companyForm.hseManagerPlaceholder")} />
+          <Label htmlFor="address">{t("companyForm.address")}</Label>
+          <Input id="address" name="address" defaultValue={company?.address ?? ""} placeholder={t("companyForm.addressPlaceholder")} disabled={readOnly} />
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="phone">{t("companyForm.phone")}</Label>
+            <Input id="phone" name="phone" defaultValue={company?.phone ?? ""} dir="ltr" placeholder="+966..." disabled={readOnly} />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="email">{t("companyForm.email")}</Label>
+            <Input id="email" name="email" type="email" defaultValue={company?.email ?? ""} dir="ltr" placeholder="info@company.com" disabled={readOnly} />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="employeeCount">{t("companyForm.employeeCount")}</Label>
+            <Input id="employeeCount" name="employeeCount" type="number" min="0" defaultValue={company?.employeeCount ?? 0} disabled={readOnly} />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="hseManager">{t("companyForm.hseManager")}</Label>
+            <Input id="hseManager" name="hseManager" defaultValue={company?.hseManager ?? ""} placeholder={t("companyForm.hseManagerPlaceholder")} disabled={readOnly} />
+          </div>
         </div>
       </div>
       <div className="flex items-center gap-3">
-        <Button type="submit" className="gap-2" disabled={isPending || readOnly}>
-          <Save className="size-4" />
-          {isPending ? t("companyForm.saving") : t("companyForm.save")}
-        </Button>
+        {/* في وضع العرض فقط نُخفي زر الحفظ تماماً ونكتفي بملاحظة "عرض فقط". */}
+        {!readOnly && (
+          <Button type="submit" className="gap-2" disabled={isPending}>
+            <Save className="size-4" />
+            {isPending ? t("companyForm.saving") : t("companyForm.save")}
+          </Button>
+        )}
         {saved && <span className="text-sm text-primary">{t("companyForm.savedOk")}</span>}
         {readOnly && <span className="text-sm text-muted-foreground">{t("companyForm.readOnlyHint")}</span>}
       </div>
