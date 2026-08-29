@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { CompanyForm } from "@/components/company-form"
 import { ChangePasswordForm } from "@/components/change-password-form"
+import { OperationalSettingsForm } from "@/components/operational-settings-form"
 import { requireOrgUser } from "@/lib/session"
 import { getCompany } from "@/app/actions/hse"
+import { getOperationalSettings } from "@/app/actions/org-settings"
 import { getUsers } from "@/app/actions/users"
 import { getServerT } from "@/lib/i18n/server"
 import type { TFunction } from "@/lib/i18n/translate"
@@ -30,7 +32,9 @@ function roleLabel(t: TFunction, role?: string | null): string {
 export default async function SettingsPage() {
   const user = await requireOrgUser()
   const company = await getCompany()
+  const operational = await getOperationalSettings()
   const isAdmin = user.role === "admin"
+  const canEditOps = (user.role === "admin" || user.role === "manager") && !user.impersonating
   const team = isAdmin ? await getUsers() : []
   const { t } = await getServerT()
 
@@ -58,6 +62,10 @@ export default async function SettingsPage() {
           <div className="mt-auto rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground text-pretty">
             {t("settingsPage.roleHint")}
           </div>
+        </Card>
+
+        <Card className="p-6 lg:col-span-2">
+          <OperationalSettingsForm settings={operational} readOnly={!canEditOps} />
         </Card>
 
         <Card className="p-6 lg:col-span-2">

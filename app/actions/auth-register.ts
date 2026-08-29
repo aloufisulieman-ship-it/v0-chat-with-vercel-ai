@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm"
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { organization, user as userTable } from "@/lib/db/schema"
+import { seedOrganizationDefaults } from "@/app/actions/org-settings"
 
 // يُستدعى مباشرةً بعد نجاح authClient.signUp.email (الذي يسجّل الدخول تلقائياً ويضبط
 // الكوكي). يقرأ المستخدم الحالي من الجلسة، ينشئ مؤسسة جديدة، ويرقّي المُسجِّل إلى
@@ -40,6 +41,9 @@ export async function registerOrganization(input: {
     name: orgName.slice(0, 200),
     status: "pending",
   })
+
+  // تهيئة إعدادات التشغيل الافتراضية (أنواع مركبات/مخالفات، فئات جولة، أعداد بوابات).
+  await seedOrganizationDefaults(orgId)
 
   // المُسجِّل يصبح أول admin لمؤسسته، لكن بحالة "قيد المراجعة" — لا يستطيع استخدام
   // النظام حتى يعتمد مسؤول المنصّة المؤسسة (عندها تتحوّل حالته إلى approved).

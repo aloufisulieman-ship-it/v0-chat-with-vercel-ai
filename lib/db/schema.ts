@@ -317,7 +317,7 @@ export const violation = pgTable("violation", {
   category: text("category").default("internal"),
   // مصدر إدخال المخالفة: electronic (عبر النظام) | manual (نموذج ورقي ممسوح).
   entryMode: text("entry_mode").notNull().default("electronic"),
-  // اسم المفتش/الموظف الذ������ رصد المخالفة (يُعبّأ تلقائياً عند الرصد بالذكاء الاصطناعي).
+  // اسم المفتش/الموظف الذ�������� رصد المخالفة (يُعبّأ تلقائياً عند الرصد بالذكاء الاصطناعي).
   detectedBy: text("detected_by").default(""),
   internalAction: text("internal_action").default(""),
   violationDate: date("violationDate"),
@@ -723,5 +723,63 @@ export const vehicleSighting = pgTable(
   },
   (t) => ({
     entryIdx: index("vehicle_sightings_entry_idx").on(t.entryId),
+  }),
+)
+
+// ---------- إعدادات التشغيل لكل مؤسسة ----------
+// قيم كانت مثبّتة في الكود وأصبحت قابلة للتخصيص لكل مؤسسة. العزل عبر organizationId.
+// صف واحد لكل مؤسسة يحمل الأعداد العامة (بوابات الدخول/الخروج).
+export const orgSettings = pgTable("org_settings", {
+  organizationId: text("organizationId").primaryKey(),
+  entryGateCount: integer("entry_gate_count").notNull().default(1),
+  exitGateCount: integer("exit_gate_count").notNull().default(1),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+})
+
+// أنواع المركبات المتاحة للمؤسسة (نص عربي حر). sortOrder يحفظ ترتيب العرض.
+export const vehicleType = pgTable(
+  "vehicle_types",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: text("organizationId").notNull(),
+    label: text("label").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    orgIdx: index("vehicle_types_org_idx").on(t.organizationId),
+  }),
+)
+
+// أنواع المخالفات المتاحة للمؤسسة (نص عربي حر + شدة افتراضية اختيارية).
+export const violationType = pgTable(
+  "violation_types",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: text("organizationId").notNull(),
+    label: text("label").notNull(),
+    severity: text("severity").notNull().default("medium"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    orgIdx: index("violation_types_org_idx").on(t.organizationId),
+  }),
+)
+
+// فئات الجولة التفتيشية للمؤسسة (نص عربي حر + أيقونة + لون من مجموعة جاهزة).
+export const inspectionCategory = pgTable(
+  "inspection_categories",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: text("organizationId").notNull(),
+    label: text("label").notNull(),
+    icon: text("icon").notNull().default("clipboard-check"),
+    color: text("color").notNull().default("blue"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    orgIdx: index("inspection_categories_org_idx").on(t.organizationId),
   }),
 )
