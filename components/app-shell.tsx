@@ -43,17 +43,17 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen bg-background">
-      {/* علامة مائية: شعار رقيب (الدرع + العين) ثابتة في منتصف الخلفية، خلف كل المحتوى،
-          بشفافية منخفضة جدًا ولا تتفاعل مع المؤشر. mix-blend يُخفي خلفية الأيقونة البيضاء
-          فيظهر الدرع فقط في الوضعين الفاتح والداكن. */}
+      {/* علامة مائية: شعار رقيب (الدرع + العين) بنسخة شفافة فعليًا (بلا خلفية بيضاء)،
+          ثابتة في منتصف الخلفية خلف كل المحتوى (z-0 أسفل عمود المحتوى z-10)، ولا تتفاعل
+          مع المؤشر. الشفافية تُطبَّق على الصورة نفسها فقط (0.04) فلا تؤثر على تباين النصوص. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none fixed inset-0 z-0 flex items-center justify-center overflow-hidden"
+        className="pointer-events-none fixed inset-0 z-0 flex items-center justify-center overflow-hidden bg-transparent"
       >
         <img
-          src="/raqeeb-icon.png"
+          src="/raqeeb-watermark.png"
           alt=""
-          className="h-[460px] w-[460px] max-w-[80vw] object-contain opacity-[0.05] mix-blend-multiply dark:opacity-[0.06] dark:mix-blend-screen"
+          className="h-[400px] w-[400px] max-w-[70vw] object-contain opacity-[0.04]"
         />
       </div>
 
