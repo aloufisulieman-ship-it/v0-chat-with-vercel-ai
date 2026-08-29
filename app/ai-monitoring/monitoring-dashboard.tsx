@@ -15,6 +15,7 @@ import {
   Check,
   CircleX,
   Trash2,
+  Truck,
   type LucideIcon,
 } from "lucide-react"
 import { Card } from "@/components/ui/card"
@@ -25,7 +26,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
+import { VehicleTracking } from "./vehicle-tracking"
+import type { TrackedVehicle } from "@/app/actions/ai-monitoring"
 import {
   detectionTypeOptions,
   detectionStatusOptions,
@@ -98,7 +102,7 @@ const typeTone: Record<DetectionType, string> = {
   pedestrian_near_forklift: "bg-destructive/10 text-destructive",
 }
 
-function isToday(iso: string) {
+export function isToday(iso: string) {
   // نقارن التاريخ بتوقيت الرياض (وليس توقيت الخادم/المتصفح) لضمان ثبات عدّاد
   // "اليوم" بين الخادم والعميل وصحّته بالنسبة للمستخدم السعودي.
   const fmt = (date: Date) =>
@@ -106,7 +110,7 @@ function isToday(iso: string) {
   return fmt(new Date(iso)) === fmt(new Date())
 }
 
-function timeFmt(iso: string, locale: string) {
+export function timeFmt(iso: string, locale: string) {
   const d = new Date(iso)
   // نثبّت المنطقة الزمنية على توقيت الرياض ليتطابق تنسيق الخادم (UTC) مع العميل
   // (التوقيت المحلي) ويُمنع خطأ عدم تطابق الترطيب (hydration mismatch)، مع عرض
@@ -212,11 +216,13 @@ function SnapshotDialog({
 export function MonitoringDashboard({
   initial,
   isAdmin,
+  vehicleTracking,
 }: {
   initial: DetectionDto[]
   isAdmin: boolean
+  vehicleTracking: TrackedVehicle[]
 }) {
-  const { t, locale } = useI18n()
+  const { t, locale, dir } = useI18n()
   const { data } = useSWR<{ detections: DetectionDto[] }>(
     DETECTIONS_KEY,
     fetcher,
@@ -329,7 +335,19 @@ export function MonitoringDashboard({
     "rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
 
   return (
-    <div className="flex flex-col gap-6">
+    <Tabs defaultValue="live" dir={dir} className="gap-6">
+      <TabsList>
+        <TabsTrigger value="live" className="gap-1.5">
+          <Radio className="size-4" />
+          {t("aiMonitoring.tabLive")}
+        </TabsTrigger>
+        <TabsTrigger value="vehicles" className="gap-1.5">
+          <Truck className="size-4" />
+          {t("aiMonitoring.tabVehicles")}
+        </TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="live" className="flex flex-col gap-6">
       {/* بطاقات KPI للأنواع الستة */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         {detectionTypeOptions.map((opt) => {
@@ -652,6 +670,11 @@ export function MonitoringDashboard({
           </div>
         </Card>
       </div>
-    </div>
+      </TabsContent>
+
+      <TabsContent value="vehicles">
+        <VehicleTracking initial={vehicleTracking} />
+      </TabsContent>
+    </Tabs>
   )
 }

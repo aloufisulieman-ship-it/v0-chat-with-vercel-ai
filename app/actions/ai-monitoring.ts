@@ -1,12 +1,13 @@
 "use server"
 
 import { db } from "@/lib/db"
-import { aiDetection, activeCameraStream, aiMonitoringNotification, user } from "@/lib/db/schema"
+import { aiDetection, activeCameraStream, aiMonitoringNotification, user, equipment } from "@/lib/db/schema"
 import { and, desc, eq, gte, isNull, inArray, or } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { requireUser, requireHseReviewerScope, assertWritable } from "@/lib/session"
 import type { DetectionStatus, FrameViolation } from "@/lib/ai-monitoring"
 import { mergeFrameViolations } from "@/lib/ai-monitoring"
+import { normalizePlate, normalizeCode } from "@/lib/ai-recognition"
 import { sessionCameraId } from "@/lib/camera-session"
 
 const VALID_STATUS: DetectionStatus[] = ["new", "acknowledged", "resolved", "false_positive"]
@@ -313,7 +314,7 @@ export async function saveFrameDetection(input: {
         detectionTypes: JSON.stringify(mergedTypes),
         severity: primary.severity,
         confidenceScore: Math.max(existing.confidenceScore, merged.primaryConfidence),
-        // نجمع كل المخالفات في نص ملاحظات واحد يذكرها جميعاً مرة واحدة.
+        // نجمع كل المخ��لفات في نص ملاحظات واحد يذكرها جميعاً مرة واحدة.
         notes: mergeNotes(existing.notes || "", merged.notes),
         // نحدّث اللقطة لأحدث دليل بصري إن توفّرت لقطة جديدة.
         snapshotUrl: input.snapshotUrl || existing.snapshotUrl,
@@ -464,4 +465,154 @@ export async function deleteDetection(id: number) {
     : and(eq(aiDetection.organizationId, organizationId), eq(aiDetection.id, id), eq(aiDetection.userId, userId))
   await db.delete(aiDetection).where(where)
   revalidatePath("/ai-monitoring")
+}
+
+/* ---------------- تتبع المركبات ---------------- */
+
+// رصدة واحدة لمركبة: أين ومتى رُصدت وما نوع المخالفة وعدد مرات استمرارها.
+export type VehicleSighting = {
+  detectionId: number
+  location: string
+  at: string
+  detectionType: string
+  detectionTypes: string[]
+  severity: string
+  status: string
+  count: number
+}
+
+// مركبة متتبَّعة: بياناتها من السجل (إن كانت مسجّلة) + خلاصة رصداتها من المراقبة الذكية.
+export type TrackedVehicle = {
+  key: string
+  plate: string
+  registered: boolean
+  equipmentType: string
+  ownerCompany: string
+  driverName: string
+  internalCode: string
+  active: boolean
+  totalSightings: number
+  totalDetections: number
+  openViolations: number
+  lastSeenAt: string | null
+  lastSeenLocation: string | null
+  sightings: VehicleSighting[]
+}
+
+const OPEN_STATUSES = new Set(["new", "acknowledged"])
+
+// تتبّع المركبات: يربط رصدات المراقبة الذكية (subjectType='vehicle') بسجل المعدات
+// عبر اللوحة المطبّعة، فيعرض لكل مركبة آخر ظهور وموقعه وعدد الرصدات والمخالفات المفتوحة
+// وسجل ظهورها. يشمل المركبات المسجّلة (حتى بلا رصدات) والمركبات المرصودة غير المسجّلة.
+export async function getVehicleTracking(): Promise<TrackedVehicle[]> {
+  const { userId, organizationId, isManager } = await requireHseReviewerScope()
+
+  const detWhere = isManager
+    ? and(eq(aiDetection.organizationId, organizationId), eq(aiDetection.subjectType, "vehicle"))
+    : and(
+        eq(aiDetection.organizationId, organizationId),
+        eq(aiDetection.subjectType, "vehicle"),
+        eq(aiDetection.userId, userId),
+      )
+  const detRows = await db
+    .select()
+    .from(aiDetection)
+    .where(detWhere)
+    .orderBy(desc(aiDetection.lastDetectedAt))
+
+  const equipRows = await db
+    .select()
+    .from(equipment)
+    .where(eq(equipment.organizationId, organizationId))
+
+  // تجميع الرصدات حسب مفتاح الهوية (subjectKey).
+  const groups = new Map<string, typeof detRows>()
+  for (const r of detRows) {
+    const key = r.subjectKey || "veh:?"
+    const list = groups.get(key)
+    if (list) list.push(r)
+    else groups.set(key, [r])
+  }
+
+  const toSighting = (r: (typeof detRows)[number]): VehicleSighting => ({
+    detectionId: r.id,
+    location: r.cameraLocation || "",
+    at: (r.lastDetectedAt as unknown as Date)?.toISOString?.() ?? String(r.lastDetectedAt),
+    detectionType: r.detectionType,
+    detectionTypes: parseDetectionTypes(r.detectionTypes, r.detectionType),
+    severity: r.severity,
+    status: r.status,
+    count: r.detectionCount,
+  })
+
+  const buildSummary = (rows: (typeof detRows)) => {
+    const sightings = rows.map(toSighting)
+    const totalDetections = rows.reduce((s, r) => s + (r.detectionCount || 1), 0)
+    const openViolations = rows.filter((r) => OPEN_STATUSES.has(r.status)).length
+    const last = sightings[0] ?? null // مرتّبة تنازلياً بآخر رصد
+    return {
+      totalSightings: rows.length,
+      totalDetections,
+      openViolations,
+      lastSeenAt: last?.at ?? null,
+      lastSeenLocation: last?.location ?? null,
+      sightings: sightings.slice(0, 25),
+    }
+  }
+
+  const result: TrackedVehicle[] = []
+  const usedKeys = new Set<string>()
+
+  // المركبات المسجّلة أولاً (تُعرض حتى دون رصدات).
+  for (const e of equipRows) {
+    const vehKey = `veh:${normalizePlate(e.plateNumber)}`
+    const tukKey = `tuk:${normalizeCode(e.plateNumber)}`
+    const matched = [vehKey, tukKey].filter((k) => groups.has(k))
+    const rows = matched.flatMap((k) => {
+      usedKeys.add(k)
+      return groups.get(k) as typeof detRows
+    })
+    rows.sort((a, b) => {
+      const ta = (a.lastDetectedAt as unknown as Date)?.getTime?.() ?? 0
+      const tb = (b.lastDetectedAt as unknown as Date)?.getTime?.() ?? 0
+      return tb - ta
+    })
+    result.push({
+      key: vehKey,
+      plate: e.plateNumber,
+      registered: true,
+      equipmentType: e.equipmentType,
+      ownerCompany: e.ownerCompany,
+      driverName: e.driverName,
+      internalCode: e.internalCode,
+      active: e.active,
+      ...buildSummary(rows),
+    })
+  }
+
+  // المركبات المرصودة غير المسجّلة في السجل.
+  for (const [key, rows] of groups) {
+    if (usedKeys.has(key)) continue
+    const plate = key.replace(/^(veh:|tuk:)/, "") || "?"
+    result.push({
+      key,
+      plate,
+      registered: false,
+      equipmentType: "",
+      ownerCompany: "",
+      driverName: "",
+      internalCode: "",
+      active: true,
+      ...buildSummary(rows),
+    })
+  }
+
+  // ترتيب: الأحدث ظهوراً أولاً، ثم المسجّلة بلا رصدات في النهاية.
+  result.sort((a, b) => {
+    const ta = a.lastSeenAt ? Date.parse(a.lastSeenAt) : 0
+    const tb = b.lastSeenAt ? Date.parse(b.lastSeenAt) : 0
+    return tb - ta
+  })
+
+  return result
 }

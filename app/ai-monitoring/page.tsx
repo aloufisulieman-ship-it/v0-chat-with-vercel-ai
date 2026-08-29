@@ -1,6 +1,6 @@
 import { AppShell } from "@/components/app-shell"
 import { requireHseReviewer } from "@/lib/session"
-import { getDetections } from "@/app/actions/ai-monitoring"
+import { getDetections, getVehicleTracking } from "@/app/actions/ai-monitoring"
 import { MonitoringDashboard, type DetectionDto } from "./monitoring-dashboard"
 import { getServerT } from "@/lib/i18n/server"
 import Link from "next/link"
@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic"
 export default async function AiMonitoringPage() {
   const user = await requireHseReviewer()
   const rows = await getDetections()
+  const vehicleTracking = await getVehicleTracking()
   const { t } = await getServerT()
 
   // تحويل التواريخ إلى نصوص لتتوافق مع بيانات الـ API أثناء التحديث الحي.
@@ -68,7 +69,11 @@ export default async function AiMonitoringPage() {
         </div>
       }
     >
-      <MonitoringDashboard initial={initial} isAdmin={user.role === "admin"} />
+      <MonitoringDashboard
+        initial={initial}
+        isAdmin={user.role === "admin"}
+        vehicleTracking={vehicleTracking}
+      />
     </AppShell>
   )
 }

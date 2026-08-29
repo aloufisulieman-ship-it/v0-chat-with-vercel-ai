@@ -1161,6 +1161,8 @@ export const en: Dictionary = {
     clearFilters: "Clear filters",
     autoRefresh: "Auto-refresh every 10 seconds",
     detectionsCount: "detections",
+    tabLive: "Live Monitoring",
+    tabVehicles: "Vehicle Tracking",
     noMatching: "No matching detections.",
     undefinedLocation: "Unspecified location",
     colTime: "Time",
@@ -1458,6 +1460,23 @@ export const en: Dictionary = {
       unauthOpenPhone: "Open phone camera stream",
       unauthBackHome: "Back to dashboard",
     },
+  },
+
+  vehicleTracking: {
+    kpiTotal: "Total Vehicles",
+    kpiSeenToday: "Seen Today",
+    kpiOpenViolations: "Open Violations",
+    kpiUnregistered: "Unregistered",
+    searchPlaceholder: "Search by plate, company or driver…",
+    vehiclesCount: "vehicles",
+    empty: "No vehicles to display.",
+    unregistered: "Unregistered",
+    noDetails: "No additional details",
+    notInRegistry: "Detected vehicle not in the equipment registry",
+    neverSeen: "Never detected",
+    totalSightings: "Total sightings",
+    openViolations: "Open violations",
+    noSightings: "No sightings recorded for this vehicle.",
   },
 
   status: {

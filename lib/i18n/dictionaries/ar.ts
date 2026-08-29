@@ -330,7 +330,7 @@ export const ar = {
     tabFile: "ملف Excel/CSV",
     pasteHint: "الصق اسماً واحداً في كل سطر. لإضافة الوظيفة، افصلها بفاصلة أو مسافتين (مثال: أحمد علي، فني).",
       pastePlaceholder: "أحمد ����لي، فني سلامة\nخالد سعيد، مشرف",
-    fileHint: "العمود الأول = الاسم، العمود الثاني (اختياري) = الوظيفة.",
+    fileHint: "العمود الأول = الاسم، العم��د الثاني (اختياري) = الوظيفة.",
     preview: "معاينة",
     cancel: "إلغاء",
     importAction: "استيراد",
@@ -637,7 +637,7 @@ export const ar = {
     detectedByShort: "اسم المفتش/الموظف",
   },
 
-  // نموذج إصدار تصريح
+  // نموذج إصدار ت��ريح
   permitDialog: {
     issue: "إصدار تصريح",
     issueTitle: "إصدار تصريح عمل",
@@ -1195,6 +1195,8 @@ export const ar = {
     clearFilters: "��سح الفلاتر",
     autoRefresh: "تحديث تلقائي كل 10 ثوانٍ",
     detectionsCount: "اكتشاف",
+    tabLive: "المراقبة اللحظية",
+    tabVehicles: "تتبع المركبات",
     noMatching: "لا توجد اكتشافات مطابقة.",
     undefinedLocation: "موقع غير محدد",
     colTime: "الوقت",
@@ -1503,6 +1505,24 @@ export const ar = {
       unauthOpenPhone: "فتح بث كاميرا الهاتف",
       unauthBackHome: "العودة للوحة التحكم",
     },
+  },
+
+  // تبويب تتبع المركبات داخل صفحة المراقبة الذكية
+  vehicleTracking: {
+    kpiTotal: "إجمالي المركبات",
+    kpiSeenToday: "ظهرت اليوم",
+    kpiOpenViolations: "مخالفات مفتوحة",
+    kpiUnregistered: "غير مسجّلة",
+    searchPlaceholder: "بحث باللوحة أو الشركة أو السائق…",
+    vehiclesCount: "مركبة",
+    empty: "لا توجد مركبات للعرض.",
+    unregistered: "غير مسجّلة",
+    noDetails: "لا توجد بيانات إضافية",
+    notInRegistry: "مركبة مرصودة غير موجودة في سجل المعدات",
+    neverSeen: "لم تُرصد بعد",
+    totalSightings: "إجمالي مرات الظهور",
+    openViolations: "مخالفات مفتوحة",
+    noSightings: "لا توجد رصدات مسجّلة لهذه المركبة.",
   },
 
   // الحالات (statuses) — قيم مشتركة عبر الوحدات
@@ -1846,13 +1866,13 @@ export const ar = {
     addUserTitle: "إضافة مستخدم جديد",
     addUserDesc: "أنشئ حساباً وحدّد قسمه والصفحات المسموح له بالوصول إليها.",
     nameLabel: "الاسم",
-    namePlaceholder: "مثال: محمد أحمد",
+    namePlaceholder: "مثال: محمد أ��مد",
     emailLabel: "البريد الإلكتروني",
     passwordLabel: "كلمة المرور",
     passwordPlaceholder: "8 أحرف على الأقل",
     departmentLabel: "القسم",
     roleLabel: "الدور",
-    adminAllAccess: "مدير النظام يملك صلاحية كاملة على جميع الصفحات.",
+    adminAllAccess: "مدير النظام يملك صلاحية كا��لة على جميع الصفحات.",
     allowedPages: "الصفحات المسموح بها",
     cancel: "إلغاء",
     createAccount: "إنشاء الحساب",
