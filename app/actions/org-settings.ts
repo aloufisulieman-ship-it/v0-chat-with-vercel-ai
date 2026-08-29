@@ -1,10 +1,11 @@
 "use server"
 
 import { db } from "@/lib/db"
-import { orgSettings, vehicleType, violationType, inspectionCategory } from "@/lib/db/schema"
+import { orgSettings, vehicleType, violationType, inspectionCategory, organization } from "@/lib/db/schema"
 import { eq, asc } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
-import { requireScope, requireHseReviewerScope, assertWritable } from "@/lib/session"
+import { requireScope, requireHseReviewerScope } from "@/lib/session"
+import { getSettingsLock, lockSettings, SETTINGS_LOCKED_MESSAGE } from "@/lib/settings-lock"
 import {
   MAX_GATES,
   DEFAULT_ENTRY_GATE_COUNT,
@@ -116,9 +117,15 @@ export async function getOperationalGateCounts(): Promise<{ entryGateCount: numb
 export async function saveOperationalSettings(
   input: OperationalSettingsInput,
 ): Promise<{ ok: boolean; error?: string }> {
-  await assertWritable()
-  const { organizationId, isManager } = await requireHseReviewerScope()
+  // قفل الإعداد الأولي: مسؤول المنصّة (readOnly = وضع الدخول إلى المؤسسة) يتجاوز القفل
+  // ويعدّل دائماً؛ مدير المؤسسة يُرفض حفظه على الخادم بعد القفل برسالة موحّدة.
+  const { organizationId, isManager, readOnly } = await requireHseReviewerScope()
   if (!isManager) return { ok: false, error: "التعديل مقصور على مدير المؤسسة" }
+  const isPlatformAdminActing = readOnly
+  if (!isPlatformAdminActing) {
+    const { locked } = await getSettingsLock(organizationId)
+    if (locked) return { ok: false, error: SETTINGS_LOCKED_MESSAGE }
+  }
 
   // تنقية المدخلات: إسقاط الفارغ، قصّ الطول، تحديد الأعداد ضمن الحدود.
   const vTypes = input.vehicleTypes
@@ -165,10 +172,30 @@ export async function saveOperationalSettings(
     .insert(inspectionCategory)
     .values(cats.map((c, i) => ({ organizationId, label: c.label, icon: c.icon, color: c.color, sortOrder: i })))
 
+  // أول حفظ ناجح من مدير المؤسسة يقفل معلومات المنشأة وإعدادات التشغيل معاً.
+  if (!isPlatformAdminActing) await lockSettings(organizationId)
+
   revalidatePath("/settings")
   revalidatePath("/ai-monitoring")
   revalidatePath("/violations")
   revalidatePath("/equipment")
   revalidatePath("/patrol")
+  return { ok: true }
+}
+
+// طلب مدير المؤسسة فتح تعديل الإعدادات بعد قفلها. لا يفتح القفل مباشرة — يسجّل الطلب
+// فقط ليظهر لمسؤول المنصّة في قائمة المؤسسات. مسؤول المنصّة لا يحتاجه (يتجاوز القفل).
+export async function requestSettingsUnlock(): Promise<{ ok: boolean; error?: string }> {
+  const { organizationId, isManager, readOnly } = await requireHseReviewerScope()
+  if (readOnly) return { ok: false, error: "مسؤول المنصّة يعدّل الإعدادات مباشرة دون طلب" }
+  if (!isManager) return { ok: false, error: "الطلب مقصور على مدير المؤسسة" }
+  const { locked } = await getSettingsLock(organizationId)
+  if (!locked) return { ok: false, error: "الإعدادات غير مقفلة" }
+  await db
+    .update(organization)
+    .set({ settingsUnlockRequested: true, updatedAt: new Date() })
+    .where(eq(organization.id, organizationId))
+  revalidatePath("/settings")
+  revalidatePath("/admin/organizations")
   return { ok: true }
 }

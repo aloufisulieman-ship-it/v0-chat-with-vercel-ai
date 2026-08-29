@@ -32,6 +32,7 @@ import {
   type ModuleScope,
 } from "@/lib/session"
 import { scopeWhere } from "@/lib/scope"
+import { getSettingsLock, lockSettings, SETTINGS_LOCKED_MESSAGE } from "@/lib/settings-lock"
 import { severityLabels, statusLabels, permitTypePrefix, permitTypeExtraFields } from "@/lib/labels"
 import {
   detectionTypeLabels,
@@ -110,13 +111,29 @@ export async function getCompany() {
 }
 
 export async function saveCompany(formData: FormData) {
-  await assertWritable()
-  const { userId, organizationId } = await requireScope()
-  const existing = await db
-    .select()
-    .from(company)
-    .where(and(eq(company.organizationId, organizationId), eq(company.userId, userId)))
-    .limit(1)
+  // قفل الإعداد الأولي: مسؤول المنصّة (readOnly = وضع الدخول إلى المؤسسة) يتجاوز القفل
+  // ويعدّل دائماً؛ مدير المؤسسة يُرفض حفظه على الخادم بعد أن يصبح settingsLocked = true.
+  const { userId, organizationId, readOnly } = await requireScope()
+  const isPlatformAdminActing = readOnly
+  if (!isPlatformAdminActing) {
+    const { locked } = await getSettingsLock(organizationId)
+    if (locked) throw new Error(SETTINGS_LOCKED_MESSAGE)
+  }
+
+  // مسؤول المنصّة يعدّل ملف المؤسسة التمثيلي (أحدث صف) بصرف النظر عن صاحبه؛ مستخدم
+  // المؤسسة يعدّل صفّه الخاص داخل مؤسسته.
+  const existing = isPlatformAdminActing
+    ? await db
+        .select()
+        .from(company)
+        .where(eq(company.organizationId, organizationId))
+        .orderBy(desc(company.updatedAt))
+        .limit(1)
+    : await db
+        .select()
+        .from(company)
+        .where(and(eq(company.organizationId, organizationId), eq(company.userId, userId)))
+        .limit(1)
   const values = {
     name: str(formData.get("name")),
     industry: str(formData.get("industry")),
@@ -131,10 +148,14 @@ export async function saveCompany(formData: FormData) {
     await db
       .update(company)
       .set(values)
-      .where(and(eq(company.id, existing[0].id), eq(company.organizationId, organizationId), eq(company.userId, userId)))
+      .where(and(eq(company.id, existing[0].id), eq(company.organizationId, organizationId)))
   } else {
     await db.insert(company).values({ userId, organizationId, ...values })
   }
+
+  // أول حفظ ناجح من مدير المؤسسة يقفل معلومات المنشأة وإعدادات التشغيل معاً.
+  if (!isPlatformAdminActing) await lockSettings(organizationId)
+
   revalidatePath("/settings")
   revalidatePath("/")
 }

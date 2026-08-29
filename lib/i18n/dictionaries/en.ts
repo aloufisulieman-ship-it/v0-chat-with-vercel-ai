@@ -1600,7 +1600,7 @@ export const en: Dictionary = {
   violationTypes: {
     "عدم ارتداء خوذة السلامة": "Not wearing a safety helmet",
     "عدم ارتداء حذاء السلامة": "Not wearing safety shoes",
-    "عدم ارتداء سترة عاكس����": "Not wearing a reflective vest",
+    "عدم ارتداء سترة عاكس������": "Not wearing a reflective vest",
     "عدم ارتداء قفازات واقية": "Not wearing protective gloves",
     "عدم ارتداء نظارات واقية": "Not wearing protective goggles",
     "عدم ارتداء كمامة أو جهاز تنفس": "Not wearing a mask or respirator",
@@ -1804,7 +1804,7 @@ export const en: Dictionary = {
     save: "Save facility info",
     savedOk: "Saved successfully",
     saveError: "Could not save changes",
-    readOnlyHint: "View only — editing is disabled while a platform admin is viewing this organization.",
+    readOnlyHint: "View only — editing is currently disabled.",
   },
 
   usersManager: {
@@ -1898,6 +1898,12 @@ export const en: Dictionary = {
     opsIcon: "Icon",
     opsColor: "Color",
     opsEmpty: "No items — add at least one.",
+    lockTitle: "Settings locked after initial setup",
+    lockBody: "Facility information and operational settings became view-only after their first save. To make changes, please contact platform management or send an unlock request.",
+    lockRequestUnlock: "Request edit access",
+    lockRequesting: "Sending...",
+    lockRequestSent: "Unlock request sent — awaiting platform management review.",
+    lockRequestFailed: "Could not send the request",
   },
 
   pendingPage: {

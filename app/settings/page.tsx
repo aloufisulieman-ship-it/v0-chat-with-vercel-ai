@@ -6,7 +6,9 @@ import { Card } from "@/components/ui/card"
 import { CompanyForm } from "@/components/company-form"
 import { ChangePasswordForm } from "@/components/change-password-form"
 import { OperationalSettingsForm } from "@/components/operational-settings-form"
+import { SettingsLockNotice } from "@/components/settings-lock-notice"
 import { requireOrgUser } from "@/lib/session"
+import { getSettingsLock } from "@/lib/settings-lock"
 import { getCompany } from "@/app/actions/hse"
 import { getOperationalSettings } from "@/app/actions/org-settings"
 import { getUsers } from "@/app/actions/users"
@@ -33,20 +35,32 @@ export default async function SettingsPage() {
   const user = await requireOrgUser()
   const company = await getCompany()
   const operational = await getOperationalSettings()
+  const { locked, unlockRequested } = await getSettingsLock(user.organizationId)
   const isAdmin = user.role === "admin"
-  const canEditOps = (user.role === "admin" || user.role === "manager") && !user.impersonating
+  const isManagerRole = user.role === "admin" || user.role === "manager"
+  // قفل الإعداد الأولي: مسؤول المنصّة (impersonating) يعدّل الحقلين دائماً؛ مدير المؤسسة
+  // يعدّلهما حتى أول حفظ ناجح فقط، ثم يصبحان للعرض فقط حتى تفتحهما إدارة المنصّة.
+  const companyReadOnly = user.impersonating ? false : locked
+  const canEditOps = user.impersonating ? true : isManagerRole && !locked
+  const showLockNotice = !user.impersonating && locked
   const team = isAdmin ? await getUsers() : []
   const { t } = await getServerT()
 
   return (
     <AppShell title={t("pageHeaders.settingsTitle")} subtitle={t("pageHeaders.settingsSubtitle")} user={user}>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {showLockNotice && (
+          <div className="lg:col-span-2">
+            <SettingsLockNotice unlockRequested={unlockRequested} />
+          </div>
+        )}
+
         <Card className="p-6">
           <div className="mb-4 flex items-center gap-2">
             <Building2 className="size-5 text-primary" />
             <h3 className="text-base font-semibold text-foreground">{t("settingsPage.facilityInfo")}</h3>
           </div>
-          <CompanyForm company={company} readOnly={user.impersonating} />
+          <CompanyForm company={company} readOnly={companyReadOnly} />
         </Card>
 
         <Card className="flex flex-col gap-4 p-6">

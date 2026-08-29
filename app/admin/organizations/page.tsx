@@ -41,9 +41,14 @@ export default async function AdminOrganizationsPage() {
                   <Building2 className="size-6" />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="text-base font-semibold text-foreground">{o.name}</span>
                     <StatusPill status={o.status} />
+                    {o.settingsUnlockRequested && (
+                      <span className="rounded-full bg-accent/20 px-2 py-0.5 text-xs font-medium text-accent-foreground">
+                        طلب فتح تعديل الإعدادات
+                      </span>
+                    )}
                   </div>
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1">
@@ -62,7 +67,13 @@ export default async function AdminOrganizationsPage() {
                 </div>
               </div>
               <div className="shrink-0 md:pe-2">
-                <OrganizationActions orgId={o.id} status={o.status} name={o.name} />
+                <OrganizationActions
+                  orgId={o.id}
+                  status={o.status}
+                  name={o.name}
+                  settingsLocked={o.settingsLocked}
+                  settingsUnlockRequested={o.settingsUnlockRequested}
+                />
               </div>
             </Card>
           ))}

@@ -9,6 +9,12 @@ export const organization = pgTable("organization", {
   // حالة مراجعة المؤسسة على مستوى المنصّة: pending (بانتظار موافقة مسؤول المنصّة) |
   // approved (مُعتمدة ويمكن لمستخدميها استخدام النظام) | rejected (مرفوضة، الوصول محجوب).
   status: text("status").notNull().default("pending"),
+  // قفل "الإعداد الأولي": بعد أول حفظ ناجح لمعلومات المنشأة أو إعدادات التشغيل من مدير
+  // المؤسسة يتحوّل إلى true، فتصبح هذه الحقول للعرض فقط لمديري المؤسسة. مسؤول المنصّة
+  // وحده يتجاوز القفل (يعدّل دائماً عبر وضع الدخول إلى المؤسسة).
+  settingsLocked: boolean("settingsLocked").notNull().default(false),
+  // هل طلب مدير المؤسسة فتح التعديل بعد القفل — يظهر لمسؤول المنصّة في قائمة المؤسسات.
+  settingsUnlockRequested: boolean("settingsUnlockRequested").notNull().default(false),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
@@ -317,7 +323,7 @@ export const violation = pgTable("violation", {
   category: text("category").default("internal"),
   // مصدر إدخال المخالفة: electronic (عبر النظام) | manual (نموذج ورقي ممسوح).
   entryMode: text("entry_mode").notNull().default("electronic"),
-  // اسم المفتش/الموظف الذ�������� رصد المخالفة (يُعبّأ تلقائياً عند الرصد بالذكاء الاصطناعي).
+  // اسم المفتش/الموظف الذ���������� رصد المخالفة (يُعبّأ تلقائياً عند الرصد بالذكاء الاصطناعي).
   detectedBy: text("detected_by").default(""),
   internalAction: text("internal_action").default(""),
   violationDate: date("violationDate"),
@@ -590,7 +596,7 @@ export const equipment = pgTable(
     equipmentType: text("equipment_type").notNull().default("forklift"),
     // الشركة المالكة أو الجهة المسؤولة عن المعدة.
     ownerCompany: text("owner_company").notNull().default(""),
-    // اسم السائق/المستخدم المخوّل بتشغيل المعدة.
+    // اسم السائق/المستخ��م المخوّل بتشغيل المعدة.
     driverName: text("driver_name").notNull().default(""),
     // رقم داخلي/كود أصل اختياري (غير مستخدم في المطابقة، للعرض فقط).
     internalCode: text("internal_code").notNull().default(""),
@@ -767,7 +773,7 @@ export const violationType = pgTable(
   }),
 )
 
-// فئات الجولة التفتيشية للمؤسسة (نص عربي حر + أيقونة + لون من مجموعة جاهزة).
+// فئات الجولة التفتيشية للمؤسسة (نص عربي حر + أيقونة + لون ��ن مجموعة جاهزة).
 export const inspectionCategory = pgTable(
   "inspection_categories",
   {
