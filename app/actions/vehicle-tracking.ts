@@ -6,25 +6,21 @@ import { and, desc, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { requireHseReviewerScope, assertWritable } from "@/lib/session"
 import { normalizePlate } from "@/lib/ai-recognition"
+import type {
+  VehicleStatus,
+  GateActionResult,
+  EntrySightingDto,
+  EntryViolationDto,
+  VehicleEntryDto,
+  VehicleDetailDto,
+  TrackingOverview,
+  PresentVehicleDto,
+} from "@/lib/vehicle-tracking-shared"
 
 /* ============================================================
    موديول تتبع المركبات — منطق البوابات (7 بوابات)
    الحالات: outside (خارج) | inside (داخل) | blocked (محجوبة عن الخروج)
    ============================================================ */
-
-export const GATE_COUNT = 7
-
-export type VehicleStatus = "outside" | "inside" | "blocked"
-
-export type GateActionResult = {
-  ok: boolean
-  action: "entry" | "exit" | "sighting" | "blocked" | "error"
-  message: string
-  plate: string
-  status?: VehicleStatus
-  // عند رفض الخروج: تفاصيل المخالفات المرتبطة بالدخول الحالي.
-  blockingViolations?: { id: number; type: string; severity: string; at: string }[]
-}
 
 // إيجاد/إنشاء السجل الرئيسي للمركبة بمطابقة اللوحة المطبّعة (حروف+أرقام موحّدة).
 async function findOrCreateVehicle(organizationId: string, plateRaw: string, vehicleType?: string) {
@@ -277,26 +273,6 @@ export async function attemptVehicleExit(plateRaw: string, gateId: number): Prom
 
 /* ---------------- استعلامات العرض ---------------- */
 
-export type EntrySightingDto = { id: number; cameraId: string; location: string; at: string }
-export type EntryViolationDto = { id: number; type: string; severity: string; at: string; source: string }
-export type VehicleEntryDto = {
-  id: number
-  entryGateId: number
-  entryTime: string
-  exitTime: string | null
-  exitGateId: number | null
-  status: string
-  sightings: EntrySightingDto[]
-  violations: EntryViolationDto[]
-}
-export type VehicleDetailDto = {
-  id: number
-  plateNumber: string
-  vehicleType: string
-  currentStatus: VehicleStatus
-  entries: VehicleEntryDto[]
-}
-
 // البحث عن مركبة برقم لوحتها وإرجاع سجلها الكامل: كل الدخولات + مشاهدات ومخالفات كل دخول.
 export async function searchVehicle(plateRaw: string): Promise<VehicleDetailDto | null> {
   const { organizationId } = await requireHseReviewerScope()
@@ -383,7 +359,6 @@ export async function searchVehicle(plateRaw: string): Promise<VehicleDetailDto 
 }
 
 // خلاصة لبطاقات الحالة أعلى الصفحة.
-export type TrackingOverview = { inside: number; outside: number; blocked: number; total: number }
 export async function getTrackingOverview(): Promise<TrackingOverview> {
   const { organizationId } = await requireHseReviewerScope()
   const rows = await db.select().from(vehicle).where(eq(vehicle.organizationId, organizationId))
@@ -395,15 +370,6 @@ export async function getTrackingOverview(): Promise<TrackingOverview> {
   }
 }
 
-// المركبات الموجودة داخل السوق حالياً (inside/blocked) لعرضها في لوحة البوابات.
-export type PresentVehicleDto = {
-  id: number
-  plateNumber: string
-  vehicleType: string
-  status: VehicleStatus
-  entryGateId: number
-  entryTime: string
-}
 // ---------------- الربط التلقائي من المراقبة الذكية ----------------
 // يُستدعى من مسار التعرّف (/api/ai-monitoring/recognize) عند قراءة لوحة مركبة داخل
 // السوق. المؤسسة تُمرَّر مباشرةً (المسار موثّق مسبقاً). المنطق: إن لم يوجد دخول مفتوح

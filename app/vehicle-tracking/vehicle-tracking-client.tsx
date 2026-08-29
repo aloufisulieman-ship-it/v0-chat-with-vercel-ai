@@ -29,13 +29,15 @@ import {
   recordVehicleSighting,
   attemptVehicleExit,
   searchVehicle,
+} from "@/app/actions/vehicle-tracking"
+import {
   GATE_COUNT,
   type GateActionResult,
   type VehicleDetailDto,
   type VehicleStatus,
   type TrackingOverview,
   type PresentVehicleDto,
-} from "@/app/actions/vehicle-tracking"
+} from "@/lib/vehicle-tracking-shared"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
@@ -409,7 +411,7 @@ function InsideList({ inside }: { inside: PresentVehicleDto[] }) {
 
       {inside.length === 0 ? (
         <p className="rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
-          لا توجد مركبات داخل السوق حالياً.
+          لا توجد مركبات ��اخل السوق حالياً.
         </p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
