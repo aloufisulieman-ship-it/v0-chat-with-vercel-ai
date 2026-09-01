@@ -7,13 +7,17 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { AttachmentsManager, fileUrl } from "@/components/attachments-manager"
 import { getAttachments, type AttachmentRow } from "@/app/actions/attachments"
-import { downloadElementPdf } from "@/lib/pdf"
+import { downloadElementPdf, elementToPdf } from "@/lib/pdf"
 import { signatureRoles as signatureRolesConfig, labelForSignatureKind } from "@/lib/signature-roles"
 import { toast } from "@/hooks/use-toast"
 import { useI18n } from "@/lib/i18n/client"
@@ -86,6 +90,12 @@ export function RecordDetailsDialog({
   const [open, setOpen] = useState(false)
   const [attachments, setAttachments] = useState<AttachmentRow[]>(initialAttachments)
   const [busy, setBusy] = useState<"pdf" | "email" | null>(null)
+  // نافذة إدخال البريد: المستلم + رسالة اختيارية. زر "إرسال" ينفّذ الإرسال الفعلي
+  // من الخادم عبر Resend مع إرفاق ملف PDF تلقائياً — بلا mailto وبلا تنزيل يدوي.
+  const [emailOpen, setEmailOpen] = useState(false)
+  const [emailTo, setEmailTo] = useState("")
+  const [emailMessage, setEmailMessage] = useState("")
+  const [sending, setSending] = useState(false)
   const reportRef = useRef<HTMLDivElement | null>(null)
   // أدرج أدوار التوقيع الإضافية (مثل توقيع موظف HR/المالية) بعد الأدوار الافتراضية
   // للوحدة، مع تفادي التكرار إن وُجد مفتاح مطابق.
@@ -264,37 +274,44 @@ export function RecordDetailsDialog({
     }
   }
 
-  // إرسال بالبريد عبر برنامج البريد الافتراضي في الجهاز (mailto).
-  // بما أن mailto لا يدعم إرفاق الملفات برمجياً من المتصفح، نتّبع أفضل بديل عملي:
-  // (1) نُنزّل تقرير PDF الكامل (صفحة A4 واحدة: بيانات + صور + تواقيع) تلقائياً،
-  // (2) نفتح برنامج البريد الافتراضي برسالة جديدة وموضوعها مُجهَّز برقم المخالفة،
-  // (3) نُذكّر المستخدم بإرفاق الملف المُنزَّل يدوياً (الحد الأقصى الممكن دون خادم بريد).
-  async function handleEmail() {
-    setBusy("email")
+  // إرسال فعلي من الخادم عبر Resend: نُولّد تقرير PDF الكامل على العميل (صفحة A4
+  // واحدة، بلا تكرار تواقيع)، نحوّله إلى base64، ونرسله لواجهة /api/reports/email
+  // التي تُرفقه وترسله مباشرةً إلى بريد المستلم — بلا فتح برنامج بريد وبلا تنزيل يدوي.
+  async function sendEmail() {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(emailTo)) {
+      toast({ title: t("recordDetails.invalidEmail"), variant: "destructive" })
+      return
+    }
+    setSending(true)
     let el: HTMLElement | null = null
     try {
       el = await buildReportElement()
-      await downloadElementPdf(el, fileBase, { singlePage: true })
-
+      const pdf = await elementToPdf(el, { singlePage: true })
+      const dataUri = pdf.output("datauristring")
       const subject = documentNo
         ? t("recordDetails.mailSubjectNo").replace("{title}", title).replace("{no}", documentNo)
         : t("recordDetails.mailSubject").replace("{title}", title)
-      const body = t("recordDetails.mailBody")
-        .replace("{title}", title)
-        .replace("{file}", `${fileBase}.pdf`)
-
-      // فتح برنامج البريد الافتراضي عبر نقرة رابط mailto (أكثر موثوقية من تغيير الموقع).
-      const a = document.createElement("a")
-      a.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-      a.style.display = "none"
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-
-      toast({
-        title: t("recordDetails.emailOpenedTitle"),
-        description: t("recordDetails.emailAttachManuallyDesc"),
+      const res = await fetch("/api/reports/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: emailTo,
+          subject,
+          message: emailMessage || t("recordDetails.mailReport").replace("{title}", title),
+          fileName: `${fileBase}.pdf`,
+          pdfBase64: dataUri,
+        }),
       })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || t("recordDetails.emailFailedTitle"))
+      toast({
+        title: t("recordDetails.emailSentTitle"),
+        description: t("recordDetails.emailSentDesc").replace("{email}", emailTo),
+      })
+      setEmailOpen(false)
+      setEmailTo("")
+      setEmailMessage("")
     } catch (err) {
       toast({
         title: t("recordDetails.emailFailedTitle"),
@@ -303,11 +320,12 @@ export function RecordDetailsDialog({
       })
     } finally {
       if (el) document.body.removeChild(el)
-      setBusy(null)
+      setSending(false)
     }
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         {trigger ?? (
@@ -330,11 +348,11 @@ export function RecordDetailsDialog({
           <Button
             size="sm"
             variant="outline"
-            onClick={handleEmail}
+            onClick={() => setEmailOpen(true)}
             disabled={busy !== null}
             className="gap-1.5 bg-transparent"
           >
-            {busy === "email" ? <Loader2 className="size-3.5 animate-spin" /> : <Mail className="size-3.5" />}
+            <Mail className="size-3.5" />
             {t("recordDetails.sendEmail")}
           </Button>
         </div>
@@ -408,6 +426,52 @@ export function RecordDetailsDialog({
         )}
       </DialogContent>
     </Dialog>
+
+    {/* نافذة إدخال بريد المستلم — الإرسال الفعلي عبر الخادم (Resend) مع مرفق PDF */}
+    <Dialog open={emailOpen} onOpenChange={(v) => !sending && setEmailOpen(v)}>
+      <DialogContent dir="rtl" className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t("recordDetails.emailDialogTitle")}</DialogTitle>
+          <DialogDescription>{t("recordDetails.emailDialogDesc")}</DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`email-to-${recordId}`}>{t("recordDetails.recipientEmail")}</Label>
+            <Input
+              id={`email-to-${recordId}`}
+              type="email"
+              dir="ltr"
+              placeholder="name@example.com"
+              value={emailTo}
+              onChange={(e) => setEmailTo(e.target.value)}
+              disabled={sending}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`email-msg-${recordId}`}>{t("recordDetails.messageOptional")}</Label>
+            <Textarea
+              id={`email-msg-${recordId}`}
+              rows={3}
+              placeholder={t("recordDetails.messagePlaceholder")}
+              value={emailMessage}
+              onChange={(e) => setEmailMessage(e.target.value)}
+              disabled={sending}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">{t("recordDetails.pdfAttachNote")}</p>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setEmailOpen(false)} disabled={sending}>
+            {t("recordDetails.cancel")}
+          </Button>
+          <Button onClick={sendEmail} disabled={sending} className="gap-2">
+            {sending ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />}
+            {sending ? t("recordDetails.sending") : t("recordDetails.send")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   )
 }
 
