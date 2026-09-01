@@ -21,6 +21,12 @@ export default async function FinancePage() {
   const pending = allItems.filter((v) => normalizeFinanceStatus(v.financeStatus) !== "closed").length
   const closed = allItems.filter((v) => normalizeFinanceStatus(v.financeStatus) === "closed").length
 
+  // القوائم النشطة تستبعد المغلقة: بمجرد الإغلاق تختفي المخالفة/الحادثة من قسم المالية
+  // وتظهر ضمن سجلّي "المخالفات"/"الحوادث" العامّين. عدّادات الـ KPI تبقى على القوائم
+  // الكاملة (بما فيها عدّاد "المغلقة") لإظهار الإجمالي الصحيح — فلترة عرض فقط، بلا حذف.
+  const activeViolations = violations.filter((v) => normalizeFinanceStatus(v.financeStatus) !== "closed")
+  const activeIncidents = incidents.filter((i) => normalizeFinanceStatus(i.financeStatus) !== "closed")
+
   return (
     <AppShell
       title={t("finance.title")}
@@ -36,13 +42,13 @@ export default async function FinancePage() {
 
       <section className="mt-8">
         <h2 className="mb-3 text-lg font-semibold text-foreground">{t("finance.violationsSection")}</h2>
-        {violations.length === 0 ? (
+        {activeViolations.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
             {t("finance.noViolations")}
           </p>
         ) : (
           <div className="flex flex-col gap-4">
-            {violations.map((v) => (
+            {activeViolations.map((v) => (
               <FinanceActionCard
                 key={v.id}
                 id={v.id}
@@ -106,13 +112,13 @@ export default async function FinancePage() {
 
       <section className="mt-8">
         <h2 className="mb-3 text-lg font-semibold text-foreground">{t("finance.incidentsSection")}</h2>
-        {incidents.length === 0 ? (
+        {activeIncidents.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
             {t("finance.noIncidents")}
           </p>
         ) : (
           <div className="flex flex-col gap-4">
-            {incidents.map((incident) => (
+            {activeIncidents.map((incident) => (
               <FinanceActionCard
                 key={incident.id}
                 id={incident.id}
