@@ -114,6 +114,8 @@ export default async function HrPage() {
                 action={updateHrIncident}
                 refLabel={`i-${i.id}`}
                 hrStatus={i.hrStatus}
+                module="incidents"
+                signatureRole={HR_OFFICER_SIGNATURE_ROLE}
                 initialAttachments={parseHrAttachments(i.hrAttachmentUrl)}
                 closedBy={i.hrClosedBy ?? ""}
                 closedAt={i.hrClosedAt ? i.hrClosedAt.toISOString() : ""}

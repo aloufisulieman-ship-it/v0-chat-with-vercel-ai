@@ -49,7 +49,8 @@ export default async function FinancePage() {
                 action={updateFinanceViolation}
                 refLabel={`v-${v.id}`}
                 financeStatus={v.financeStatus}
-                requireSignatureRoleKey={FINANCE_OFFICER_SIGNATURE_ROLE.key}
+                module="violations"
+                signatureRole={FINANCE_OFFICER_SIGNATURE_ROLE}
                 initialSettlement={v.settlementNumber ?? ""}
                 initialReceipt={v.paymentReceiptUrl ?? ""}
                 closedBy={v.financeClosedBy ?? ""}
@@ -67,7 +68,6 @@ export default async function FinancePage() {
                     title={`${t("finance.violationPrefix")} ${v.companyName || v.employeeName}`}
                     subtitle={t("finance.violationReport")}
                     documentNo={v.documentNo ?? undefined}
-                    extraSignatureRoles={[FINANCE_OFFICER_SIGNATURE_ROLE]}
                     trigger={
                       <Button type="button" variant="outline" size="sm">
                         <Eye className="size-4" />
@@ -119,6 +119,8 @@ export default async function FinancePage() {
                 action={updateFinanceIncident}
                 refLabel={`i-${incident.id}`}
                 financeStatus={incident.financeStatus}
+                module="incidents"
+                signatureRole={FINANCE_OFFICER_SIGNATURE_ROLE}
                 initialSettlement={incident.settlementNumber ?? ""}
                 initialReceipt={incident.paymentReceiptUrl ?? ""}
                 closedBy={incident.financeClosedBy ?? ""}

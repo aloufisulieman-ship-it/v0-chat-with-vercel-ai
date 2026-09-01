@@ -84,6 +84,7 @@ export async function updateFinanceViolation(formData: FormData) {
   if (closing) {
     const signed = await hasRoleSignature({
       organizationId: closer.organizationId,
+      userId: closer.id,
       module: "violations",
       recordId: id,
       roleKey: FINANCE_OFFICER_SIGNATURE_ROLE.key,
@@ -115,6 +116,7 @@ export async function updateFinanceIncident(formData: FormData) {
   if (closing) {
     const signed = await hasRoleSignature({
       organizationId: closer.organizationId,
+      userId: closer.id,
       module: "incidents",
       recordId: id,
       roleKey: FINANCE_OFFICER_SIGNATURE_ROLE.key,

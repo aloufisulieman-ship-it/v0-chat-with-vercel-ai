@@ -89,6 +89,7 @@ export async function updateHrViolation(formData: FormData) {
   if (closing) {
     const signed = await hasRoleSignature({
       organizationId: closer.organizationId,
+      userId: closer.id,
       module: "violations",
       recordId: id,
       roleKey: HR_OFFICER_SIGNATURE_ROLE.key,
@@ -120,6 +121,7 @@ export async function updateHrIncident(formData: FormData) {
   if (closing) {
     const signed = await hasRoleSignature({
       organizationId: closer.organizationId,
+      userId: closer.id,
       module: "incidents",
       recordId: id,
       roleKey: HR_OFFICER_SIGNATURE_ROLE.key,
