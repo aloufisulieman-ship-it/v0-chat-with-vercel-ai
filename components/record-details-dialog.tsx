@@ -53,6 +53,7 @@ export function RecordDetailsDialog({
   extraSection,
   extraReportHtml,
   suppressReportAttachments,
+  extraSignatureRoles,
 }: {
   module: string
   recordId: number
@@ -63,6 +64,9 @@ export function RecordDetailsDialog({
   signatures?: DetailField[]
   initialAttachments: AttachmentRow[]
   trigger?: React.ReactNode
+  // Extra role-named signature slots appended to the module's default roles
+  // (used to show the HR/Finance officer signature only on their track).
+  extraSignatureRoles?: { key: string; label: string }[]
   // Optional custom block rendered on-screen below the fields.
   extraSection?: React.ReactNode
   // Optional custom HTML injected into the PDF (page 1) after the fields table.
@@ -76,7 +80,13 @@ export function RecordDetailsDialog({
   const [attachments, setAttachments] = useState<AttachmentRow[]>(initialAttachments)
   const [busy, setBusy] = useState<"pdf" | "email" | null>(null)
   const reportRef = useRef<HTMLDivElement | null>(null)
-  const moduleRoles = signatureRolesConfig[module]
+  // أدرج أدوار التوقيع الإضافية (مثل توقيع موظف HR/المالية) بعد الأدوار الافتراضية
+  // للوحدة، مع تفادي التكرار إن وُجد مفتاح مطابق.
+  const baseRoles = signatureRolesConfig[module]
+  const moduleRoles =
+    extraSignatureRoles && extraSignatureRoles.length > 0
+      ? [...(baseRoles ?? []), ...extraSignatureRoles.filter((r) => !baseRoles?.some((b) => b.key === r.key))]
+      : baseRoles
 
   async function handleOpenChange(next: boolean) {
     setOpen(next)

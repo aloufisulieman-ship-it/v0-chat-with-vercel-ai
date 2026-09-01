@@ -9,6 +9,7 @@ import { getServerT } from "@/lib/i18n/server"
 import { statusLabel, severityLabel, categoryLabel } from "@/lib/i18n/labels"
 import { formatParties } from "@/lib/incident-types"
 import { normalizeHrStatus, parseHrAttachments } from "@/lib/hr-status"
+import { HR_OFFICER_SIGNATURE_ROLE } from "@/lib/signature-roles"
 import { HrActionCard } from "./hr-action-card"
 
 export default async function HrPage() {
@@ -47,6 +48,7 @@ export default async function HrPage() {
                 action={updateHrViolation}
                 refLabel={`v-${v.id}`}
                 hrStatus={v.hrStatus}
+                requireSignatureRoleKey={HR_OFFICER_SIGNATURE_ROLE.key}
                 initialAttachments={parseHrAttachments(v.hrAttachmentUrl)}
                 closedBy={v.hrClosedBy ?? ""}
                 closedAt={v.hrClosedAt ? v.hrClosedAt.toISOString() : ""}
@@ -66,6 +68,7 @@ export default async function HrPage() {
                     title={`${t("hr.violationPrefix")} ${v.employeeName}`}
                     subtitle={t("hr.violationReport")}
                     documentNo={v.documentNo ?? undefined}
+                    extraSignatureRoles={[HR_OFFICER_SIGNATURE_ROLE]}
                     trigger={
                       <Button type="button" variant="outline" size="sm">
                         <Eye className="size-4" />

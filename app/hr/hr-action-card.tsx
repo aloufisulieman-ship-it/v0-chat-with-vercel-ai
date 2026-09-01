@@ -11,6 +11,7 @@ import { toast } from "@/hooks/use-toast"
 import { hrStatusOptions, normalizeHrStatus, type HrStatus } from "@/lib/hr-status"
 import { useI18n } from "@/lib/i18n/client"
 import { refStatusLabel } from "@/lib/i18n/labels"
+import { hasRecordRoleSignature } from "@/app/actions/attachments"
 
 type HrAction = (formData: FormData) => Promise<void>
 
@@ -27,6 +28,7 @@ export function HrActionCard({
   initialAttachments,
   closedBy,
   closedAt,
+  requireSignatureRoleKey,
 }: {
   id: number
   action: HrAction
@@ -42,6 +44,9 @@ export function HrActionCard({
   initialAttachments: string[]
   closedBy?: string
   closedAt?: string
+  // عند ضبطه، يُمنع الإغلاق قبل وجود توقيع هذا الدور (مثل توقيع موظف HR).
+  // يُمرَّر فقط لمخالفات قسم HR، فلا يتأثر مسار الحوادث.
+  requireSignatureRoleKey?: string
 }) {
   const { t, formatDateTime } = useI18n()
   const [hrAction, setHrAction] = useState(initialAction)
@@ -67,6 +72,19 @@ export function HrActionCard({
       return
     }
     startTransition(async () => {
+      // تحقق مبكر على الواجهة: امنع الإغلاق إن غاب توقيع موظف الموارد البشرية.
+      // (التحقق النهائي المُلزِم يقع أيضاً على الخادم داخل updateHrViolation.)
+      if (status === "closed" && requireSignatureRoleKey) {
+        try {
+          const signed = await hasRecordRoleSignature("violations", id, requireSignatureRoleKey)
+          if (!signed) {
+            toast({ title: t("hrCard.signatureRequired"), variant: "destructive" })
+            return
+          }
+        } catch {
+          // في حال فشل التحقق المسبق، نترك الخادم يفرض الشرط عند المحاولة.
+        }
+      }
       const fd = new FormData()
       fd.append("id", String(id))
       fd.append("hrAction", hrAction)

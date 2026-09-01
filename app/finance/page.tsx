@@ -8,6 +8,7 @@ import { getFinanceIncidents, getFinanceViolations, updateFinanceIncident, updat
 import { getServerT } from "@/lib/i18n/server"
 import { statusLabel, categoryLabel } from "@/lib/i18n/labels"
 import { normalizeFinanceStatus } from "@/lib/finance-status"
+import { FINANCE_OFFICER_SIGNATURE_ROLE } from "@/lib/signature-roles"
 import { FinanceClosureBlock } from "@/components/finance-closure-block"
 import { FinanceActionCard } from "./finance-action-card"
 
@@ -48,6 +49,7 @@ export default async function FinancePage() {
                 action={updateFinanceViolation}
                 refLabel={`v-${v.id}`}
                 financeStatus={v.financeStatus}
+                requireSignatureRoleKey={FINANCE_OFFICER_SIGNATURE_ROLE.key}
                 initialSettlement={v.settlementNumber ?? ""}
                 initialReceipt={v.paymentReceiptUrl ?? ""}
                 closedBy={v.financeClosedBy ?? ""}
@@ -65,6 +67,7 @@ export default async function FinancePage() {
                     title={`${t("finance.violationPrefix")} ${v.companyName || v.employeeName}`}
                     subtitle={t("finance.violationReport")}
                     documentNo={v.documentNo ?? undefined}
+                    extraSignatureRoles={[FINANCE_OFFICER_SIGNATURE_ROLE]}
                     trigger={
                       <Button type="button" variant="outline" size="sm">
                         <Eye className="size-4" />

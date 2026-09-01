@@ -10,6 +10,7 @@ import { toast } from "@/hooks/use-toast"
 import { financeStatusOptions, normalizeFinanceStatus, type FinanceStatus } from "@/lib/finance-status"
 import { useI18n } from "@/lib/i18n/client"
 import { refStatusLabel } from "@/lib/i18n/labels"
+import { hasRecordRoleSignature } from "@/app/actions/attachments"
 
 type FinanceAction = (formData: FormData) => Promise<void>
 
@@ -24,6 +25,7 @@ export function FinanceActionCard({
   initialReceipt,
   closedBy,
   closedAt,
+  requireSignatureRoleKey,
 }: {
   id: number
   action: FinanceAction
@@ -37,6 +39,9 @@ export function FinanceActionCard({
   initialReceipt: string
   closedBy?: string
   closedAt?: string
+  // عند ضبطه، يُمنع الإغلاق قبل وجود توقيع هذا الدور (توقيع موظف المالية).
+  // يُمرَّر فقط لمخالفات قسم المالية، فلا يتأثر مسار الحوادث.
+  requireSignatureRoleKey?: string
 }) {
   const { t, formatDateTime } = useI18n()
   const [settlementNumber, setSettlementNumber] = useState(initialSettlement)
@@ -63,6 +68,19 @@ export function FinanceActionCard({
       return
     }
     startTransition(async () => {
+      // تحقق مبكر على الواجهة: امنع الإغلاق إن غاب توقيع موظف المالية.
+      // (التحقق النهائي المُلزِم يقع أيضاً على الخادم داخل updateFinanceViolation.)
+      if (status === "closed" && requireSignatureRoleKey) {
+        try {
+          const signed = await hasRecordRoleSignature("violations", id, requireSignatureRoleKey)
+          if (!signed) {
+            toast({ title: t("financeCard.signatureRequired"), variant: "destructive" })
+            return
+          }
+        } catch {
+          // في حال فشل التحقق المسبق، نترك الخادم يفرض الشرط عند المحاولة.
+        }
+      }
       const fd = new FormData()
       fd.append("id", String(id))
       fd.append("settlementNumber", settlementNumber)

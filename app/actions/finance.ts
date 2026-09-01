@@ -6,6 +6,8 @@ import { and, desc, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { requireModule, requireModuleScope, assertWritable } from "@/lib/session"
 import { normalizeFinanceStatus, type FinanceStatus } from "@/lib/finance-status"
+import { hasRoleSignature } from "@/lib/signature-check"
+import { FINANCE_OFFICER_SIGNATURE_ROLE } from "@/lib/signature-roles"
 
 function str(v: FormDataEntryValue | null, fallback = "") {
   return v == null ? fallback : String(v)
@@ -75,6 +77,21 @@ export async function updateFinanceViolation(formData: FormData) {
   const closer = await requireModule("finance")
   const id = Number(formData.get("id"))
   if (!Number.isFinite(id)) throw new Error("معرّف غير صالح")
+
+  // إلزام توقيع موظف المالية قبل إغلاق مخالفة قسم المالية فقط. الشرط مستقل عن
+  // قسم الموارد البشرية، ولا يُطبَّق إلا عند محاولة الإغلاق (لا يعيق باقي التدفقات).
+  const closing = normalizeFinanceStatus(str(formData.get("financeStatus"), "pending")) === "closed"
+  if (closing) {
+    const signed = await hasRoleSignature({
+      organizationId: closer.organizationId,
+      module: "violations",
+      recordId: id,
+      roleKey: FINANCE_OFFICER_SIGNATURE_ROLE.key,
+    })
+    if (!signed) {
+      throw new Error("لا يمكن إغلاق المخالفة قبل حفظ توقيع موظف المالية")
+    }
+  }
 
   await db
     .update(violation)
