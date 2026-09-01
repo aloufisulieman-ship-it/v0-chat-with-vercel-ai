@@ -16,6 +16,19 @@ export const signatureRoles: Record<string, SignatureRole[]> = {
   training: [{ key: "trainer", label: "توقيع المدرب" }],
 }
 
+// أدوار توقيع خاصة بمسار المعالجة (تُحقن شرطياً في نافذة التفاصيل):
+// - توقيع موظف الموارد البشرية يظهر فقط لمخالفات قسم HR (الفئة الداخلية).
+// - توقيع موظف المالية يظهر فقط لمخالفات قسم المالية (الفئة الخارجية).
+// كل منهما شرط مستقل لإغلاق مخالفة قسمه.
+export const HR_OFFICER_SIGNATURE_ROLE: SignatureRole = {
+  key: "hr_officer",
+  label: "توقيع موظف الموارد البشرية",
+}
+export const FINANCE_OFFICER_SIGNATURE_ROLE: SignatureRole = {
+  key: "finance_officer",
+  label: "توقيع موظف المالية",
+}
+
 export const SIGNATURE_KIND_PREFIX = "signature:"
 
 export function roleKindFor(roleKey: string) {
@@ -30,6 +43,8 @@ export function roleKeyFromKind(kind: string) {
 export function labelForSignatureKind(module: string, kind: string): string {
   const key = roleKeyFromKind(kind)
   if (!key) return "توقيع"
-  const found = signatureRoles[module]?.find((r) => r.key === key)
+  const found =
+    signatureRoles[module]?.find((r) => r.key === key) ??
+    [HR_OFFICER_SIGNATURE_ROLE, FINANCE_OFFICER_SIGNATURE_ROLE].find((r) => r.key === key)
   return found?.label ?? "توقيع"
 }

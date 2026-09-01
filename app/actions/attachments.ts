@@ -5,6 +5,7 @@ import { attachment } from "@/lib/db/schema"
 import { and, asc, eq } from "drizzle-orm"
 import { put, del } from "@vercel/blob"
 import { requireScope, assertWritable } from "@/lib/session"
+import { hasRoleSignature } from "@/lib/signature-check"
 
 export type AttachmentRow = {
   id: number
@@ -17,6 +18,17 @@ export type AttachmentRow = {
   contentType: string
   size: number
   createdAt: Date
+}
+
+// تحقق خفيف (للواجهة) من وجود توقيع دور معيّن على سجل، على مستوى المؤسسة.
+// يُستخدم قبل محاولة إغلاق مخالفة لعرض تنبيه مبكر إن غاب توقيع الموظف المعني.
+export async function hasRecordRoleSignature(
+  module: string,
+  recordId: number,
+  roleKey: string,
+): Promise<boolean> {
+  const { organizationId } = await requireScope()
+  return hasRoleSignature({ organizationId, module, recordId, roleKey })
 }
 
 // Fetch all attachments for a single record.

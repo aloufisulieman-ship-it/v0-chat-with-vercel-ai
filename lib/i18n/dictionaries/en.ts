@@ -902,6 +902,7 @@ export const en: Dictionary = {
 
   hrCard: {
     actionRequired: "Action taken is required when closing the case",
+    signatureRequired: "The HR officer signature must be saved before closing the violation",
     caseClosed: "Case closed",
     actionSaved: "HR action saved",
     saveFailed: "Failed to save action",
@@ -961,6 +962,7 @@ export const en: Dictionary = {
   financeCard: {
     settlementRequired: "Settlement number is required when closing the case",
     receiptRequired: "Payment receipt is required when closing the case",
+    signatureRequired: "The finance officer signature must be saved before closing the violation",
     caseClosed: "Case closed",
     actionSaved: "Finance action saved",
     saveFailed: "Failed to save action",
@@ -1600,7 +1602,7 @@ export const en: Dictionary = {
   violationTypes: {
     "عدم ارتداء خوذة السلامة": "Not wearing a safety helmet",
     "عدم ارتداء حذاء السلامة": "Not wearing safety shoes",
-    "عدم ارتداء سترة عاكسة": "Not wearing a reflective vest",
+    "عدم ارتداء سترة عاكس��": "Not wearing a reflective vest",
     "عدم ارتداء قفازات واقية": "Not wearing protective gloves",
     "عدم ارتداء نظارات واقية": "Not wearing protective goggles",
     "عدم ارتداء كمامة أو جهاز تنفس": "Not wearing a mask or respirator",
