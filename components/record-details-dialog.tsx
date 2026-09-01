@@ -7,13 +7,17 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { AttachmentsManager, fileUrl } from "@/components/attachments-manager"
 import { getAttachments, type AttachmentRow } from "@/app/actions/attachments"
-import { downloadElementPdf } from "@/lib/pdf"
+import { downloadElementPdf, elementToPdf } from "@/lib/pdf"
 import { signatureRoles as signatureRolesConfig, labelForSignatureKind } from "@/lib/signature-roles"
 import { toast } from "@/hooks/use-toast"
 import { useI18n } from "@/lib/i18n/client"
@@ -86,6 +90,13 @@ export function RecordDetailsDialog({
   const [open, setOpen] = useState(false)
   const [attachments, setAttachments] = useState<AttachmentRow[]>(initialAttachments)
   const [busy, setBusy] = useState<"pdf" | "email" | null>(null)
+  // حالة نافذة إرسال البريد: نُرسل التقرير كمرفق PDF عبر واجهة Resend الموجودة
+  // (نفس مسار صفحة التقارير)، بدلاً من رابط mailto الذي يتسبب في صفحة "حظر
+  // المحتوى" داخل الإطار المُضمَّن (iframe) في المعاينة.
+  const [emailOpen, setEmailOpen] = useState(false)
+  const [emailTo, setEmailTo] = useState("")
+  const [emailMessage, setEmailMessage] = useState("")
+  const [sending, setSending] = useState(false)
   const reportRef = useRef<HTMLDivElement | null>(null)
   // أدرج أدوار التوقيع الإضافية (مثل توقيع موظف HR/المالية) بعد الأدوار الافتراضية
   // للوحدة، مع تفادي التكرار إن وُجد مفتاح مطابق.
@@ -109,9 +120,16 @@ export function RecordDetailsDialog({
 
   async function buildReportElement(): Promise<HTMLElement> {
     const photos = attachments.filter((a) => a.kind === "photo")
-    const signatureAttachments = attachments.filter(
-      (a) => a.kind === "signature" || a.kind.startsWith("signature:"),
-    )
+    // إزالة تكرار التواقيع: قد يوجد أكثر من مرفق لنفس الدور (مثل توقيع موظف الموارد
+    // البشرية المحفوظ مرتين). نُبقي الأحدث فقط لكل نوع (أعلى id) حتى لا يظهر التوقيع
+    // مكرراً في الـ PDF. المرفقات مُرتّبة تصاعدياً، فالأخير هو الأحدث.
+    const latestByKind = new Map<string, AttachmentRow>()
+    for (const a of attachments) {
+      if (a.kind === "signature" || a.kind.startsWith("signature:")) {
+        latestByKind.set(a.kind, a)
+      }
+    }
+    const signatureAttachments = Array.from(latestByKind.values())
 
     const photoData = await Promise.all(photos.map((p) => toDataUrl(fileUrl(p.pathname))))
     const sigData = await Promise.all(
@@ -147,18 +165,19 @@ export function RecordDetailsDialog({
 
     // الصور المرفقة: شبكة من عمودين، عرض كل صورة لا يتجاوز نصف الصفحة
     const validPhotos = photoData.filter(Boolean)
+    // حجم صورة الإثبات مُصغَّر ليتناسب مع صفحة A4 واحدة بعد بيانات المخالفة والتواقيع.
     const photosHtml = validPhotos
       .map(
         (d) =>
-          `<div style="width:50%;box-sizing:border-box;padding:6px;"><img src="${d}" style="width:100%;height:220px;border:1px solid #e2e8f0;border-radius:6px;object-fit:cover;" /></div>`,
+          `<div style="width:50%;box-sizing:border-box;padding:4px;"><img src="${d}" style="width:100%;height:120px;border:1px solid #e2e8f0;border-radius:6px;object-fit:cover;" /></div>`,
       )
       .join("")
 
     // التواقيع الرسمية: جدول 2×2
     const sigCell = (s?: { data: string | null; label: string }) =>
       s && s.data
-        ? `<td style="width:50%;border:1px solid #e2e8f0;padding:12px;text-align:center;vertical-align:top;background:#fff;"><img src="${s.data}" style="max-height:110px;max-width:90%;" /><div style="margin-top:8px;font-size:12pt;font-weight:600;color:#334155;border-top:1px solid #e2e8f0;padding-top:8px;">${escapeHtml(s.label)}</div></td>`
-        : `<td style="width:50%;border:1px solid #e2e8f0;padding:12px;"></td>`
+        ? `<td style="width:50%;border:1px solid #e2e8f0;padding:6px;text-align:center;vertical-align:top;background:#fff;"><img src="${s.data}" style="max-height:64px;max-width:80%;" /><div style="margin-top:4px;font-size:10pt;font-weight:600;color:#334155;border-top:1px solid #e2e8f0;padding-top:4px;">${escapeHtml(s.label)}</div></td>`
+        : `<td style="width:50%;border:1px solid #e2e8f0;padding:6px;"></td>`
     const sigRows: string[] = []
     for (let i = 0; i < allSigs.length; i += 2) {
       sigRows.push(`<tr>${sigCell(allSigs[i])}${sigCell(allSigs[i + 1])}</tr>`)
@@ -180,7 +199,7 @@ export function RecordDetailsDialog({
       </svg>`
 
     container.innerHTML = `
-      <table style="width:100%;border-collapse:collapse;border:1px solid #cbd5e1;margin-bottom:24px;">
+      <table style="width:100%;border-collapse:collapse;border:1px solid #cbd5e1;margin-bottom:12px;">
         <tr>
           <td style="border:1px solid #cbd5e1;padding:10px;width:150px;text-align:center;vertical-align:middle;background:#ffffff;">
             ${mhsLogo}
@@ -205,24 +224,24 @@ export function RecordDetailsDialog({
       </div>
     `
 
-    // Natural-height first page (no forced A4 min-height → avoids blank pages).
-    const page1 = `<div style="padding:40px;box-sizing:border-box;">${container.innerHTML}</div>`
+    // هوامش مضغوطة ليتناسب كل المحتوى مع صفحة A4 واحدة (يُصغَّر تلقائياً عبر singlePage).
+    const page1 = `<div style="padding:20px 24px;box-sizing:border-box;">${container.innerHTML}</div>`
 
     // The attachments/signatures page is skipped entirely for training, where
     // attendee signatures already appear inline in the attendance table.
     const hasAttachments = !suppressReportAttachments && (!!photosHtml || !!sigHtml)
 
     const page2 = hasAttachments
-      ? `<div style="margin-top:24px;padding:0 40px 40px;box-sizing:border-box;">
-           <h1 style="font-size:16pt;color:#0f766e;margin:0 0 16px;border-bottom:2px solid #0f766e;padding-bottom:10px;">المرفقات والتواقيع الرسمية</h1>
+      ? `<div style="margin-top:12px;padding:0 24px 20px;box-sizing:border-box;">
+           <h1 style="font-size:13pt;color:#0f766e;margin:0 0 8px;border-bottom:2px solid #0f766e;padding-bottom:6px;">المرفقات والتواقيع الرسمية</h1>
            ${
              photosHtml
-               ? `<h2 style="font-size:14pt;color:#0f766e;margin:0 0 8px;">الصور المرفقة (${validPhotos.length})</h2><div style="display:flex;flex-wrap:wrap;margin-bottom:28px;">${photosHtml}</div>`
+               ? `<h2 style="font-size:11pt;color:#0f766e;margin:0 0 4px;">الصور المرفقة (${validPhotos.length})</h2><div style="display:flex;flex-wrap:wrap;margin-bottom:12px;">${photosHtml}</div>`
                : ""
            }
            ${
              sigHtml
-               ? `<h2 style="font-size:14pt;color:#0f766e;margin:0 0 8px;">التواقيع الرسمية</h2>${sigHtml}`
+               ? `<h2 style="font-size:11pt;color:#0f766e;margin:0 0 4px;">التواقيع الرسمية</h2>${sigHtml}`
                : ""
            }
          </div>`
@@ -241,7 +260,8 @@ export function RecordDetailsDialog({
     let el: HTMLElement | null = null
     try {
       el = await buildReportElement()
-      await downloadElementPdf(el, fileBase)
+      // singlePage: يضمن ظهور التقرير بالكامل ضمن ورقة A4 واحدة دون صفحة ثانية.
+      await downloadElementPdf(el, fileBase, { singlePage: true })
       toast({ title: t("recordDetails.pdfDownloadedTitle") })
     } catch (err) {
       toast({
@@ -255,36 +275,41 @@ export function RecordDetailsDialog({
     }
   }
 
-  async function handleEmail() {
-    setBusy("email")
+  // إرسال التقرير كمرفق PDF عبر واجهة Resend الموجودة. نُولّد الـ PDF على العميل
+  // (ضمن صفحة A4 واحدة) ثم نرسله كـ base64 — بلا mailto حتى لا تظهر صفحة حظر
+  // المحتوى داخل الإطار المُضمَّن، وحتى يصل البريد فعلياً لصندوق المستلم.
+  async function sendEmail() {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(emailTo)) {
+      toast({ title: t("recordDetails.invalidEmail"), variant: "destructive" })
+      return
+    }
+    setSending(true)
     let el: HTMLElement | null = null
     try {
       el = await buildReportElement()
-      await downloadElementPdf(el, fileBase)
-
-      const lines = fields
-        .filter((f) => f.value && f.value !== "-" && !isBase64Image(f.value))
-        .map((f) => `${f.label}: ${f.value}`)
-      const body = [
-        t("recordDetails.mailReport").replace("{title}", title),
-        documentNo ? t("recordDetails.mailDocNo").replace("{no}", documentNo) : "",
-        "",
-        ...lines,
-        "",
-        t("recordDetails.mailPhotoCount").replace("{count}", String(attachments.filter((a) => a.kind === "photo").length)),
-        t("recordDetails.mailSigCount").replace("{count}", String(attachments.filter((a) => a.kind === "signature" || a.kind.startsWith("signature:")).length)),
-        "",
-        t("recordDetails.mailAttachNote"),
-      ]
-        .filter((l) => l !== null)
-        .join("\n")
-
-      const mailto = `mailto:?subject=${encodeURIComponent(t("recordDetails.mailSubject").replace("{title}", title))}&body=${encodeURIComponent(body)}`
-      window.location.href = mailto
-      toast({
-        title: t("recordDetails.emailReadyTitle"),
-        description: t("recordDetails.emailReadyDesc"),
+      const pdf = await elementToPdf(el, { singlePage: true })
+      const dataUri = pdf.output("datauristring")
+      const res = await fetch("/api/reports/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: emailTo,
+          subject: t("recordDetails.mailSubject").replace("{title}", title),
+          message: emailMessage || t("recordDetails.mailReport").replace("{title}", title),
+          fileName: `${fileBase}.pdf`,
+          pdfBase64: dataUri,
+        }),
       })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || t("recordDetails.emailFailedTitle"))
+      toast({
+        title: t("recordDetails.emailSentTitle"),
+        description: t("recordDetails.emailSentDesc").replace("{email}", emailTo),
+      })
+      setEmailOpen(false)
+      setEmailTo("")
+      setEmailMessage("")
     } catch (err) {
       toast({
         title: t("recordDetails.emailFailedTitle"),
@@ -293,11 +318,12 @@ export function RecordDetailsDialog({
       })
     } finally {
       if (el) document.body.removeChild(el)
-      setBusy(null)
+      setSending(false)
     }
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         {trigger ?? (
@@ -320,11 +346,11 @@ export function RecordDetailsDialog({
           <Button
             size="sm"
             variant="outline"
-            onClick={handleEmail}
+            onClick={() => setEmailOpen(true)}
             disabled={busy !== null}
             className="gap-1.5 bg-transparent"
           >
-            {busy === "email" ? <Loader2 className="size-3.5 animate-spin" /> : <Mail className="size-3.5" />}
+            <Mail className="size-3.5" />
             {t("recordDetails.sendEmail")}
           </Button>
         </div>
@@ -398,6 +424,50 @@ export function RecordDetailsDialog({
         )}
       </DialogContent>
     </Dialog>
+
+    {/* نافذة إدخال بريد المستلم — الإرسال عبر Resend مع إرفاق تقرير PDF */}
+    <Dialog open={emailOpen} onOpenChange={(v) => !sending && setEmailOpen(v)}>
+      <DialogContent dir="rtl" className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t("recordDetails.emailDialogTitle")}</DialogTitle>
+          <DialogDescription>{t("recordDetails.emailDialogDesc")}</DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`email-to-${recordId}`}>{t("recordDetails.recipientEmail")}</Label>
+            <Input
+              id={`email-to-${recordId}`}
+              type="email"
+              dir="ltr"
+              placeholder="name@example.com"
+              value={emailTo}
+              onChange={(e) => setEmailTo(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`email-msg-${recordId}`}>{t("recordDetails.messageOptional")}</Label>
+            <Textarea
+              id={`email-msg-${recordId}`}
+              rows={3}
+              placeholder={t("recordDetails.messagePlaceholder")}
+              value={emailMessage}
+              onChange={(e) => setEmailMessage(e.target.value)}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">{t("recordDetails.pdfAttachNote")}</p>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setEmailOpen(false)} disabled={sending}>
+            {t("recordDetails.cancel")}
+          </Button>
+          <Button onClick={sendEmail} disabled={sending} className="gap-2">
+            {sending ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />}
+            {t("recordDetails.send")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   )
 }
 
