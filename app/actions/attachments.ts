@@ -6,6 +6,7 @@ import { and, asc, eq } from "drizzle-orm"
 import { put, del } from "@vercel/blob"
 import { requireScope, assertWritable } from "@/lib/session"
 import { hasRoleSignature } from "@/lib/signature-check"
+import { roleKindFor } from "@/lib/signature-roles"
 
 export type AttachmentRow = {
   id: number
@@ -27,8 +28,33 @@ export async function hasRecordRoleSignature(
   recordId: number,
   roleKey: string,
 ): Promise<boolean> {
-  const { organizationId } = await requireScope()
-  return hasRoleSignature({ organizationId, module, recordId, roleKey })
+  const { userId, organizationId } = await requireScope()
+  return hasRoleSignature({ organizationId, userId, module, recordId, roleKey })
+}
+
+// جلب توقيع دور معيّن على سجل للعرض داخل بطاقة المعالجة.
+// النطاق بالمستخدم + المؤسسة ليطابق نطاق الرفع ونطاق العرض (وسيط /api/file) ومنطق
+// التحقق عند الإغلاق؛ فما يُعرض في البطاقة هو نفسه ما يفرضه شرط الإغلاق تماماً.
+export async function getRecordRoleSignature(
+  module: string,
+  recordId: number,
+  roleKey: string,
+): Promise<{ id: number; pathname: string; url: string } | null> {
+  const { userId, organizationId } = await requireScope()
+  const rows = await db
+    .select({ id: attachment.id, pathname: attachment.pathname, url: attachment.url })
+    .from(attachment)
+    .where(
+      and(
+        eq(attachment.organizationId, organizationId),
+        eq(attachment.userId, userId),
+        eq(attachment.module, module),
+        eq(attachment.recordId, recordId),
+        eq(attachment.kind, roleKindFor(roleKey)),
+      ),
+    )
+    .limit(1)
+  return rows[0] ?? null
 }
 
 // Fetch all attachments for a single record.

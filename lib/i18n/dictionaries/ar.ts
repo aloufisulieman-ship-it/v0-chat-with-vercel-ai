@@ -172,7 +172,7 @@ export const ar = {
 
   trainingMod: {
     newCourse: "دورة جديدة",
-    pageEmptyMessage: "لا تو������������د دورات. أضف دورة جديدة للبدء.",
+    pageEmptyMessage: "لا تو����������������د دورات. أضف دورة جديدة للبدء.",
     kpiTotalCourses: "إجمالي الدورات",
     kpiTotalTrainees: "إجمالي المتدربين",
     kpiCompleted: "دورات مكتملة",
@@ -326,11 +326,11 @@ export const ar = {
     deletePhoto: "حذف الصورة",
     // استيراد قائمة الحضور
     importList: "استيراد قائمة",
-    importAttendanceTitle: "استيراد قائمة الحضور",
+    importAttendanceTitle: "استيراد قائمة ا����حض��ر",
     tabPaste: "لصق ن��",
     tabFile: "ملف Excel/CSV",
     pasteHint: "الصق اسماً واحداً في كل سطر. لإضافة الوظيفة، افصلها بفاصلة أو مسافتين (مثال: أحمد علي، فني).",
-      pastePlaceholder: "أحمد ����لي، فني سلامة\nخالد س��يد�� مشرف",
+      pastePlaceholder: "أحمد ����لي، فني سل��مة\nخالد س��يد�� مشرف",
     fileHint: "العمود الأول = الاسم، العم����د الثاني (اختياري) = الوظيفة.",
     preview: "معاينة",
     cancel: "إلغاء",
@@ -514,6 +514,8 @@ export const ar = {
     sigViolator: "توقيع المخالف",
     sigReporter: "توقيع المُبلِّغ / المشرف",
     sigManager: "توقيع مدير السلامة",
+    sigAuditor: "توقيع المدقق",
+    sigHrOfficer: "توقيع الموارد البشرية",
   },
 
   // التصاريح
@@ -529,7 +531,7 @@ export const ar = {
     approvedBy: "اعتمده",
     workLocation: "موقع العمل",
     noPermits: "لا توجد تصاريح",
-    totalPermits: "إجمالي التصاريح",
+    totalPermits: "إجمال�� التصاريح",
     activePermits: "تصاريح نشطة",
     pendingApproval: "بانتظار الاعتماد",
     registryTitle: "سج�� تصاريح العم��",
@@ -634,7 +636,7 @@ export const ar = {
     employeeNameRequired: "اسم الموظف مطلوب",
     editSavedTitle: "تم حفظ التعديلات",
     editSavedDesc: "تم تحديث المخالفة بنجاح.",
-    saveEdits: "حفظ التعديلات",
+    saveEdits: "ح��ظ التعديلات",
     detectedByShort: "اسم ال��فتش/الموظف",
   },
 
@@ -718,7 +720,7 @@ export const ar = {
     // أعمدة الجدول
     colType: "النوع",
     colLocation: "الموقع",
-    colReporter: "المُبلِّغ",
+    colReporter: "��لمُبلِّغ",
     colSeverity: "الخطورة",
     colStatus: "الحالة",
     colDate: "التاريخ",
@@ -988,7 +990,7 @@ export const ar = {
 
   // بطاقة إجراء المالية
   financeCard: {
-    settlementRequired: "رقم الستلمنت إلزامي عند إغلاق الحالة",
+    settlementRequired: "رقم الستلمنت إلزامي عند إغل��ق الحالة",
     receiptRequired: "إيصال الدفع إلزامي عند إغلاق الحالة",
     signatureRequired: "يجب حفظ توقيع موظف المالية قبل إغلاق المخالفة",
     caseClosed: "تم ��غلاق الحالة",
@@ -1091,7 +1093,7 @@ export const ar = {
   // التدقيق والامتثال
   auditsMod: {
     dialogTitle: "تدقيق جديد",
-    dialogDesc: "سجّل عملية تدقيق.",
+    dialogDesc: "سجّل عملية ��دقيق.",
     trigger: "تدقيق جديد",
     registryTitle: "سجل عمليات التدقيق",
     emptyMessage: "لا توجد عمليات تدقيق. أضف تدقيقاً جديداً للبدء.",
@@ -1328,7 +1330,7 @@ export const ar = {
       streamTypeWebrtc: "فيديو حي مباشر (WebRTC)",
       streamTypeSnapshots: "لقطات شبه فورية (~0.4 ث)",
       micToastFailed: "تعذّر تشغيل المايكروفون",
-      captureFailedNow: "تعذّر التقاط لقطة الآن. حاول مرة أخرى.",
+      captureFailedNow: "تعذّر التقاط لقطة ال��ن. حاول مرة أخرى.",
       captureFailed: "تعذّر التقاط اللقطة",
       recordStartFailed: "تعذّر بدء التسجيل",
       liveUnavailable: "البث الحي غير متاح ا��آن.",
@@ -1372,7 +1374,7 @@ export const ar = {
       recNext: "التالي",
       recPageOf: "صفحة {page} من {total}",
       recOpenPhone: "فتح كاميرا الهاتف",
-      recCapturePrompt: "شغّل الفيديو وأوقفه عند اللحظة المطلوبة ثم التقط لقطة لإنشاء مخالفة منها.",
+      recCapturePrompt: "شغّل الفيديو وأوقفه عن�� اللحظة المطلوبة ثم التقط لقطة لإنشاء مخالفة منها.",
       recCaptureFromMoment: "التقاط لقطة من اللحظة الحالية",
       recExtractedShots: "اللقطات المستخرجة",
       recNoShotsYet: "لم يتم التقاط أي لقطات من هذا التسجيل بعد.",
@@ -1551,7 +1553,7 @@ export const ar = {
   // شارات وحالات صغيرة مشت��كة
   badges: {
     hrClosed: "تم الإغلاق من الموارد البشرية",
-    hrPending: "قيد المعالجة لدى الموارد البشرية",
+    hrPending: "قيد المعالجة لدى الموارد البش��ية",
     financeClosed: "تم الإغلاق من المالية",
     financePending: "قيد المعالجة لدى المالية",
     entryManual: "يدوية",
@@ -1659,7 +1661,7 @@ export const ar = {
   // أنواع المخالفات (القيم مخزّنة بالعربية — هذه للعرض فقط)
   violationTypes: {
     "عدم ارتداء خوذة السلامة": "عدم ارتداء خوذة السلامة",
-    "عدم ارتداء حذاء السلامة": "عدم ارتداء حذاء السلامة",
+    "عدم ارتداء حذاء ا��سلامة": "عدم ارتداء حذاء السلامة",
     "عدم ارتداء سترة عاكسة": "عدم ارتداء سترة عاكسة",
     "عدم ارتداء قفازات واقية": "عدم ارتداء قفازات واقية",
     "عد�� ارتداء نظارات واقية": "عدم ارتد��ء نظارات واقية",
@@ -1816,7 +1818,7 @@ export const ar = {
   haveAccount: "لديك حساب بالفعل؟ ",
   noAccount: "ليس لديك حساب؟ ",
   signUpLink: "إنشاء حساب",
-  signInLink: "تسجيل الدخول",
+  signInLink: "تسج��ل الدخول",
   },
 
   changePassword: {
@@ -1854,6 +1856,11 @@ export const ar = {
     clear: "مسح",
     saving: "جارٍ الحفظ...",
     save: "حفظ التوقيع",
+    saved: "تم حفظ التوقيع",
+    saveFailed: "تعذّر حفظ التوقيع",
+    delete: "حذف",
+    deleted: "تم حذف التوقيع",
+    deleteFailed: "تعذّر حذف التوقيع",
   },
 
   companyForm: {
@@ -1907,7 +1914,7 @@ export const ar = {
     permsDialogDesc: "حدّد القسم والصفحات التي يمكن لهذا المستخدم الوصول إليها.",
     save: "حفظ",
     allPermissions: "كل الصلاحيات",
-    noPermissions: "لا توجد صلاحيات",
+    noPermissions: "��ا توجد صلاحيات",
     userCountOne: "مستخدم",
     userCountMany: "مستخدمين",
     inSystem: "في النظام",
@@ -2028,15 +2035,20 @@ export const ar = {
     pdfDownloadedTitle: "تم تنزيل ملف PDF",
     pdfFailedTitle: "تعذّر إنشاء PDF",
     genericError: "حدث خطأ.",
-    emailReadyTitle: "تم تجهيز البريد",
-    emailReadyDesc: "أُنزِل ملف PDF — أرفقه بالرسالة قبل الإرسال.",
-    emailFailedTitle: "تعذّر تجهيز البريد",
-    mailReport: "تقرير: {title}",
-    mailDocNo: "رقم الوثيقة: {no}",
-    mailPhotoCount: "عدد الصور المرفقة: {count}",
-    mailSigCount: "عدد التواقيع: {count}",
-    mailAttachNote: "ملاحظة: تم تنزيل ملف PDF الكامل (يحتوي الصور والتواقيع) على جهازك — يرجى إرفاقه بهذه الرسالة.",
-    mailSubject: "تقرير {title}",
+  emailFailedTitle: "تعذّر إرسال البريد",
+  mailReport: "تقرير: {title}",
+  mailSubject: "تقرير {title}",
+  emailDialogTitle: "إرسال التقرير بالبريد",
+  emailDialogDesc: "سيُرسَل التقرير كملف PDF مرفق إلى البريد المُدخَل.",
+  recipientEmail: "بريد المستلم",
+  messageOptional: "رسالة (اختياري)",
+  messagePlaceholder: "أضف ملاحظة تُرفق مع التقرير…",
+  pdfAttachNote: "سيُرفق تقرير PDF كامل (البيانات والصور والتواقيع) ضمن صفحة واحدة.",
+  invalidEmail: "البريد الإلكتروني غير صالح",
+  emailSentTitle: "تم إرسال البريد",
+  emailSentDesc: "أُرسل التقرير إلى {email}",
+  cancel: "إلغاء",
+  send: "إرسال",
   },
 
   dashboardCharts: {

@@ -5,7 +5,7 @@ import { StatusBadge } from "@/components/status-badge"
 import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { requireModule } from "@/lib/session"
-import { getViolations, getEmployees, deleteViolation } from "@/app/actions/hse"
+import { getViolations, getEmployees, deleteViolation, getAiViolationSignatureInfo } from "@/app/actions/hse"
 import { getOperationalSettings } from "@/app/actions/org-settings"
 import { getServerT } from "@/lib/i18n/server"
 import { statusLabel, categoryLabel } from "@/lib/i18n/labels"
@@ -33,10 +33,11 @@ export default async function ViolationsPage({
   searchParams: Promise<{ evidence?: string; from?: string; detectedBy?: string }>
 }) {
   const user = await requireModule("violations")
-  const [violations, employees, operational] = await Promise.all([
+  const [violations, employees, operational, aiSignatureInfo] = await Promise.all([
     getViolations(),
     getEmployees(),
     getOperationalSettings(),
+    getAiViolationSignatureInfo(),
   ])
   const violationTypeLabels = operational.violationTypes.map((v) => v.label)
   const { t } = await getServerT()
@@ -101,6 +102,15 @@ export default async function ViolationsPage({
               { label: t("violations.sigViolator"), value: r.violatorSignature || "" },
               { label: t("violations.sigReporter"), value: r.editorSignature || "" },
               { label: t("violations.sigManager"), value: r.managerSignature || "" },
+              // مربّعان إضافيان للمخالفات الآلية فقط (الناتجة عن الرصد الذكي):
+              // توقيع المدقق الذي حوّل الرصد، وتوقيع موظف الموارد البشرية الذي أغلق
+              // الحالة — يُسحبان للقراءة من القيم المحفوظة، و"" يعني لم يُوقَّع بعد.
+              ...(aiSignatureInfo[r.id]
+                ? [
+                    { label: t("violations.sigAuditor"), value: aiSignatureInfo[r.id].auditor },
+                    { label: t("violations.sigHrOfficer"), value: aiSignatureInfo[r.id].hrOfficer },
+                  ]
+                : []),
             ]}
             initialAttachments={[]}
             extraSection={

@@ -12,6 +12,8 @@ import { hrStatusOptions, normalizeHrStatus, type HrStatus } from "@/lib/hr-stat
 import { useI18n } from "@/lib/i18n/client"
 import { refStatusLabel } from "@/lib/i18n/labels"
 import { hasRecordRoleSignature } from "@/app/actions/attachments"
+import { InlineRoleSignature } from "@/components/inline-role-signature"
+import { type SignatureRole } from "@/lib/signature-roles"
 
 type HrAction = (formData: FormData) => Promise<void>
 
@@ -28,7 +30,8 @@ export function HrActionCard({
   initialAttachments,
   closedBy,
   closedAt,
-  requireSignatureRoleKey,
+  module = "violations",
+  signatureRole,
 }: {
   id: number
   action: HrAction
@@ -44,9 +47,10 @@ export function HrActionCard({
   initialAttachments: string[]
   closedBy?: string
   closedAt?: string
-  // عند ضبطه، يُمنع الإغلاق قبل وجود توقيع هذا الدور (مثل توقيع موظف HR).
-  // يُمرَّر فقط لمخالفات قسم HR، فلا يتأثر مسار الحوادث.
-  requireSignatureRoleKey?: string
+  // الوحدة التي يُخزَّن تحتها التوقيع والمرفقات: "violations" أو "incidents".
+  module?: string
+  // عند ضبطه، يظهر مربع توقيع الموظف ويُمنع الإغلاق قبل حفظه.
+  signatureRole?: SignatureRole
 }) {
   const { t, formatDateTime } = useI18n()
   const [hrAction, setHrAction] = useState(initialAction)
@@ -54,6 +58,7 @@ export function HrActionCard({
   const [hrNotes, setHrNotes] = useState(initialNotes)
   const [status, setStatus] = useState<HrStatus>(normalizeHrStatus(initialStatus))
   const [attachments, setAttachments] = useState<string[]>(initialAttachments)
+  const [signed, setSigned] = useState(false)
   const [pending, startTransition] = useTransition()
 
   function handleFiles(e: React.ChangeEvent<HTMLInputElement>) {
@@ -73,16 +78,17 @@ export function HrActionCard({
     }
     startTransition(async () => {
       // تحقق مبكر على الواجهة: امنع الإغلاق إن غاب توقيع موظف الموارد البشرية.
-      // (التحقق النهائي المُلزِم يقع أيضاً على الخادم داخل updateHrViolation.)
-      if (status === "closed" && requireSignatureRoleKey) {
+      // (التحقق النهائي المُلزِم يقع أيضاً على الخادم داخل updateHrViolation/Incident.)
+      if (status === "closed" && signatureRole) {
+        let ok = signed
         try {
-          const signed = await hasRecordRoleSignature("violations", id, requireSignatureRoleKey)
-          if (!signed) {
-            toast({ title: t("hrCard.signatureRequired"), variant: "destructive" })
-            return
-          }
+          ok = await hasRecordRoleSignature(module, id, signatureRole.key)
         } catch {
-          // في حال فشل التحقق المسبق، نترك الخادم يفرض الشرط عند المحاولة.
+          // في حال فشل التحقق المسبق، نعتمد الحالة المحلية ثم يفرض الخادم الشرط.
+        }
+        if (!ok) {
+          toast({ title: t("hrCard.signatureRequired"), variant: "destructive" })
+          return
         }
       }
       const fd = new FormData()
@@ -214,6 +220,20 @@ export function HrActionCard({
           )}
         </div>
       </div>
+
+      {/* توقيع موظف الموارد البشرية — إلزامي قبل إغلاق الحالة (يُعرض داخل البطاقة). */}
+      {signatureRole && (
+        <div className="mt-3 border-t border-border pt-3">
+          <InlineRoleSignature
+            module={module}
+            recordId={id}
+            role={signatureRole}
+            required={status === "closed"}
+            disabled={pending}
+            onChange={setSigned}
+          />
+        </div>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
         <Button type="button" variant={status === "closed" ? "default" : "outline"} size="sm" onClick={submit} disabled={pending}>

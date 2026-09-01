@@ -504,6 +504,8 @@ export const en: Dictionary = {
     sigViolator: "Offender Signature",
     sigReporter: "Reporter / Supervisor Signature",
     sigManager: "Safety Manager Signature",
+    sigAuditor: "Auditor Signature",
+    sigHrOfficer: "HR Signature",
   },
 
   permits: {
@@ -844,7 +846,7 @@ export const en: Dictionary = {
   incidentTypes: {
     "اصطدام مركبين": "Vehicle collision",
     "دهس": "Run-over",
-    "اصطدام بجسم ثابت": "Collision with a fixed object",
+    "اصطدام بجسم ثاب��": "Collision with a fixed object",
     "إصابة عمل": "Work injury",
     "سقوط بضاعة": "Falling goods",
     "سقوط من ارتفاع": "Fall from height",
@@ -1596,11 +1598,11 @@ export const en: Dictionary = {
     "غرامة مالية": "Financial fine",
     "أخرى": "Other",
     "إشعار الشركة": "Notify the company",
-    "إيقاف العمل": "Stop work",
+    "إي��اف العمل": "Stop work",
   },
 
   violationTypes: {
-    "عدم ارتداء خوذة السلامة": "Not wearing a safety helmet",
+    "عدم ا����تداء خوذة السلامة": "Not wearing a safety helmet",
     "عدم ارتداء حذاء السلامة": "Not wearing safety shoes",
     "عدم ارتداء سترة عاكس��": "Not wearing a reflective vest",
     "عدم ارتداء قفازات واقية": "Not wearing protective gloves",
@@ -1792,6 +1794,11 @@ export const en: Dictionary = {
     clear: "Clear",
     saving: "Saving...",
     save: "Save signature",
+    saved: "Signature saved",
+    saveFailed: "Failed to save signature",
+    delete: "Delete",
+    deleted: "Signature deleted",
+    deleteFailed: "Failed to delete signature",
   },
 
   companyForm: {
@@ -1966,15 +1973,20 @@ export const en: Dictionary = {
     pdfDownloadedTitle: "PDF downloaded",
     pdfFailedTitle: "Could not generate PDF",
     genericError: "An error occurred.",
-    emailReadyTitle: "Email ready",
-    emailReadyDesc: "The PDF was downloaded — attach it to the message before sending.",
-    emailFailedTitle: "Could not prepare email",
-    mailReport: "Report: {title}",
-    mailDocNo: "Document No.: {no}",
-    mailPhotoCount: "Attached photos: {count}",
-    mailSigCount: "Signatures: {count}",
-    mailAttachNote: "Note: The full PDF (including photos and signatures) was downloaded to your device — please attach it to this message.",
-    mailSubject: "{title} report",
+  emailFailedTitle: "Could not send email",
+  mailReport: "Report: {title}",
+  mailSubject: "{title} report",
+  emailDialogTitle: "Send report by email",
+  emailDialogDesc: "The report will be sent as a PDF attachment to the entered address.",
+  recipientEmail: "Recipient email",
+  messageOptional: "Message (optional)",
+  messagePlaceholder: "Add a note to include with the report…",
+  pdfAttachNote: "A full PDF report (data, photos and signatures) will be attached on a single page.",
+  invalidEmail: "Invalid email address",
+  emailSentTitle: "Email sent",
+  emailSentDesc: "The report was sent to {email}",
+  cancel: "Cancel",
+  send: "Send",
   },
 
   dashboardCharts: {

@@ -17,8 +17,13 @@ export default async function HrPage() {
   const { t } = await getServerT()
   const [violations, incidents] = await Promise.all([getHrViolations(), getHrIncidents()])
 
-  const pendingViolations = violations.filter((v) => normalizeHrStatus(v.hrStatus) !== "closed").length
-  const pendingIncidents = incidents.filter((i) => normalizeHrStatus(i.hrStatus) !== "closed").length
+  // القوائم النشطة تستبعد المغلقة: بمجرد الإغلاق تختفي المخالفة/الحادثة من قسم HR
+  // وتظهر ضمن سجلّي "المخالفات"/"الحوادث" العامّين. عدّادات الـ KPI تبقى على القوائم
+  // الكاملة لإظهار الإجمالي الصحيح (لا حذف بيانات — فلترة عرض فقط).
+  const activeViolations = violations.filter((v) => normalizeHrStatus(v.hrStatus) !== "closed")
+  const activeIncidents = incidents.filter((i) => normalizeHrStatus(i.hrStatus) !== "closed")
+  const pendingViolations = activeViolations.length
+  const pendingIncidents = activeIncidents.length
 
   return (
     <AppShell
@@ -35,20 +40,21 @@ export default async function HrPage() {
       {/* القائمة الأولى: المخالفات المحوّلة للموارد البشرية */}
       <section className="mt-8">
         <h2 className="mb-3 text-lg font-semibold text-foreground">{t("hr.violationsSection")}</h2>
-        {violations.length === 0 ? (
+        {activeViolations.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
             {t("hr.noViolations")}
           </p>
         ) : (
           <div className="flex flex-col gap-4">
-            {violations.map((v) => (
+            {activeViolations.map((v) => (
               <HrActionCard
                 key={v.id}
                 id={v.id}
                 action={updateHrViolation}
                 refLabel={`v-${v.id}`}
                 hrStatus={v.hrStatus}
-                requireSignatureRoleKey={HR_OFFICER_SIGNATURE_ROLE.key}
+                module="violations"
+                signatureRole={HR_OFFICER_SIGNATURE_ROLE}
                 initialAttachments={parseHrAttachments(v.hrAttachmentUrl)}
                 closedBy={v.hrClosedBy ?? ""}
                 closedAt={v.hrClosedAt ? v.hrClosedAt.toISOString() : ""}
@@ -68,7 +74,6 @@ export default async function HrPage() {
                     title={`${t("hr.violationPrefix")} ${v.employeeName}`}
                     subtitle={t("hr.violationReport")}
                     documentNo={v.documentNo ?? undefined}
-                    extraSignatureRoles={[HR_OFFICER_SIGNATURE_ROLE]}
                     trigger={
                       <Button type="button" variant="outline" size="sm">
                         <Eye className="size-4" />
@@ -101,19 +106,21 @@ export default async function HrPage() {
       {/* القائمة الثانية: الحوادث الداخلية المحوّلة (طرف متضرر موظف) */}
       <section className="mt-10">
         <h2 className="mb-3 text-lg font-semibold text-foreground">{t("hr.incidentsSection")}</h2>
-        {incidents.length === 0 ? (
+        {activeIncidents.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
             {t("hr.noIncidents")}
           </p>
         ) : (
           <div className="flex flex-col gap-4">
-            {incidents.map((i) => (
+            {activeIncidents.map((i) => (
               <HrActionCard
                 key={i.id}
                 id={i.id}
                 action={updateHrIncident}
                 refLabel={`i-${i.id}`}
                 hrStatus={i.hrStatus}
+                module="incidents"
+                signatureRole={HR_OFFICER_SIGNATURE_ROLE}
                 initialAttachments={parseHrAttachments(i.hrAttachmentUrl)}
                 closedBy={i.hrClosedBy ?? ""}
                 closedAt={i.hrClosedAt ? i.hrClosedAt.toISOString() : ""}

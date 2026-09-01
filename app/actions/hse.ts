@@ -21,8 +21,9 @@ import {
   user,
   aiDetection,
 } from "@/lib/db/schema"
-import { and, desc, eq } from "drizzle-orm"
+import { and, desc, eq, inArray, isNotNull } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
+import { roleKindFor, AUDITOR_SIGNATURE_ROLE, HR_OFFICER_SIGNATURE_ROLE } from "@/lib/signature-roles"
 import {
   requireModuleScope,
   requireScope,
@@ -906,6 +907,57 @@ export async function getViolations() {
     .orderBy(desc(violation.createdAt))
 }
 
+// التواقيع الرسمية الإضافية الخاصة بالمخالفات الآلية (الناتجة عن الرصد الذكي).
+// مخالفة آلية = مرتبطة باكتشاف ذكي عبر aiDetection.linkedViolationNo (المؤشر
+// الرسمي الذي يضبطه acceptDetectionAsViolation)، وليس عبر مطابقة نصوص هشّة.
+// نُعيد لكل مخالفة آلية رابطَي توقيع "المدقق" و"موظف الموارد البشرية" على مستوى
+// المؤسسة (لا المستخدم) ليظهرا لأي مُطّلع بصرف النظر عمّن وقّع. القيمة "" تعني
+// "لم يتم التوقيع بعد". المخالفات اليدوية لا تظهر في الخريطة إطلاقاً، فلا تتأثر.
+export async function getAiViolationSignatureInfo(): Promise<
+  Record<number, { auditor: string; hrOfficer: string }>
+> {
+  const scope = await requireModuleScope("violations")
+
+  const dets = await db
+    .select({ no: aiDetection.linkedViolationNo })
+    .from(aiDetection)
+    .where(and(eq(aiDetection.organizationId, scope.organizationId), isNotNull(aiDetection.linkedViolationNo)))
+  const aiDocNos = new Set(dets.map((d) => d.no).filter((n): n is string => !!n))
+  if (aiDocNos.size === 0) return {}
+
+  const vios = await db
+    .select({ id: violation.id, documentNo: violation.documentNo })
+    .from(violation)
+    .where(scopeWhere({ organizationId: violation.organizationId, userId: violation.userId }, scope))
+  const aiVios = vios.filter((v) => v.documentNo && aiDocNos.has(v.documentNo))
+  if (aiVios.length === 0) return {}
+  const ids = aiVios.map((v) => v.id)
+
+  const auditorKind = roleKindFor(AUDITOR_SIGNATURE_ROLE.key)
+  const hrKind = roleKindFor(HR_OFFICER_SIGNATURE_ROLE.key)
+  const sigs = await db
+    .select({ recordId: attachment.recordId, kind: attachment.kind, url: attachment.url })
+    .from(attachment)
+    .where(
+      and(
+        eq(attachment.organizationId, scope.organizationId),
+        eq(attachment.module, "violations"),
+        inArray(attachment.recordId, ids),
+        inArray(attachment.kind, [auditorKind, hrKind]),
+      ),
+    )
+
+  const result: Record<number, { auditor: string; hrOfficer: string }> = {}
+  for (const v of aiVios) result[v.id] = { auditor: "", hrOfficer: "" }
+  for (const s of sigs) {
+    const entry = result[s.recordId]
+    if (!entry) continue
+    if (s.kind === auditorKind) entry.auditor = s.url ?? ""
+    else if (s.kind === hrKind) entry.hrOfficer = s.url ?? ""
+  }
+  return result
+}
+
 export async function createViolationFull(formData: FormData) {
   await assertWritable()
   const { userId, organizationId } = await requireModuleScope("violations")
@@ -1502,7 +1554,7 @@ export async function getReportData(
       key: "positives",
       title: "تقرير الملاحظات الإيجابية",
       columns: [
-        { key: "documentNo", label: "رقم الملاحظة" },
+        { key: "documentNo", label: "رقم الملاح��ة" },
         { key: "description", label: "الوصف" },
         { key: "location", label: "الموقع" },
         { key: "observationDate", label: "التاريخ" },

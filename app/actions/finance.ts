@@ -84,6 +84,7 @@ export async function updateFinanceViolation(formData: FormData) {
   if (closing) {
     const signed = await hasRoleSignature({
       organizationId: closer.organizationId,
+      userId: closer.id,
       module: "violations",
       recordId: id,
       roleKey: FINANCE_OFFICER_SIGNATURE_ROLE.key,
@@ -108,6 +109,22 @@ export async function updateFinanceIncident(formData: FormData) {
   const closer = await requireModule("finance")
   const id = Number(formData.get("id"))
   if (!Number.isFinite(id)) throw new Error("معرّف غير صالح")
+
+  // نفس شرط المخالفات: يُمنع إغلاق الحادثة المحوّلة إلى المالية قبل توقيع موظف
+  // المالية. التوقيع مخزَّن تحت وحدة "incidents". الشرط مستقل عن قسم HR.
+  const closing = normalizeFinanceStatus(str(formData.get("financeStatus"), "pending")) === "closed"
+  if (closing) {
+    const signed = await hasRoleSignature({
+      organizationId: closer.organizationId,
+      userId: closer.id,
+      module: "incidents",
+      recordId: id,
+      roleKey: FINANCE_OFFICER_SIGNATURE_ROLE.key,
+    })
+    if (!signed) {
+      throw new Error("لا يمكن إغلاق الحادثة قبل حفظ توقيع موظف المالية")
+    }
+  }
 
   await db
     .update(incident)
