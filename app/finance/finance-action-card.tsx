@@ -11,6 +11,8 @@ import { financeStatusOptions, normalizeFinanceStatus, type FinanceStatus } from
 import { useI18n } from "@/lib/i18n/client"
 import { refStatusLabel } from "@/lib/i18n/labels"
 import { hasRecordRoleSignature } from "@/app/actions/attachments"
+import { InlineRoleSignature } from "@/components/inline-role-signature"
+import { type SignatureRole } from "@/lib/signature-roles"
 
 type FinanceAction = (formData: FormData) => Promise<void>
 
@@ -25,7 +27,8 @@ export function FinanceActionCard({
   initialReceipt,
   closedBy,
   closedAt,
-  requireSignatureRoleKey,
+  module = "violations",
+  signatureRole,
 }: {
   id: number
   action: FinanceAction
@@ -39,14 +42,16 @@ export function FinanceActionCard({
   initialReceipt: string
   closedBy?: string
   closedAt?: string
-  // عند ضبطه، يُمنع الإغلاق قبل وجود توقيع هذا الدور (توقيع موظف المالية).
-  // يُمرَّر فقط لمخالفات قسم المالية، فلا يتأثر مسار الحوادث.
-  requireSignatureRoleKey?: string
+  // الوحدة التي يُخزَّن تحتها التوقيع: "violations" أو "incidents".
+  module?: string
+  // عند ضبطه، يظهر مربع توقيع موظف المالية ويُمنع الإغلاق قبل حفظه.
+  signatureRole?: SignatureRole
 }) {
   const { t, formatDateTime } = useI18n()
   const [settlementNumber, setSettlementNumber] = useState(initialSettlement)
   const [receipt, setReceipt] = useState<string>(initialReceipt)
   const [status, setStatus] = useState<FinanceStatus>(normalizeFinanceStatus(initialStatus))
+  const [signed, setSigned] = useState(false)
   const [pending, startTransition] = useTransition()
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -69,16 +74,17 @@ export function FinanceActionCard({
     }
     startTransition(async () => {
       // تحقق مبكر على الواجهة: امنع الإغلاق إن غاب توقيع موظف المالية.
-      // (التحقق النهائي المُلزِم يقع أيضاً على الخادم داخل updateFinanceViolation.)
-      if (status === "closed" && requireSignatureRoleKey) {
+      // (التحقق النهائي المُلزِم يقع أيضاً على الخادم داخل updateFinanceViolation/Incident.)
+      if (status === "closed" && signatureRole) {
+        let ok = signed
         try {
-          const signed = await hasRecordRoleSignature("violations", id, requireSignatureRoleKey)
-          if (!signed) {
-            toast({ title: t("financeCard.signatureRequired"), variant: "destructive" })
-            return
-          }
+          ok = await hasRecordRoleSignature(module, id, signatureRole.key)
         } catch {
-          // في حال فشل التحقق المسبق، نترك الخادم يفرض الشرط عند المحاولة.
+          // في حال فشل التحقق المسبق، نعتمد الحالة المحلية ثم يفرض الخادم الشرط.
+        }
+        if (!ok) {
+          toast({ title: t("financeCard.signatureRequired"), variant: "destructive" })
+          return
         }
       }
       const fd = new FormData()
@@ -186,6 +192,20 @@ export function FinanceActionCard({
           )}
         </div>
       </div>
+
+      {/* توقيع موظف المالية — إلزامي قبل إغلاق الحالة (يُعرض داخل البطاقة). */}
+      {signatureRole && (
+        <div className="mt-3 border-t border-border pt-3">
+          <InlineRoleSignature
+            module={module}
+            recordId={id}
+            role={signatureRole}
+            required={status === "closed"}
+            disabled={pending}
+            onChange={setSigned}
+          />
+        </div>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
         <Button type="button" variant={status === "closed" ? "default" : "outline"} size="sm" onClick={submit} disabled={pending}>

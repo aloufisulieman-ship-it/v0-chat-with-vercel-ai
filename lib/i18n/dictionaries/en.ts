@@ -1600,7 +1600,7 @@ export const en: Dictionary = {
   },
 
   violationTypes: {
-    "عدم ارتداء خوذة السلامة": "Not wearing a safety helmet",
+    "عدم ا��تداء خوذة السلامة": "Not wearing a safety helmet",
     "عدم ارتداء حذاء السلامة": "Not wearing safety shoes",
     "عدم ارتداء سترة عاكس��": "Not wearing a reflective vest",
     "عدم ارتداء قفازات واقية": "Not wearing protective gloves",
@@ -1792,6 +1792,11 @@ export const en: Dictionary = {
     clear: "Clear",
     saving: "Saving...",
     save: "Save signature",
+    saved: "Signature saved",
+    saveFailed: "Failed to save signature",
+    delete: "Delete",
+    deleted: "Signature deleted",
+    deleteFailed: "Failed to delete signature",
   },
 
   companyForm: {

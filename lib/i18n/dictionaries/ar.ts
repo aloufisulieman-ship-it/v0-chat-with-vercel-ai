@@ -172,7 +172,7 @@ export const ar = {
 
   trainingMod: {
     newCourse: "دورة جديدة",
-    pageEmptyMessage: "لا تو������������د دورات. أضف دورة جديدة للبدء.",
+    pageEmptyMessage: "لا تو��������������د دورات. أضف دورة جديدة للبدء.",
     kpiTotalCourses: "إجمالي الدورات",
     kpiTotalTrainees: "إجمالي المتدربين",
     kpiCompleted: "دورات مكتملة",
@@ -326,7 +326,7 @@ export const ar = {
     deletePhoto: "حذف الصورة",
     // استيراد قائمة الحضور
     importList: "استيراد قائمة",
-    importAttendanceTitle: "استيراد قائمة الحضور",
+    importAttendanceTitle: "استيراد قائمة الحض��ر",
     tabPaste: "لصق ن��",
     tabFile: "ملف Excel/CSV",
     pasteHint: "الصق اسماً واحداً في كل سطر. لإضافة الوظيفة، افصلها بفاصلة أو مسافتين (مثال: أحمد علي، فني).",
@@ -634,7 +634,7 @@ export const ar = {
     employeeNameRequired: "اسم الموظف مطلوب",
     editSavedTitle: "تم حفظ التعديلات",
     editSavedDesc: "تم تحديث المخالفة بنجاح.",
-    saveEdits: "حفظ التعديلات",
+    saveEdits: "ح��ظ التعديلات",
     detectedByShort: "اسم ال��فتش/الموظف",
   },
 
@@ -988,7 +988,7 @@ export const ar = {
 
   // بطاقة إجراء المالية
   financeCard: {
-    settlementRequired: "رقم الستلمنت إلزامي عند إغلاق الحالة",
+    settlementRequired: "رقم الستلمنت إلزامي عند إغل��ق الحالة",
     receiptRequired: "إيصال الدفع إلزامي عند إغلاق الحالة",
     signatureRequired: "يجب حفظ توقيع موظف المالية قبل إغلاق المخالفة",
     caseClosed: "تم ��غلاق الحالة",
@@ -1091,7 +1091,7 @@ export const ar = {
   // التدقيق والامتثال
   auditsMod: {
     dialogTitle: "تدقيق جديد",
-    dialogDesc: "سجّل عملية تدقيق.",
+    dialogDesc: "سجّل عملية ��دقيق.",
     trigger: "تدقيق جديد",
     registryTitle: "سجل عمليات التدقيق",
     emptyMessage: "لا توجد عمليات تدقيق. أضف تدقيقاً جديداً للبدء.",
@@ -1659,7 +1659,7 @@ export const ar = {
   // أنواع المخالفات (القيم مخزّنة بالعربية — هذه للعرض فقط)
   violationTypes: {
     "عدم ارتداء خوذة السلامة": "عدم ارتداء خوذة السلامة",
-    "عدم ارتداء حذاء السلامة": "عدم ارتداء حذاء السلامة",
+    "عدم ارتداء حذاء ا��سلامة": "عدم ارتداء حذاء السلامة",
     "عدم ارتداء سترة عاكسة": "عدم ارتداء سترة عاكسة",
     "عدم ارتداء قفازات واقية": "عدم ارتداء قفازات واقية",
     "عد�� ارتداء نظارات واقية": "عدم ارتد��ء نظارات واقية",
@@ -1854,6 +1854,11 @@ export const ar = {
     clear: "مسح",
     saving: "جارٍ الحفظ...",
     save: "حفظ التوقيع",
+    saved: "تم حفظ التوقيع",
+    saveFailed: "تعذّر حفظ التوقيع",
+    delete: "حذف",
+    deleted: "تم حذف التوقيع",
+    deleteFailed: "تعذّر حذف التوقيع",
   },
 
   companyForm: {
@@ -1907,7 +1912,7 @@ export const ar = {
     permsDialogDesc: "حدّد القسم والصفحات التي يمكن لهذا المستخدم الوصول إليها.",
     save: "حفظ",
     allPermissions: "كل الصلاحيات",
-    noPermissions: "لا توجد صلاحيات",
+    noPermissions: "��ا توجد صلاحيات",
     userCountOne: "مستخدم",
     userCountMany: "مستخدمين",
     inSystem: "في النظام",

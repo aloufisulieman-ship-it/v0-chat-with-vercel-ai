@@ -114,6 +114,21 @@ export async function updateHrIncident(formData: FormData) {
   const id = Number(formData.get("id"))
   if (!Number.isFinite(id)) throw new Error("معرّف غير صالح")
 
+  // نفس شرط المخالفات: يُمنع إغلاق الحادثة المحوّلة إلى HR قبل توقيع موظف الموارد
+  // البشرية. التوقيع مخزَّن تحت وحدة "incidents". الشرط مستقل عن قسم المالية.
+  const closing = normalizeHrStatus(str(formData.get("hrStatus"), "pending")) === "closed"
+  if (closing) {
+    const signed = await hasRoleSignature({
+      organizationId: closer.organizationId,
+      module: "incidents",
+      recordId: id,
+      roleKey: HR_OFFICER_SIGNATURE_ROLE.key,
+    })
+    if (!signed) {
+      throw new Error("لا يمكن إغلاق الحادثة قبل حفظ توقيع موظف الموارد البشرية")
+    }
+  }
+
   await db
     .update(incident)
     .set(buildHrUpdate(formData, closer.name))

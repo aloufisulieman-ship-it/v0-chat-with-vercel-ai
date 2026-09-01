@@ -48,7 +48,8 @@ export default async function HrPage() {
                 action={updateHrViolation}
                 refLabel={`v-${v.id}`}
                 hrStatus={v.hrStatus}
-                requireSignatureRoleKey={HR_OFFICER_SIGNATURE_ROLE.key}
+                module="violations"
+                signatureRole={HR_OFFICER_SIGNATURE_ROLE}
                 initialAttachments={parseHrAttachments(v.hrAttachmentUrl)}
                 closedBy={v.hrClosedBy ?? ""}
                 closedAt={v.hrClosedAt ? v.hrClosedAt.toISOString() : ""}
@@ -68,7 +69,6 @@ export default async function HrPage() {
                     title={`${t("hr.violationPrefix")} ${v.employeeName}`}
                     subtitle={t("hr.violationReport")}
                     documentNo={v.documentNo ?? undefined}
-                    extraSignatureRoles={[HR_OFFICER_SIGNATURE_ROLE]}
                     trigger={
                       <Button type="button" variant="outline" size="sm">
                         <Eye className="size-4" />
