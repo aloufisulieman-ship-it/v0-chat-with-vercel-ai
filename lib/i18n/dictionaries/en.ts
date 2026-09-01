@@ -504,6 +504,8 @@ export const en: Dictionary = {
     sigViolator: "Offender Signature",
     sigReporter: "Reporter / Supervisor Signature",
     sigManager: "Safety Manager Signature",
+    sigAuditor: "Auditor Signature",
+    sigHrOfficer: "HR Signature",
   },
 
   permits: {
@@ -844,7 +846,7 @@ export const en: Dictionary = {
   incidentTypes: {
     "اصطدام مركبين": "Vehicle collision",
     "دهس": "Run-over",
-    "اصطدام بجسم ثابت": "Collision with a fixed object",
+    "اصطدام بجسم ثاب��": "Collision with a fixed object",
     "إصابة عمل": "Work injury",
     "سقوط بضاعة": "Falling goods",
     "سقوط من ارتفاع": "Fall from height",
@@ -1600,7 +1602,7 @@ export const en: Dictionary = {
   },
 
   violationTypes: {
-    "عدم ا��تداء خوذة السلامة": "Not wearing a safety helmet",
+    "عدم ا����تداء خوذة السلامة": "Not wearing a safety helmet",
     "عدم ارتداء حذاء السلامة": "Not wearing safety shoes",
     "عدم ارتداء سترة عاكس��": "Not wearing a reflective vest",
     "عدم ارتداء قفازات واقية": "Not wearing protective gloves",

@@ -40,6 +40,13 @@ function isBase64Image(value: string) {
   return value?.startsWith("data:image")
 }
 
+// يقرّر ما إذا كانت قيمة التوقيع صالحة للعرض كصورة: إمّا base64 مضمّن (التواقيع
+// المحفوظة في أعمدة السجل) أو رابط ملف عام (توقيع المدقق/الموارد البشرية المحفوظ
+// كمرفق على Blob). القيمة الفارغة تعني "لم يتم التوقيع بعد".
+function isDisplayableSignature(value: string) {
+  return !!value && (isBase64Image(value) || value.startsWith("http") || value.startsWith("/api/file"))
+}
+
 export function RecordDetailsDialog({
   module,
   recordId,
@@ -370,7 +377,7 @@ export function RecordDetailsDialog({
                   className="flex flex-col gap-2 rounded-lg border border-border p-3"
                 >
                   <span className="text-sm font-medium text-foreground">{sig.label}</span>
-                  {isBase64Image(sig.value) ? (
+                  {isDisplayableSignature(sig.value) ? (
                     <div className="overflow-hidden rounded-md border border-border bg-white">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img

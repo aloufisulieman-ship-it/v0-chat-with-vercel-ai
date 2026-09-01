@@ -28,6 +28,12 @@ export const FINANCE_OFFICER_SIGNATURE_ROLE: SignatureRole = {
   key: "finance_officer",
   label: "توقيع موظف المالية",
 }
+// توقيع المدقق الذي حوّل الرصد الآلي (المراقبة الذكية) إلى مخالفة ووجّهها.
+// يظهر للقراءة فقط في تفاصيل المخالفات الآلية إلى جانب توقيع موظف الموارد البشرية.
+export const AUDITOR_SIGNATURE_ROLE: SignatureRole = {
+  key: "auditor",
+  label: "توقيع المدقق",
+}
 
 export const SIGNATURE_KIND_PREFIX = "signature:"
 
@@ -45,6 +51,6 @@ export function labelForSignatureKind(module: string, kind: string): string {
   if (!key) return "توقيع"
   const found =
     signatureRoles[module]?.find((r) => r.key === key) ??
-    [HR_OFFICER_SIGNATURE_ROLE, FINANCE_OFFICER_SIGNATURE_ROLE].find((r) => r.key === key)
+    [HR_OFFICER_SIGNATURE_ROLE, FINANCE_OFFICER_SIGNATURE_ROLE, AUDITOR_SIGNATURE_ROLE].find((r) => r.key === key)
   return found?.label ?? "توقيع"
 }

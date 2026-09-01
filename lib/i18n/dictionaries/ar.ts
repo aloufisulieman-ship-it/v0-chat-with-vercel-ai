@@ -326,7 +326,7 @@ export const ar = {
     deletePhoto: "حذف الصورة",
     // استيراد قائمة الحضور
     importList: "استيراد قائمة",
-    importAttendanceTitle: "استيراد قائمة الحض��ر",
+    importAttendanceTitle: "استيراد قائمة ا��حض��ر",
     tabPaste: "لصق ن��",
     tabFile: "ملف Excel/CSV",
     pasteHint: "الصق اسماً واحداً في كل سطر. لإضافة الوظيفة، افصلها بفاصلة أو مسافتين (مثال: أحمد علي، فني).",
@@ -514,6 +514,8 @@ export const ar = {
     sigViolator: "توقيع المخالف",
     sigReporter: "توقيع المُبلِّغ / المشرف",
     sigManager: "توقيع مدير السلامة",
+    sigAuditor: "توقيع المدقق",
+    sigHrOfficer: "توقيع الموارد البشرية",
   },
 
   // التصاريح
@@ -718,7 +720,7 @@ export const ar = {
     // أعمدة الجدول
     colType: "النوع",
     colLocation: "الموقع",
-    colReporter: "المُبلِّغ",
+    colReporter: "��لمُبلِّغ",
     colSeverity: "الخطورة",
     colStatus: "الحالة",
     colDate: "التاريخ",
@@ -1328,7 +1330,7 @@ export const ar = {
       streamTypeWebrtc: "فيديو حي مباشر (WebRTC)",
       streamTypeSnapshots: "لقطات شبه فورية (~0.4 ث)",
       micToastFailed: "تعذّر تشغيل المايكروفون",
-      captureFailedNow: "تعذّر التقاط لقطة الآن. حاول مرة أخرى.",
+      captureFailedNow: "تعذّر التقاط لقطة ال��ن. حاول مرة أخرى.",
       captureFailed: "تعذّر التقاط اللقطة",
       recordStartFailed: "تعذّر بدء التسجيل",
       liveUnavailable: "البث الحي غير متاح ا��آن.",
