@@ -64,7 +64,10 @@ async function saveDataUrlAttachment(
   if (!parsed) return
   const filename = `${baseName}.${parsed.ext}`
   const key = `hse/${userId}/${module}/${recordId}/${Date.now()}-${filename}`
-  const uploaded = await put(key, parsed.blob, { access: "private", addRandomSuffix: true })
+  // المتجر المربوط عام (public) — كما في بقية مسارات الرفع (الكاميرات/التسجيلات/إثباتات
+  // اللقطات). يجب أن يطابق access نوع المتجر وإلا فشل الرفع. التحكم بالوصول يبقى على
+  // مستوى التطبيق عبر وسيط /api/file المقيّد بالمستخدم/المؤسسة.
+  const uploaded = await put(key, parsed.blob, { access: "public", addRandomSuffix: true })
   await db.insert(attachment).values({
     userId,
     organizationId,
@@ -406,7 +409,7 @@ function isPermitApprover(role: string, department: string): boolean {
   return role === "admin" || department === "المدير العام" || department === "مفتش السلامة"
 }
 
-// اعتماد أو رفض تصريح عمل من قِبل المدير، مع تسجيل اسم المعتمِد والتاريخ والسبب.
+// اعتماد أو رفض تصريح عمل من قِبل المدير، مع تسجيل اسم المعتمِد والتاريخ والسب��.
 // مقيّد بمؤسسة المعتمِد: لا يمكن اعتماد تصريح تابع لمؤسسة أخرى.
 export async function updatePermitStatus(
   permitId: number,
@@ -1086,10 +1089,18 @@ export async function acceptDetectionAsViolation(
 
   const recordId = inserted.id
 
-  // أرفق لقطة الإثبات (رابط Blob) كمرفق صورة للمخالفة — أفضل جهد لا يُفشل العملية.
+  // أرفق لقطة الإثبات كمرفق صورة للمخالفة — أفضل جهد لا يُفشل العملية.
+  // اللقطات تُخزَّن في ai_detections.snapshotUrl كـ data URL بصيغة base64 (ناتج
+  // canvas.toDataURL من الكاميرا)، لا كرابط http. لذا نمرّرها مباشرةً إلى
+  // saveDataUrlAttachment التي ترفعها إلى Blob وتحفظ رابط URL فقط في جدول المرفقات
+  // (لا يُخزَّن الـ base64 الضخم في قاعدة البيانات). ندعم أيضاً حالة رابط http
+  // القديمة كخيار احتياطي بجلبها وتحويلها إلى data URL.
   try {
-    if (det.snapshotUrl && det.snapshotUrl.startsWith("http")) {
-      const res = await fetch(det.snapshotUrl)
+    const snap = det.snapshotUrl?.trim() || ""
+    if (snap.startsWith("data:image")) {
+      await saveDataUrlAttachment(userId, organizationId, "violations", recordId, "photo", snap, "ai-detection-evidence")
+    } else if (snap.startsWith("http")) {
+      const res = await fetch(snap)
       if (res.ok) {
         const buf = Buffer.from(await res.arrayBuffer())
         const contentType = res.headers.get("content-type") || "image/jpeg"
@@ -1098,7 +1109,7 @@ export async function acceptDetectionAsViolation(
       }
     }
   } catch {
-    // تجاهل فشل جلب اللقطة — المخالفة محفوظة أصلاً.
+    // تجاهل فشل إرفاق اللقطة — المخالفة محفوظة أصلاً.
   }
 
   // حدّث الاكتشاف: الحالة "converted" + الربط برقم المخالفة الجديد (داخل نفس المؤسسة).
