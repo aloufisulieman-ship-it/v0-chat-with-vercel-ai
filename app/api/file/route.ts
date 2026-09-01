@@ -1,12 +1,16 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { get } from "@vercel/blob"
 import { db } from "@/lib/db"
 import { attachment } from "@/lib/db/schema"
 import { and, eq } from "drizzle-orm"
 import { getCurrentUser } from "@/lib/session"
 
-// Serves private blob files only to the authenticated owner of the attachment,
+// Serves attachment files only to the authenticated owner of the attachment,
 // scoped to the caller's organization for tenant isolation.
+//
+// المتجر المربوط عام (public)، لكن هذا الوسيط يبقى هو نقطة التقديم الوحيدة كي يظل
+// التحكم بالوصول على مستوى التطبيق: لا يُقدَّم أي ملف قبل التحقق أن المرفق يخص
+// المستخدم الحالي داخل مؤسسته، ثم نجلب المحتوى من رابط Blob العام المخزَّن ونبثّه
+// عبر الخادم فلا يُكشف رابط التخزين للعميل.
 export async function GET(request: NextRequest) {
   const current = await getCurrentUser()
   if (!current) {
@@ -18,9 +22,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Missing pathname" }, { status: 400 })
   }
 
-  // Ensure the file belongs to this user within their organization.
+  // Ensure the file belongs to this user within their organization, and get its URL.
   const rows = await db
-    .select({ id: attachment.id })
+    .select({ url: attachment.url, contentType: attachment.contentType })
     .from(attachment)
     .where(
       and(
@@ -36,26 +40,28 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const result = await get(pathname, {
-      access: "private",
-      ifNoneMatch: request.headers.get("if-none-match") ?? undefined,
+    const upstream = await fetch(rows[0].url, {
+      headers: { "if-none-match": request.headers.get("if-none-match") ?? "" },
     })
 
-    if (!result) {
-      return new NextResponse("Not found", { status: 404 })
-    }
-
-    if (result.statusCode === 304) {
+    if (upstream.status === 304) {
       return new NextResponse(null, {
         status: 304,
-        headers: { ETag: result.blob.etag, "Cache-Control": "private, no-cache" },
+        headers: {
+          ETag: upstream.headers.get("etag") ?? "",
+          "Cache-Control": "private, no-cache",
+        },
       })
     }
 
-    return new NextResponse(result.stream, {
+    if (!upstream.ok || !upstream.body) {
+      return new NextResponse("Not found", { status: 404 })
+    }
+
+    return new NextResponse(upstream.body, {
       headers: {
-        "Content-Type": result.blob.contentType,
-        ETag: result.blob.etag,
+        "Content-Type": upstream.headers.get("content-type") ?? rows[0].contentType ?? "application/octet-stream",
+        ETag: upstream.headers.get("etag") ?? "",
         "Cache-Control": "private, no-cache",
       },
     })

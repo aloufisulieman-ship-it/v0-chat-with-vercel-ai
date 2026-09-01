@@ -64,7 +64,10 @@ async function saveDataUrlAttachment(
   if (!parsed) return
   const filename = `${baseName}.${parsed.ext}`
   const key = `hse/${userId}/${module}/${recordId}/${Date.now()}-${filename}`
-  const uploaded = await put(key, parsed.blob, { access: "private", addRandomSuffix: true })
+  // المتجر المربوط عام (public) — كما في بقية مسارات الرفع (الكاميرات/التسجيلات/إثباتات
+  // اللقطات). يجب أن يطابق access نوع المتجر وإلا فشل الرفع. التحكم بالوصول يبقى على
+  // مستوى التطبيق عبر وسيط /api/file المقيّد بالمستخدم/المؤسسة.
+  const uploaded = await put(key, parsed.blob, { access: "public", addRandomSuffix: true })
   await db.insert(attachment).values({
     userId,
     organizationId,

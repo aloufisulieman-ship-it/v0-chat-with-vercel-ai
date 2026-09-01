@@ -55,7 +55,9 @@ export async function uploadAttachment(formData: FormData) {
   const safeName = file.name?.replace(/[^\w.\-]+/g, "_") || `${kind}.png`
   const key = `hse/${userId}/${module}/${recordId}/${Date.now()}-${safeName}`
 
-  const blob = await put(key, file, { access: "private", addRandomSuffix: true })
+  // المتجر المربوط عام (public) — يجب أن يطابق access نوع المتجر. التحكم بالوصول
+  // يبقى على مستوى التطبيق عبر وسيط /api/file المقيّد بالمستخدم/المؤسسة.
+  const blob = await put(key, file, { access: "public", addRandomSuffix: true })
 
   const [row] = await db
     .insert(attachment)
