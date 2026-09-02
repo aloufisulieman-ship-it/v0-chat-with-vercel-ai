@@ -1,5 +1,17 @@
 import { betterAuth } from "better-auth"
+import { APIError } from "better-auth/api"
 import { pool } from "@/lib/db"
+
+// رسائل الحجب (تُعرض في نموذج تسجيل الدخول كما هي).
+export const ACCOUNT_BLOCKED_MESSAGES: Record<string, string> = {
+  suspended: "حسابك موقوف مؤقتاً. يرجى التواصل مع مسؤول النظام.",
+  banned: "تم حظر هذا الحساب نهائياً.",
+}
+
+function clientIp(h: Headers | undefined) {
+  if (!h) return ""
+  return (h.get("x-forwarded-for") ?? "").split(",")[0].trim() || h.get("x-real-ip") || ""
+}
 
 export const auth = betterAuth({
   database: pool,
@@ -44,6 +56,28 @@ export const auth = betterAuth({
               status: "pending",
             },
           }
+        },
+      },
+    },
+    session: {
+      create: {
+        // بوابة الدخول على مستوى الخادم: أي حساب suspended/banned يُرفض إنشاء جلسة له
+        // حتى مع كلمة مرور صحيحة (لا يمكن تجاوزها من الواجهة). عند النجاح نسجّل آخر دخول.
+        before: async (session, ctx) => {
+          const { rows } = await pool.query<{ account_status: string }>(
+            `select account_status from "user" where id = $1 limit 1`,
+            [session.userId],
+          )
+          const st = rows[0]?.account_status ?? "active"
+          if (st === "suspended" || st === "banned") {
+            throw new APIError("FORBIDDEN", { message: ACCOUNT_BLOCKED_MESSAGES[st], code: `ACCOUNT_${st.toUpperCase()}` })
+          }
+          const h = ctx?.headers ?? ctx?.request?.headers
+          await pool.query(
+            `update "user" set last_login_at = now(), last_login_ip = $2, last_login_device = $3 where id = $1`,
+            [session.userId, clientIp(h), (h?.get("user-agent") ?? "").slice(0, 300)],
+          )
+          return { data: session }
         },
       },
     },

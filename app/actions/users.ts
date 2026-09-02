@@ -2,7 +2,7 @@
 
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
-import { user as userTable, account as accountTable } from "@/lib/db/schema"
+import { user as userTable, account as accountTable, userAuditLog } from "@/lib/db/schema"
 import { requireAdmin, assertWritable } from "@/lib/session"
 import { and, desc, eq, ne } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
@@ -90,15 +90,36 @@ export async function createUser(input: {
 export async function updateUserPermissions(userId: string, department: string, permissions: string[]) {
   await assertWritable()
   const admin = await requireAdmin()
+  const next = serializePermissions(permissions)
+  const [before] = await db
+    .select({ email: userTable.email, permissions: userTable.permissions, department: userTable.department })
+    .from(userTable)
+    .where(and(eq(userTable.id, userId), eq(userTable.organizationId, admin.organizationId)))
+    .limit(1)
+  if (!before) throw new Error("المستخدم غير موجود في مؤسستك")
+
   await db
     .update(userTable)
     .set({
       department,
-      permissions: serializePermissions(permissions),
+      permissions: next,
       updatedAt: new Date(),
     })
     .where(and(eq(userTable.id, userId), eq(userTable.organizationId, admin.organizationId)))
+
+  // سجل التدقيق: صلاحيات الوحدات والقسم (قبل/بعد) عند تغيّرهما فقط.
+  const entries: (typeof userAuditLog.$inferInsert)[] = []
+  const base = { actorId: admin.id, actorName: admin.name, actorEmail: admin.email, targetUserId: userId, targetEmail: before.email }
+  if ((before.permissions ?? "") !== next) {
+    entries.push({ ...base, action: "permissions_change", field: "permissions", oldValue: before.permissions ?? "", newValue: next })
+  }
+  if ((before.department ?? "") !== department) {
+    entries.push({ ...base, action: "permissions_change", field: "department", oldValue: before.department ?? "", newValue: department })
+  }
+  if (entries.length) await db.insert(userAuditLog).values(entries)
+
   revalidatePath("/users")
+  revalidatePath("/admin/users")
 }
 
 export async function approveUser(id: string) {

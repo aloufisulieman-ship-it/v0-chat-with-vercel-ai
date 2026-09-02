@@ -87,7 +87,11 @@ export function AppSidebar({
   )
   const items =
     user?.role === "admin"
-      ? [...visible, { href: "/users", labelKey: "nav.users", icon: Users }]
+      ? [
+          ...visible,
+          { href: "/admin/users", labelKey: "nav.adminUsers", icon: UserCog },
+          { href: "/users", labelKey: "nav.users", icon: Users },
+        ]
       : visible
 
   // شارة الإشعار: عدد بنود الموارد البشرية غير المعالجة (تُجلب فقط لمن يملك الوصول).

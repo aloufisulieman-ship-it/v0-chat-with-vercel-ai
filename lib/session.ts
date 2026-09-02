@@ -29,6 +29,8 @@ export type AppUser = {
   // حالة مراجعة مؤسسة المستخدم على مستوى المنصّة: pending | approved | rejected.
   // فارغة لمسؤول المنصّة (لا ينتمي لمؤسسة). تُستخدم لحجب مستخدمي المؤسسات غير المعتمدة.
   orgStatus: string
+  // حالة الحساب بعد الاعتماد: active | suspended | banned.
+  accountStatus: string
 }
 
 const userColumns = {
@@ -37,6 +39,7 @@ const userColumns = {
   email: userTable.email,
   role: userTable.role,
   status: userTable.status,
+  accountStatus: userTable.accountStatus,
   department: userTable.department,
   permissions: userTable.permissions,
   locale: userTable.locale,
@@ -136,6 +139,9 @@ function scopeFrom(u: AppUser): ModuleScope {
 export async function requireUser(): Promise<AppUser> {
   const u = await loadSessionUser()
   if (!u) redirect("/sign-in")
+
+  // حارس الجلسة: إيقاف/حظر الحساب يسري فوراً حتى على الجلسات القائمة (لا انتظار لانتهائها).
+  if (u.accountStatus === "suspended" || u.accountStatus === "banned") redirect("/suspended")
 
   // Users awaiting approval are sent to a holding page.
   if (u.status !== "approved") redirect("/pending")
