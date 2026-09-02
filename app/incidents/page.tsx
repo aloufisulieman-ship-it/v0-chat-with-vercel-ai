@@ -17,7 +17,7 @@ import { FinanceStatusBadge } from "@/components/finance-status-badge"
 import { FinanceClosureBlock } from "@/components/finance-closure-block"
 import { IncidentFormDialog } from "./incident-form"
 import { LifecycleFilterBar } from "@/components/lifecycle/lifecycle-filter-bar"
-import { DeptBadge, LifecycleBadge, SourceBadge } from "@/components/lifecycle/lifecycle-badges"
+import { DeptBadge, DueDateBadge, LifecycleBadge, SourceBadge } from "@/components/lifecycle/lifecycle-badges"
 import { LifecycleActions } from "@/components/lifecycle/lifecycle-actions"
 import { applyLifecycleFilters, isArchived, lifecycleLabel, lifecycleUi, normalizeLifecycle } from "@/lib/lifecycle"
 
@@ -63,6 +63,7 @@ export default async function IncidentsPage({
     { key: "source", header: lc.source, render: (r) => <SourceBadge source={r.source} locale={emailLocale} /> },
     { key: "incidentDate", header: t("incidents.colDate"), render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.incidentDate ?? "-"}</span> },
     { key: "routedTo", header: t("incidents.colRoutedTo"), render: (r) => <DeptBadge dept={r.assignedDept ?? r.routedTo} locale={emailLocale} /> },
+    { key: "dueDate", header: lc.dueDateCol, render: (r) => <DueDateBadge dueDate={r.dueDate} status={r.lifecycleStatus} locale={emailLocale} /> },
     {
       key: "actions",
       header: "",

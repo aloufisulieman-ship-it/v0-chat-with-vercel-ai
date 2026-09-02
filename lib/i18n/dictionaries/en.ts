@@ -5,6 +5,9 @@ import type { Dictionary } from "./ar"
 
 export const en: Dictionary = {
   common: {
+    notifications: "Notifications",
+    markAllRead: "Mark all as read",
+    noNotifications: "No new notifications",
     appName: "HSE Management System",
     save: "Save",
     cancel: "Cancel",

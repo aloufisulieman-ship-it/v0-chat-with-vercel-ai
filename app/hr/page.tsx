@@ -64,6 +64,7 @@ export default async function HrPage() {
                 initialAttachments={parseHrAttachments(v.hrAttachmentUrl)}
                 closedBy={v.hrClosedBy ?? ""}
                 closedAt={v.hrClosedAt ? v.hrClosedAt.toISOString() : ""}
+                lifecycle={{ status: v.lifecycleStatus, source: v.source, dueDate: v.dueDate, referralNotes: v.referralNotes, referredBy: v.referredBy }}
                 rows={[
                   { label: t("hr.violationNo"), value: <span dir="ltr" className="font-mono text-xs">{v.documentNo || "-"}</span> },
                   { label: t("hr.employeeName"), value: v.employeeName },
@@ -130,6 +131,7 @@ export default async function HrPage() {
                 initialAttachments={parseHrAttachments(i.hrAttachmentUrl)}
                 closedBy={i.hrClosedBy ?? ""}
                 closedAt={i.hrClosedAt ? i.hrClosedAt.toISOString() : ""}
+                lifecycle={{ status: i.lifecycleStatus, source: i.source, dueDate: i.dueDate, referralNotes: i.referralNotes, referredBy: i.referredBy }}
                 rows={[
                   { label: t("hr.incidentNo"), value: <span dir="ltr" className="font-mono text-xs">{i.documentNo || "-"}</span> },
                   { label: t("hr.type"), value: i.title },

@@ -3,7 +3,16 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import useSWR from "swr"
 import { toast } from "sonner"
+import Link from "next/link"
 import { Menu, Search, Bell } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { AppSidebar } from "@/components/app-sidebar"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { RaqeebLogo, RaqeebMark } from "@/components/raqeeb-logo"
@@ -25,19 +34,24 @@ export function AppShell({
   const { t } = useI18n()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const previousCount = useRef(0)
-  const { data: alertData, mutate: refreshAlerts } = useSWR<{ count: number; notifications: { message: string }[] }>(
-    "/api/ai-monitoring/notifications",
-    (url: string) => fetch(url).then((response) => response.json()),
-    { refreshInterval: 10000 },
-  )
+  // إشعارات موحّدة: تنبيهات الرصد الآلي + الإحالات غير المقروءة لجهات المستخدم (hr/finance).
+  const { data: alertData, mutate: refreshAlerts } = useSWR<{
+    count: number
+    notifications: { kind: "ai" | "referral"; message: string; href: string }[]
+  }>("/api/notifications", (url: string) => fetch(url).then((response) => response.json()), { refreshInterval: 10000 })
   const unreadCount = alertData?.count ?? 0
+  const notifications = alertData?.notifications ?? []
   useEffect(() => {
-    if (unreadCount > previousCount.current && previousCount.current > 0) toast.error(t("aiMonitoring.title"))
+    if (unreadCount > previousCount.current && previousCount.current > 0) {
+      const latest = alertData?.notifications?.[0]
+      if (latest?.kind === "referral") toast.info(latest.message)
+      else toast.error(t("aiMonitoring.title"))
+    }
     previousCount.current = unreadCount
-  }, [unreadCount, t])
+  }, [unreadCount, t, alertData])
   async function clearAlerts() {
     if (!unreadCount) return
-    await fetch("/api/ai-monitoring/notifications", { method: "POST" })
+    await fetch("/api/notifications", { method: "POST" })
     await refreshAlerts()
   }
 
@@ -88,15 +102,47 @@ export function AppShell({
 
           <div className="flex flex-1 items-center justify-end gap-1 md:flex-none">
             <LanguageSwitcher />
-            <button
-              onClick={clearAlerts}
-              className="relative rounded-md p-2 text-foreground hover:bg-muted"
-              aria-label={`${unreadCount} ${t("aiMonitoring.title")}`}
-              title={t("toast.updated")}
-            >
-              <Bell className="size-5" />
-              {unreadCount > 0 && <span className="absolute -end-1 -top-1 flex min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-xs font-bold text-destructive-foreground">{unreadCount > 99 ? "99+" : unreadCount}</span>}
-            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="relative rounded-md p-2 text-foreground hover:bg-muted"
+                  aria-label={`${unreadCount} ${t("common.notifications")}`}
+                >
+                  <Bell className="size-5" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -end-1 -top-1 flex min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-xs font-bold text-destructive-foreground">
+                      {unreadCount > 99 ? "99+" : unreadCount}
+                    </span>
+                  )}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80">
+                <DropdownMenuLabel className="flex items-center justify-between">
+                  <span>{t("common.notifications")}</span>
+                  {unreadCount > 0 && (
+                    <button onClick={clearAlerts} className="text-xs font-normal text-primary hover:underline">
+                      {t("common.markAllRead")}
+                    </button>
+                  )}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {notifications.length === 0 ? (
+                  <p className="px-2 py-4 text-center text-sm text-muted-foreground">{t("common.noNotifications")}</p>
+                ) : (
+                  notifications.slice(0, 8).map((n, i) => (
+                    <DropdownMenuItem key={i} asChild>
+                      <Link href={n.href} className="flex items-start gap-2 text-sm">
+                        <span
+                          className={`mt-1.5 size-2 shrink-0 rounded-full ${n.kind === "ai" ? "bg-destructive" : "bg-primary"}`}
+                          aria-hidden
+                        />
+                        <span className="line-clamp-2 text-pretty">{n.message}</span>
+                      </Link>
+                    </DropdownMenuItem>
+                  ))
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </header>
 

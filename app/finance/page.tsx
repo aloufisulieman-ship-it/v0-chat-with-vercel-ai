@@ -67,6 +67,7 @@ export default async function FinancePage() {
                 initialReceipt={v.paymentReceiptUrl ?? ""}
                 closedBy={v.financeClosedBy ?? ""}
                 closedAt={v.financeClosedAt ? v.financeClosedAt.toISOString() : ""}
+                lifecycle={{ status: v.lifecycleStatus, source: v.source, dueDate: v.dueDate, referralNotes: v.referralNotes, referredBy: v.referredBy }}
                 rows={[
                   { label: t("finance.violationNo"), value: <span dir="ltr" className="font-mono text-xs">{v.documentNo || "-"}</span> },
                   { label: t("finance.offenderCompany"), value: v.companyName || v.employeeName },
@@ -137,6 +138,7 @@ export default async function FinancePage() {
                 initialReceipt={incident.paymentReceiptUrl ?? ""}
                 closedBy={incident.financeClosedBy ?? ""}
                 closedAt={incident.financeClosedAt ? incident.financeClosedAt.toISOString() : ""}
+                lifecycle={{ status: incident.lifecycleStatus, source: incident.source, dueDate: incident.dueDate, referralNotes: incident.referralNotes, referredBy: incident.referredBy }}
                 rows={[
                   { label: t("finance.incidentNo"), value: <span dir="ltr" className="font-mono text-xs">{incident.documentNo || "-"}</span> },
                   { label: t("finance.incidentType"), value: incident.title },

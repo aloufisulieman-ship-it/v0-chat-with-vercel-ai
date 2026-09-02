@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useTransition, type ReactNode } from "react"
-import { CheckCircle2, Save, Paperclip, X, FileText } from "lucide-react"
+import { CheckCircle2, Save, Paperclip, X, FileText, CalendarClock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/use-toast"
 import { hrStatusOptions, normalizeHrStatus, type HrStatus } from "@/lib/hr-status"
 import { useI18n } from "@/lib/i18n/client"
+import { DueDateBadge, LifecycleBadge, SourceBadge } from "@/components/lifecycle/lifecycle-badges"
 import { refStatusLabel } from "@/lib/i18n/labels"
 import { hasRecordRoleSignature } from "@/app/actions/attachments"
 import { InlineRoleSignature } from "@/components/inline-role-signature"
@@ -32,6 +33,7 @@ export function HrActionCard({
   closedAt,
   module = "violations",
   signatureRole,
+  lifecycle,
 }: {
   id: number
   action: HrAction
@@ -51,8 +53,16 @@ export function HrActionCard({
   module?: string
   // عند ضبطه، يظهر مربع توقيع الموظف ويُمنع الإغلاق قبل حفظه.
   signatureRole?: SignatureRole
+  // بيانات دورة الحياة الموحّدة (الحالة/المصدر/الاستحقاق/ملاحظات الإحالة) لعرضها في رأس البطاقة.
+  lifecycle?: {
+    status: string | null
+    source: string | null
+    dueDate: string | Date | null
+    referralNotes?: string | null
+    referredBy?: string | null
+  }
 }) {
-  const { t, formatDateTime } = useI18n()
+  const { t, formatDateTime, locale } = useI18n()
   const [hrAction, setHrAction] = useState(initialAction)
   const [hrActionDate, setHrActionDate] = useState(initialDate)
   const [hrNotes, setHrNotes] = useState(initialNotes)
@@ -126,6 +136,25 @@ export function HrActionCard({
         </div>
         <div className="flex items-center gap-2">{details}</div>
       </div>
+
+      {lifecycle && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+          <LifecycleBadge status={lifecycle.status} locale={locale === "en" ? "en" : "ar"} />
+          <SourceBadge source={lifecycle.source} locale={locale === "en" ? "en" : "ar"} />
+          {lifecycle.dueDate && (
+            <span className="inline-flex items-center gap-1 text-muted-foreground">
+              <CalendarClock className="size-3.5" aria-hidden />
+              <DueDateBadge dueDate={lifecycle.dueDate} status={lifecycle.status} locale={locale === "en" ? "en" : "ar"} />
+            </span>
+          )}
+          {lifecycle.referralNotes && (
+            <p className="w-full rounded-md bg-muted px-3 py-1.5 text-muted-foreground text-pretty">
+              {lifecycle.referredBy ? <span className="font-medium text-foreground">{lifecycle.referredBy}: </span> : null}
+              {lifecycle.referralNotes}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* بيانات الإغلاق إن وُجدت */}
       {status === "closed" && (closedBy || closedAt) && (

@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { Eye, Download, Mail, Loader2, PenLine, Lock } from "lucide-react"
+import { Eye, Download, Mail, Loader2, PenLine, Lock, Printer } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
@@ -110,7 +110,7 @@ export function RecordDetailsDialog({
   const isLifecycleModule = module === "violations" || module === "incidents"
   const [open, setOpen] = useState(false)
   const [attachments, setAttachments] = useState<AttachmentRow[]>(initialAttachments)
-  const [busy, setBusy] = useState<"pdf" | "email" | null>(null)
+  const [busy, setBusy] = useState<"pdf" | "email" | "print" | null>(null)
   // نافذة اختيار برنامج البريد (EmailProviderDialog).
   const [emailOpen, setEmailOpen] = useState(false)
   const [tab, setTab] = useState<"details" | "timeline">("details")
@@ -292,6 +292,46 @@ export function RecordDetailsDialog({
     }
   }
 
+  // طباعة: نفس محتوى تقرير PDF يُفتح في نافذة مستقلة ثم window.print()، كي لا تتداخل
+  // طبقة النافذة الحوارية أو القائمة الجانبية مع المطبوع.
+  async function handlePrint() {
+    setBusy("print")
+    let el: HTMLElement | null = null
+    try {
+      el = await buildReportElement()
+      const w = window.open("", "_blank", "width=900,height=1200")
+      if (!w) throw new Error(t("recordDetails.genericError"))
+      w.document.open()
+      w.document.write(
+        `<!doctype html><html dir="rtl" lang="${emailLocale}"><head><meta charset="utf-8"><title>${fileBase}</title>` +
+          `<style>@page{size:A4;margin:12mm} body{margin:0;font-family:system-ui,sans-serif} img{max-width:100%}</style></head><body>` +
+          el.innerHTML +
+          `</body></html>`,
+      )
+      w.document.close()
+      w.focus()
+      // انتظر تحميل الصور قبل الطباعة.
+      await new Promise<void>((resolve) => {
+        const imgs = Array.from(w.document.images)
+        if (!imgs.length) return resolve()
+        let left = imgs.length
+        const done = () => { if (--left <= 0) resolve() }
+        imgs.forEach((img) => (img.complete ? done() : (img.onload = img.onerror = done)))
+        setTimeout(resolve, 2500)
+      })
+      w.print()
+    } catch (err) {
+      toast({
+        title: t("recordDetails.genericError"),
+        description: err instanceof Error ? err.message : undefined,
+        variant: "destructive",
+      })
+    } finally {
+      if (el) document.body.removeChild(el)
+      setBusy(null)
+    }
+  }
+
   // يبني PDF التقرير (صفحة A4 واحدة، بلا تكرار تواقيع) ونص الرسالة الرسمي، ويمرّرهما
   // لنافذة اختيار برنامج البريد (EmailProviderDialog) التي تنفّذ الإرسال حسب الخيار:
   // Outlook/Gmail (OAuth من بريد المستخدم) | تطبيق البريد على الجهاز | نسخ + تنزيل.
@@ -362,6 +402,10 @@ export function RecordDetailsDialog({
           >
             <Mail className="size-3.5" />
             {t("recordDetails.sendEmail")}
+          </Button>
+          <Button size="sm" variant="outline" onClick={handlePrint} disabled={busy !== null} className="gap-1.5 bg-transparent">
+            {busy === "print" ? <Loader2 className="size-3.5 animate-spin" /> : <Printer className="size-3.5" />}
+            {lc.print}
           </Button>
         </div>
 

@@ -21,7 +21,7 @@ import { EntryModeBadge } from "@/components/entry-mode-badge"
 import { ViolationFormDialog } from "./violation-form"
 import { ViolationEditDialog } from "./violation-edit-dialog"
 import { LifecycleFilterBar } from "@/components/lifecycle/lifecycle-filter-bar"
-import { DeptBadge, LifecycleBadge, SourceBadge } from "@/components/lifecycle/lifecycle-badges"
+import { DeptBadge, DueDateBadge, LifecycleBadge, SourceBadge } from "@/components/lifecycle/lifecycle-badges"
 import { LifecycleActions } from "@/components/lifecycle/lifecycle-actions"
 import { applyLifecycleFilters, isArchived, lifecycleLabel, lifecycleUi, normalizeLifecycle } from "@/lib/lifecycle"
 
@@ -105,6 +105,7 @@ export default async function ViolationsPage({
       ),
     },
     { key: "referral", header: lc.assignedTo, render: (r) => <DeptBadge dept={r.assignedDept} locale={emailLocale} /> },
+    { key: "dueDate", header: lc.dueDateCol, render: (r) => <DueDateBadge dueDate={r.dueDate} status={r.lifecycleStatus} locale={emailLocale} /> },
     {
       key: "actions", header: "", className: "text-left",
       render: (r) => (

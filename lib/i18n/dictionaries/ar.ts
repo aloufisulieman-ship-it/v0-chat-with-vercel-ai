@@ -5,6 +5,9 @@
 export const ar = {
   // عام ومشترك عبر كل الصفحات
   common: {
+    notifications: "الإشعارات",
+    markAllRead: "تعليم الكل كمقروء",
+    noNotifications: "لا توجد إشعارات جديدة",
     appName: "نظام السلامة والصحة المهنية",
     save: "حفظ",
     cancel: "إلغاء",

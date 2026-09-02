@@ -174,6 +174,9 @@ export function lifecycleUi(locale: L = "ar") {
       filterDept: "Department",
       filterSource: "Source",
       any: "Any",
+      dueDateCol: "Due",
+      overdue: "Overdue",
+      print: "Print",
     }
   }
   return {
@@ -189,7 +192,7 @@ export function lifecycleUi(locale: L = "ar") {
     dueDate: "تاريخ الاستحقاق (اختياري)",
     alsoEmail: "إرسال التقرير بالبريد أيضاً",
     closeTitle: "إغلاق السجل",
-    closeDesc: "سجّل الإجراء المتخذ. يُؤرشَف السجل تلقائياً بعد ال��غلاق.",
+    closeDesc: "سجّل الإجراء المتخذ. يُؤرشَف السجل تلقائياً بعد الإغلاق.",
     closureAction: "الإجراء المتخذ (إلزامي)",
     evidence: "ملف إثبات (اختياري)",
     reopenTitle: "إعادة فتح سجل مؤرشف",
@@ -210,5 +213,8 @@ export function lifecycleUi(locale: L = "ar") {
     filterDept: "الجهة",
     filterSource: "المصدر",
     any: "أي",
+    dueDateCol: "الاستحقاق",
+    overdue: "متأخر",
+    print: "طباعة",
   }
 }
