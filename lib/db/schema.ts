@@ -37,9 +37,35 @@ export const user = pgTable("user", {
   permissions: text("permissions").notNull().default("[]"),
   // تفضيل لغة الواجهة لكل مستخدم ("ar" | "en") — يبقى ثابتًا عبر كل الجلسات.
   locale: text("locale").notNull().default("ar"),
+  // برنامج البريد المفضّل لإرسال التقارير: "microsoft" | "google" | "device" | "copy" | null.
+  // null = اسأل في كل مرة. يُحفظ عند تفعيل "اجعله خياري الافتراضي" في نافذة الاختيار.
+  preferredEmailProvider: text("preferred_email_provider"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
+
+// ---------- حسابات البريد المرتبطة (OAuth) للإرسال المباشر من بريد المستخدم ----------
+// صف واحد لكل (مستخدم، مزوّد). الرموز مُشفَّرة بـ AES-256-GCM بمفتاح ENCRYPTION_KEY
+// قبل التخزين؛ لا تُعاد أبداً إلى العميل. provider: "microsoft" | "google".
+export const emailAccount = pgTable(
+  "email_account",
+  {
+    id: text("id").primaryKey(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(),
+    // عنوان البريد المرتبط (للعرض في الإعدادات والنافذة).
+    emailAddress: text("emailAddress").notNull().default(""),
+    accessTokenEnc: text("accessTokenEnc").notNull(),
+    refreshTokenEnc: text("refreshTokenEnc"),
+    accessTokenExpiresAt: timestamp("accessTokenExpiresAt"),
+    scope: text("scope"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("email_account_user_provider_idx").on(t.userId, t.provider)],
+)
 
 export const session = pgTable("session", {
   id: text("id").primaryKey(),
@@ -590,7 +616,7 @@ export const equipment = pgTable(
     id: serial("id").primaryKey(),
     userId: text("userId").notNull(),
     organizationId: text("organizationId").notNull(),
-    // لوحة المركبة الرسمية — المُعرّف المستخدم للمطابقة مع القراءة البصرية.
+    // لوحة المركبة الرسمية — المُعرّف المستخدم للمطابقة مع القراءة ال��صرية.
     plateNumber: text("plate_number").notNull().default(""),
     // نوع المعدة: forklift | tuktuk | truck | crane | other.
     equipmentType: text("equipment_type").notNull().default("forklift"),
