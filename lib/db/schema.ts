@@ -123,6 +123,29 @@ export const company = pgTable("company", {
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
 
+// ---------- دورة الحياة الموحّدة للمخالفة والحادث ----------
+// source: "ai_detection" | "manual" (ثابت بعد الإنشاء).
+// lifecycleStatus: "new" | "referred" | "in_progress" | "closed" | "archived".
+// assignedDept: "hr" | "finance" (قابل للتوسع). الحقول القديمة (hrStatus/financeStatus/
+// category...) تبقى وتُحدَّث تزامنياً للتوافق مع الشاشات القائمة.
+const lifecycleColumns = {
+  source: text("source").notNull().default("manual"),
+  lifecycleStatus: text("lifecycle_status").notNull().default("new"),
+  assignedDept: text("assigned_dept"),
+  referralNotes: text("referral_notes").default(""),
+  dueDate: date("due_date"),
+  referredBy: text("referred_by").default(""),
+  referredAt: timestamp("referred_at"),
+  closureAction: text("closure_action").default(""),
+  closureEvidenceUrl: text("closure_evidence_url").default(""),
+  lifecycleClosedAt: timestamp("lifecycle_closed_at"),
+  lifecycleClosedBy: text("lifecycle_closed_by").default(""),
+  archivedAt: timestamp("archived_at"),
+  reopenReason: text("reopen_reason").default(""),
+  reopenedBy: text("reopened_by").default(""),
+  reopenedAt: timestamp("reopened_at"),
+}
+
 export const incident = pgTable("incident", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
@@ -169,6 +192,7 @@ export const incident = pgTable("incident", {
   paymentReceiptUrl: text("payment_receipt_url").default(""),
   financeClosedBy: text("finance_closed_by").default(""),
   financeClosedAt: timestamp("finance_closed_at"),
+  ...lifecycleColumns,
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
@@ -382,8 +406,52 @@ export const violation = pgTable("violation", {
   // ربط المخالفة بدخول مركبة مفتوح في موديول تتبع المركبات (nullable). يُستخدم لحجب
   // خروج المركبة طالما هناك مخالفة مرتبطة بدخولها الحالي.
   entryId: integer("entry_id"),
+  ...lifecycleColumns,
+  // بيانات الرصد الآلي المنسوخة عند التحويل من المراقبة الذكية (source = ai_detection).
+  aiConfidence: integer("ai_confidence"),
+  aiSeverity: text("ai_severity").default(""),
+  aiCameraId: text("ai_camera_id").default(""),
+  sourceDetectionId: integer("source_detection_id"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
+
+// سجل حركة السجل (تدقيق، إدراج فقط): كل انتقال في دورة حياة مخالفة/حادث.
+// event: created | converted_from_ai | referred | in_progress | closed | archived | reopened.
+export const recordEvent = pgTable(
+  "record_event",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: text("organizationId").notNull(),
+    module: text("module").notNull(), // violations | incidents
+    recordId: integer("record_id").notNull(),
+    event: text("event").notNull(),
+    fromStatus: text("from_status").default(""),
+    toStatus: text("to_status").default(""),
+    userId: text("user_id").default(""),
+    userName: text("user_name").default(""),
+    note: text("note").default(""),
+    meta: text("meta").default(""), // JSON
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("record_event_module_record_idx").on(t.module, t.recordId)],
+)
+
+// إشعار داخلي عام موجّه لجهة (hr | finance) داخل المؤسسة — يُستخدم لإحالات المخالفات/الحوادث.
+export const appNotification = pgTable(
+  "app_notification",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: text("organizationId").notNull(),
+    targetModule: text("target_module").notNull(),
+    module: text("module").notNull(),
+    recordId: integer("record_id").notNull(),
+    title: text("title").notNull(),
+    message: text("message").notNull().default(""),
+    read: boolean("read").notNull().default(false),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("app_notification_org_target_idx").on(t.organizationId, t.targetModule, t.read)],
+)
 
 // ملاحظات وإيجابيات الجولة الميدانية.
 // kind: "observation" (ملاحظة/شبه حادثة) أو "positive" (ملاحظة إيجابية).
@@ -720,7 +788,7 @@ export const vehicleEntry = pgTable(
   }),
 )
 
-// إعدادات البوابات لكل مؤسسة. frameSource يحدّد مصدر فريمات الوضع التلقائي لكل بوابة:
+// إعدادات البوابات لكل مؤسسة. frameSource يحدّد مصدر فري��ات الوضع التلقائي لكل بوابة:
 // device (كاميرا جهاز المتصفح) أو external (بث خارجي يصل عبر POST /api/camera-feed من
 // خادم جسر مرتبط بكاميرات NVR). lastFrameAt/lastPlate تُحدَّث عند وصول فريم خارجي لعرض
 // حالة البث حيّاً. لا علاقة لهذا الجدول بمنطق القراءة/التسجيل — هو إعدادات ومصدر فقط.

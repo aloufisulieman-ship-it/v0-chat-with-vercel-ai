@@ -846,7 +846,7 @@ export const en: Dictionary = {
   incidentTypes: {
     "اصطدام مركبين": "Vehicle collision",
     "دهس": "Run-over",
-    "اصطدام بجسم ثاب��": "Collision with a fixed object",
+    "اصطدام بجسم ثابت": "Collision with a fixed object",
     "إصابة عمل": "Work injury",
     "سقوط بضاعة": "Falling goods",
     "سقوط من ارتفاع": "Fall from height",
@@ -1598,13 +1598,13 @@ export const en: Dictionary = {
     "غرامة مالية": "Financial fine",
     "أخرى": "Other",
     "إشعار الشركة": "Notify the company",
-    "إي������اف العمل": "Stop work",
+    "إيقاف العمل": "Stop work",
   },
 
   violationTypes: {
-    "عدم ا����تداء خوذة السلامة": "Not wearing a safety helmet",
+    "عدم ارتداء خوذة السلامة": "Not wearing a safety helmet",
     "عدم ارتداء حذاء السلامة": "Not wearing safety shoes",
-    "عدم ارتداء سترة عاكس��": "Not wearing a reflective vest",
+    "عدم ارتداء سترة عاكسة": "Not wearing a reflective vest",
     "عدم ارتداء قفازات واقية": "Not wearing protective gloves",
     "عدم ارتداء نظارات واقية": "Not wearing protective goggles",
     "عدم ارتداء كمامة أو جهاز تنفس": "Not wearing a mask or respirator",
