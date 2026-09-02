@@ -27,7 +27,7 @@ export const ROLE_DEFINITIONS: Record<
       ar: "وصول كامل لكل وحدات مؤسسته، وإدارة المستخدمين (الأدوار، الصلاحيات، الإيقاف، كلمات المرور)، وإعادة فتح السجلات المؤرشفة.",
       en: "Full access to every module in the organization, user management (roles, permissions, suspension, passwords) and reopening archived records.",
     },
-    access: { ar: "كل الوحدات (19) + إدارة المستخدمين", en: "All modules (19) + user management" },
+    access: { ar: "كل الوحدات + إدارة المستخدمين", en: "All modules + user management" },
   },
   manager: {
     label: { ar: "مشرف", en: "Manager" },

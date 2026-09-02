@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils"
 import type { AdminUserRow, AuditRow } from "@/app/actions/admin-users"
 import { resetUserPassword, revokeUserSessions, setAccountStatus, setUserRole } from "@/app/actions/admin-users"
 import { ACCOUNT_STATUS_UI, ASSIGNABLE_ROLES, AUDIT_ACTION_LABELS, ROLE_DEFINITIONS, type AccountStatus } from "@/lib/roles"
-import { parsePermissions } from "@/lib/permissions"
+import { moduleOptions, parsePermissions } from "@/lib/permissions"
 
 type Loc = "ar" | "en"
 
@@ -237,7 +237,12 @@ function UserRow({ u, self, locale }: { u: AdminUserRow; self: boolean; locale: 
   const en = locale === "en"
   const [pending, start] = useTransition()
   const [dialog, setDialog] = useState<null | "password" | "suspend" | "ban">(null)
-  const modules = u.role === "admin" || u.role === "manager" ? null : parsePermissions(u.permissions).length
+  // نحسب فقط المفاتيح المعروفة حالياً (قد تحوي القيمة المخزّنة مفاتيح وحدات قديمة).
+  const validKeys = new Set<string>(moduleOptions.map((m) => m.value))
+  const modules =
+    u.role === "admin" || u.role === "manager"
+      ? null
+      : parsePermissions(u.permissions).filter((k) => validKeys.has(k)).length
   const statusUi = ACCOUNT_STATUS_UI[(u.accountStatus as AccountStatus) ?? "active"] ?? ACCOUNT_STATUS_UI.active
 
   const run = (fn: () => Promise<{ success?: true; error?: string }>, okMsg: string) =>
@@ -281,7 +286,7 @@ function UserRow({ u, self, locale }: { u: AdminUserRow; self: boolean; locale: 
           )}
         </td>
         <td className="text-muted-foreground">
-          {modules === null ? (en ? "All" : "الكل") : `${modules} / 19`}
+          {modules === null ? (en ? "All" : "الكل") : `${modules} / ${validKeys.size}`}
         </td>
         <td>
           <div className="flex flex-col gap-1">
