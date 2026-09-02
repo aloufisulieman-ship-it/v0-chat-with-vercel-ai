@@ -1,10 +1,13 @@
 import Link from "next/link"
-import { Building2, Users, ShieldCheck, ArrowLeft, UserCircle, KeyRound } from "lucide-react"
+import { Suspense } from "react"
+import { Building2, Users, ShieldCheck, ArrowLeft, UserCircle, KeyRound, Mail } from "lucide-react"
 import { AppShell } from "@/components/app-shell"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { CompanyForm } from "@/components/company-form"
 import { ChangePasswordForm } from "@/components/change-password-form"
+import { EmailProviderSettings } from "@/components/email-provider-settings"
+import { getEmailAccountsStatus } from "@/app/actions/email-accounts"
 import { OperationalSettingsForm } from "@/components/operational-settings-form"
 import { SettingsLockNotice } from "@/components/settings-lock-notice"
 import { requireOrgUser } from "@/lib/session"
@@ -44,7 +47,9 @@ export default async function SettingsPage() {
   const canEditOps = user.impersonating ? true : isManagerRole && !locked
   const showLockNotice = !user.impersonating && locked
   const team = isAdmin ? await getUsers() : []
-  const { t } = await getServerT()
+  const emailStatus = await getEmailAccountsStatus()
+  const { t, locale } = await getServerT()
+  const emailLocale = locale === "en" ? "en" : "ar"
 
   return (
     <AppShell title={t("pageHeaders.settingsTitle")} subtitle={t("pageHeaders.settingsSubtitle")} user={user}>
@@ -80,6 +85,18 @@ export default async function SettingsPage() {
 
         <Card className="p-6 lg:col-span-2">
           <OperationalSettingsForm settings={operational} readOnly={!canEditOps} />
+        </Card>
+
+        <Card className="p-6 lg:col-span-2">
+          <div className="mb-4 flex items-center gap-2">
+            <Mail className="size-5 text-primary" />
+            <h3 className="text-base font-semibold text-foreground">
+              {emailLocale === "en" ? "Preferred mail program" : "برنامج البريد المفضّل"}
+            </h3>
+          </div>
+          <Suspense fallback={null}>
+            <EmailProviderSettings status={emailStatus} locale={emailLocale} />
+          </Suspense>
         </Card>
 
         <Card className="p-6 lg:col-span-2">

@@ -6,10 +6,11 @@ import { StatusBadge, SeverityBadge } from "@/components/status-badge"
 import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { requireModule } from "@/lib/session"
-import { getIncidents, deleteIncident } from "@/app/actions/hse"
+import { getIncidents, deleteIncident, getCompany } from "@/app/actions/hse"
 import { getServerT } from "@/lib/i18n/server"
 import { severityLabel, statusLabel } from "@/lib/i18n/labels"
 import { formatParties } from "@/lib/incident-types"
+import type { EmailSenderInfo } from "@/lib/email-export"
 import { HrStatusBadge } from "@/components/hr-status-badge"
 import { HrClosureBlock } from "@/components/hr-closure-block"
 import { FinanceStatusBadge } from "@/components/finance-status-badge"
@@ -20,9 +21,21 @@ type Incident = Awaited<ReturnType<typeof getIncidents>>[number]
 
 export default async function IncidentsPage() {
   const user = await requireModule("incidents")
-  const incidents = await getIncidents()
+  const [incidents, companyProfile] = await Promise.all([getIncidents(), getCompany().catch(() => null)])
   const { t } = await getServerT()
   const notifiedLabel = (v: string | null) => (v === "yes" ? t("incidents.yes") : t("incidents.no"))
+  // بيانات المُرسل المُلحقة تلقائياً بتوقيع رسالة البريد الرسمية.
+  const emailSender: EmailSenderInfo = {
+    companyName: companyProfile?.name || undefined,
+    phone: companyProfile?.phone || undefined,
+    email: companyProfile?.email || undefined,
+    address: companyProfile?.address || undefined,
+  }
+  // وصف الإصابات في نص الرسالة: الأطراف المتضررة المسجّلة في الحادث (سطر واحد لكل طرف).
+  const injuriesText = (r: Incident) => {
+    const p = formatParties(r.parties)
+    return p === "-" ? "" : p.replace(/\n/g, "؛ ")
+  }
 
   const open = incidents.filter((i) => i.status === "open" || i.status === "in_progress" || i.status === "investigating").length
   const closed = incidents.filter((i) => i.status === "closed").length
@@ -85,6 +98,18 @@ export default async function IncidentsPage() {
               { label: t("incidents.sigGm"), value: r.gmSignature || "" },
             ]}
             initialAttachments={[]}
+            emailSender={emailSender}
+            emailContext={{
+              kind: "incident",
+              number: r.documentNo || String(r.id),
+              type: r.title,
+              date: r.incidentDate ?? "",
+              time: r.incidentTime || "",
+              location: r.location || "",
+              severity: r.severity ? severityLabel(t, r.severity) : "",
+              injuries: injuriesText(r),
+              status: r.status ? statusLabel(t, r.status) : "",
+            }}
             extraSection={
               r.routedTo === "hr" ? (
                 <HrClosureBlock

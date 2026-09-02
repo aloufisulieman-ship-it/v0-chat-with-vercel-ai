@@ -5,7 +5,8 @@ import { StatusBadge } from "@/components/status-badge"
 import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { requireModule } from "@/lib/session"
-import { getViolations, getEmployees, deleteViolation, getAiViolationSignatureInfo } from "@/app/actions/hse"
+import { getViolations, getEmployees, deleteViolation, getAiViolationSignatureInfo, getCompany } from "@/app/actions/hse"
+import type { EmailSenderInfo } from "@/lib/email-export"
 import { getOperationalSettings } from "@/app/actions/org-settings"
 import { getServerT } from "@/lib/i18n/server"
 import { statusLabel, categoryLabel } from "@/lib/i18n/labels"
@@ -33,14 +34,30 @@ export default async function ViolationsPage({
   searchParams: Promise<{ evidence?: string; from?: string; detectedBy?: string }>
 }) {
   const user = await requireModule("violations")
-  const [violations, employees, operational, aiSignatureInfo] = await Promise.all([
+  const [violations, employees, operational, aiSignatureInfo, companyProfile] = await Promise.all([
     getViolations(),
     getEmployees(),
     getOperationalSettings(),
     getAiViolationSignatureInfo(),
+    getCompany().catch(() => null),
   ])
   const violationTypeLabels = operational.violationTypes.map((v) => v.label)
-  const { t } = await getServerT()
+  const { t, locale } = await getServerT()
+  // بيانات المُرسل المُلحقة تلقائياً بتوقيع رسالة البريد الرسمية.
+  const emailSender: EmailSenderInfo = {
+    companyName: companyProfile?.name || undefined,
+    phone: companyProfile?.phone || undefined,
+    email: companyProfile?.email || undefined,
+    address: companyProfile?.address || undefined,
+  }
+  // مصدر الرصد في نص الرسالة: الرصد الآلي (من المراقبة الذكية)، وإلا بلاغ (إدخال يدوي)
+  // أو جولة تفتيشية (إدخال إلكتروني).
+  const detectionSource = (r: Violation) => {
+    const en = locale === "en"
+    if (aiSignatureInfo[r.id]) return en ? "Automated detection" : "الرصد الآلي"
+    if (r.entryMode === "manual") return en ? "Report" : "بلاغ"
+    return en ? "Inspection round" : "جولة تفتيشية"
+  }
   const isAdmin = user.role === "admin"
   const NOT_IN_SOURCE = t("violations.notInSource")
 
@@ -113,6 +130,19 @@ export default async function ViolationsPage({
                 : []),
             ]}
             initialAttachments={[]}
+            emailSender={emailSender}
+            emailContext={{
+              kind: "violation",
+              number: r.documentNo || String(r.id),
+              type: r.violationType || "",
+              source: detectionSource(r),
+              date: r.violationDate ?? "",
+              time: r.violationTime || "",
+              location: r.place || "",
+              // لا يوجد حقل خطورة في سجل المخالفة؛ يُحذف سطره تلقائياً من الرسالة.
+              classification: r.category ? categoryLabel(t, r.category) : "",
+              status: statusLabel(t, effectiveViolationStatus(r)),
+            }}
             extraSection={
               r.category === "external" ? (
                 <FinanceClosureBlock

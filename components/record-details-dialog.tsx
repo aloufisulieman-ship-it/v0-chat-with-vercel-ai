@@ -12,8 +12,10 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { AttachmentsManager, fileUrl } from "@/components/attachments-manager"
+import { EmailProviderDialog } from "@/components/email-provider-dialog"
 import { getAttachments, type AttachmentRow } from "@/app/actions/attachments"
-import { downloadElementPdf } from "@/lib/pdf"
+import { downloadElementPdf, elementToPdf } from "@/lib/pdf"
+import { buildEmailContent, type EmailExportContext, type EmailSenderInfo } from "@/lib/email-export"
 import { signatureRoles as signatureRolesConfig, labelForSignatureKind } from "@/lib/signature-roles"
 import { toast } from "@/hooks/use-toast"
 import { useI18n } from "@/lib/i18n/client"
@@ -61,6 +63,8 @@ export function RecordDetailsDialog({
   extraReportHtml,
   suppressReportAttachments,
   extraSignatureRoles,
+  emailContext,
+  emailSender,
 }: {
   module: string
   recordId: number
@@ -71,6 +75,10 @@ export function RecordDetailsDialog({
   signatures?: DetailField[]
   initialAttachments: AttachmentRow[]
   trigger?: React.ReactNode
+  // بيانات القالب الرسمي لرسالة البريد (مخالفة/حادث). عند غيابها يُستخدم قالب عام.
+  emailContext?: EmailExportContext
+  // بيانات المُرسل (اسم الشركة/الهاتف/البريد) المُلحقة تلقائياً بتوقيع الرسالة.
+  emailSender?: EmailSenderInfo
   // Extra role-named signature slots appended to the module's default roles
   // (used to show the HR/Finance officer signature only on their track).
   extraSignatureRoles?: { key: string; label: string }[]
@@ -82,10 +90,13 @@ export function RecordDetailsDialog({
   // (used by training, where attendee signatures already appear inline).
   suppressReportAttachments?: boolean
 }) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
+  const emailLocale = locale === "en" ? "en" : "ar"
   const [open, setOpen] = useState(false)
   const [attachments, setAttachments] = useState<AttachmentRow[]>(initialAttachments)
   const [busy, setBusy] = useState<"pdf" | "email" | null>(null)
+  // نافذة اختيار برنامج البريد (EmailProviderDialog).
+  const [emailOpen, setEmailOpen] = useState(false)
   const reportRef = useRef<HTMLDivElement | null>(null)
   // أدرج أدوار التوقيع الإضافية (مثل توقيع موظف HR/المالية) بعد الأدوار الافتراضية
   // للوحدة، مع تفادي التكرار إن وُجد مفتاح مطابق.
@@ -264,50 +275,31 @@ export function RecordDetailsDialog({
     }
   }
 
-  // إرسال بالبريد عبر برنامج البريد الافتراضي في الجهاز (mailto).
-  // بما أن mailto لا يدعم إرفاق الملفات برمجياً من المتصفح، نتّبع أفضل بديل عملي:
-  // (1) نُنزّل تقرير PDF الكامل (صفحة A4 واحدة: بيانات + صور + تواقيع) تلقائياً،
-  // (2) نفتح برنامج البريد الافتراضي برسالة جديدة وموضوعها مُجهَّز برقم المخالفة،
-  // (3) نُذكّر المستخدم بإرفاق الملف المُنزَّل يدوياً (الحد الأقصى الممكن دون خادم بريد).
-  async function handleEmail() {
-    setBusy("email")
-    let el: HTMLElement | null = null
+  // يبني PDF التقرير (صفحة A4 واحدة، بلا تكرار تواقيع) ونص الرسالة الرسمي، ويمرّرهما
+  // لنافذة اختيار برنامج البريد (EmailProviderDialog) التي تنفّذ الإرسال حسب الخيار:
+  // Outlook/Gmail (OAuth من بريد المستخدم) | تطبيق البريد على الجهاز | نسخ + تنزيل.
+  async function buildEmailPayload(recipientName: string) {
+    const el = await buildReportElement()
     try {
-      el = await buildReportElement()
-      await downloadElementPdf(el, fileBase, { singlePage: true })
-
-      const subject = documentNo
-        ? t("recordDetails.mailSubjectNo").replace("{title}", title).replace("{no}", documentNo)
-        : t("recordDetails.mailSubject").replace("{title}", title)
-      const body = t("recordDetails.mailBody")
-        .replace("{title}", title)
-        .replace("{file}", `${fileBase}.pdf`)
-
-      // فتح برنامج البريد الافتراضي عبر نقرة رابط mailto (أكثر موثوقية من تغيير الموقع).
-      const a = document.createElement("a")
-      a.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-      a.style.display = "none"
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-
-      toast({
-        title: t("recordDetails.emailOpenedTitle"),
-        description: t("recordDetails.emailAttachManuallyDesc"),
-      })
-    } catch (err) {
-      toast({
-        title: t("recordDetails.emailFailedTitle"),
-        description: err instanceof Error ? err.message : t("recordDetails.genericError"),
-        variant: "destructive",
-      })
+      const pdf = await elementToPdf(el, { singlePage: true })
+      const pdfBlob = pdf.output("blob")
+      const content = emailContext
+        ? buildEmailContent(emailContext, { recipientName, sender: emailSender, locale: emailLocale })
+        : {
+            subject: documentNo
+              ? t("recordDetails.mailSubjectNo").replace("{title}", title).replace("{no}", documentNo)
+              : t("recordDetails.mailSubject").replace("{title}", title),
+            body: t("recordDetails.mailReport").replace("{title}", title),
+            fileName: `${fileBase}.pdf`,
+          }
+      return { pdfBlob, content }
     } finally {
-      if (el) document.body.removeChild(el)
-      setBusy(null)
+      document.body.removeChild(el)
     }
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         {trigger ?? (
@@ -330,11 +322,11 @@ export function RecordDetailsDialog({
           <Button
             size="sm"
             variant="outline"
-            onClick={handleEmail}
+            onClick={() => setEmailOpen(true)}
             disabled={busy !== null}
             className="gap-1.5 bg-transparent"
           >
-            {busy === "email" ? <Loader2 className="size-3.5 animate-spin" /> : <Mail className="size-3.5" />}
+            <Mail className="size-3.5" />
             {t("recordDetails.sendEmail")}
           </Button>
         </div>
@@ -408,6 +400,10 @@ export function RecordDetailsDialog({
         )}
       </DialogContent>
     </Dialog>
+
+    {/* نافذة اختيار برنامج البريد — Outlook/Gmail (OAuth) أو تطبيق الجهاز أو نسخ + تنزيل */}
+    <EmailProviderDialog open={emailOpen} onOpenChange={setEmailOpen} locale={emailLocale} build={buildEmailPayload} />
+    </>
   )
 }
 
