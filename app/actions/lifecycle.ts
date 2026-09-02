@@ -8,6 +8,8 @@ import { assertWritable, requireModuleScope, requireScope, requireUser } from "@
 import { saveDataUrlAttachment } from "@/lib/attachments-server"
 import {
   canTransition,
+  deptForClassification,
+  normalizeClassification,
   normalizeLifecycle,
   type Dept,
   type LifecycleEvent,
@@ -116,6 +118,21 @@ export async function referRecord(input: {
   // يُسمح بإعادة الإحالة من "محالة" لتغيير الجهة.
   if (from !== "referred" && !canTransition(from, "referred")) {
     throw new Error("لا يمكن إحالة السجل في حالته الحالية")
+  }
+
+  // قاعدة التوجيه الإلزامية للحوادث: داخلية → HR فقط، خارجية → المالية فقط.
+  // التصنيف يُحدَّد عند الإنشاء ولا تغيّره الإحالة؛ أي محاولة إحالة مخالفة للقاعدة تُرفض هنا
+  // بغضّ النظر عن الواجهة.
+  if (input.module === "incidents") {
+    const cls = normalizeClassification((row as { classification?: string | null }).classification)
+    const allowed = deptForClassification(cls)
+    if (input.dept !== allowed) {
+      throw new Error(
+        cls === "external"
+          ? "الحادثة مصنّفة خارجية — تُحال إلى المالية فقط"
+          : "الحادثة مصنّفة داخلية — تُحال إلى الموارد البشرية فقط",
+      )
+    }
   }
 
   const t = tableFor(input.module)

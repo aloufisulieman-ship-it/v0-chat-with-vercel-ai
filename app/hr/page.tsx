@@ -43,10 +43,15 @@ export default async function HrPage() {
         <DeptInbox dept="hr" items={inbox} locale={locale === "en" ? "en" : "ar"} />
       </div>
 
-      {/* القائمة الأولى: المخالفات المحوّلة للموارد البشرية */}
-      <section className="mt-8">
-        <h2 className="mb-3 text-lg font-semibold text-foreground">{t("hr.violationsSection")}</h2>
-        {activeViolations.length === 0 ? (
+      {/* تبويبان: المخالفات المحوّلة للموارد البشرية | الحوادث الداخلية (طرف متضرر موظف) */}
+      <DeptTabs
+        violationsLabel={t("hr.violationsSection")}
+        incidentsLabel={t("hr.incidentsSection")}
+        violationsCount={pendingViolations}
+        incidentsCount={pendingIncidents}
+        defaultTab={pendingViolations === 0 && pendingIncidents > 0 ? "incidents" : "violations"}
+        violations={
+        activeViolations.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
             {t("hr.noViolations")}
           </p>

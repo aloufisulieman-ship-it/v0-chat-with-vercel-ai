@@ -12,7 +12,15 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useToast } from "@/hooks/use-toast"
 import { startProcessing } from "@/app/actions/lifecycle"
-import { canTransition, lifecycleUi, normalizeLifecycle, type Dept, type LifecycleModule } from "@/lib/lifecycle"
+import {
+  canTransition,
+  classificationLabel,
+  deptForClassification,
+  lifecycleUi,
+  normalizeLifecycle,
+  type Dept,
+  type LifecycleModule,
+} from "@/lib/lifecycle"
 import { CloseDialog, ReferDialog, ReopenDialog } from "./lifecycle-dialogs"
 
 type L = "ar" | "en"
@@ -24,6 +32,7 @@ export function LifecycleActions({
   recordId,
   status,
   assignedDept,
+  classification,
   isAdmin,
   locale = "ar",
   onRequestEmail,
@@ -34,6 +43,8 @@ export function LifecycleActions({
   recordId: number
   status: string | null | undefined
   assignedDept?: Dept | string | null
+  // للحوادث: يقفل جهة الإحالة (داخلية→HR، خارجية→المالية). يُتجاهل للمخالفات.
+  classification?: string | null
   isAdmin: boolean
   locale?: L
   onRequestEmail?: () => void
@@ -50,6 +61,14 @@ export function LifecycleActions({
   const canStart = canTransition(from, "in_progress")
   const canClose = canTransition(from, "closed")
   const canReopen = isAdmin && from === "archived"
+
+  const lockedDept: Dept | null = module === "incidents" ? deptForClassification(classification) : null
+  const lockedReason =
+    module === "incidents"
+      ? locale === "en"
+        ? `${classificationLabel(classification, "en")} incident — routing is fixed to this department`
+        : `حادثة ${classificationLabel(classification, "ar")} — جهة الإحالة ثابتة حسب التصنيف`
+      : undefined
 
   async function start() {
     setBusy(true)
@@ -80,6 +99,8 @@ export function LifecycleActions({
         recordId={recordId}
         locale={locale}
         defaultDept={(assignedDept as Dept) || null}
+        lockedDept={lockedDept}
+        lockedReason={lockedReason}
         onReferred={({ alsoEmail }) => alsoEmail && onRequestEmail?.()}
       />
       <CloseDialog

@@ -17,6 +17,24 @@ export type LifecycleEvent =
 export const LIFECYCLE_STATUSES: LifecycleStatus[] = ["new", "referred", "in_progress", "closed", "archived"]
 export const DEPTS: Dept[] = ["hr", "finance"]
 
+// تصنيف السجل (مخالفة: category، حادثة: classification):
+// internal = طرف داخلي/موظف → الموارد البشرية حصراً | external = طرف خارجي → المالية حصراً.
+export type RecordClassification = "internal" | "external"
+
+export function normalizeClassification(v: string | null | undefined): RecordClassification {
+  return v === "external" ? "external" : "internal"
+}
+
+// الجهة الوحيدة المسموح الإحالة إليها حسب التصنيف. تُطبَّق على الخادم وتُقيّد اختيار الواجهة.
+export function deptForClassification(c: string | null | undefined): Dept {
+  return normalizeClassification(c) === "external" ? "finance" : "hr"
+}
+
+export function classificationLabel(c: string | null | undefined, locale: "ar" | "en" = "ar"): string {
+  const k = normalizeClassification(c)
+  return locale === "en" ? (k === "external" ? "External" : "Internal") : k === "external" ? "خارجية" : "داخلية"
+}
+
 type L = "ar" | "en"
 
 export function normalizeLifecycle(v: string | null | undefined): LifecycleStatus {
@@ -175,6 +193,7 @@ export function lifecycleUi(locale: L = "ar") {
       filterSource: "Source",
       any: "Any",
       dueDateCol: "Due",
+      classification: "Classification",
       overdue: "Overdue",
       print: "Print",
     }
@@ -189,7 +208,7 @@ export function lifecycleUi(locale: L = "ar") {
     referDesc: "اختر الجهة المسؤولة. يُرسَل إشعار داخلي إليها، ويمكنك أيضاً إرسال التقرير بالبريد.",
     dept: "الجهة",
     notes: "ملاحظات الإحالة",
-    dueDate: "تاريخ الاستحقاق (اختياري)",
+    dueDate: "ت��ريخ الاستحقاق (اختياري)",
     alsoEmail: "إرسال التقرير بالبريد أيضاً",
     closeTitle: "إغلاق السجل",
     closeDesc: "سجّل الإجراء المتخذ. يُؤرشَف السجل تلقائياً بعد الإغلاق.",
@@ -214,6 +233,7 @@ export function lifecycleUi(locale: L = "ar") {
     filterSource: "المصدر",
     any: "أي",
     dueDateCol: "الاستحقاق",
+    classification: "التصنيف",
     overdue: "متأخر",
     print: "طباعة",
   }

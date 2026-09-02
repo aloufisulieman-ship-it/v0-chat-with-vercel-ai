@@ -23,7 +23,12 @@ import {
 } from "@/lib/db/schema"
 import { and, desc, eq, inArray, isNotNull } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
-import { roleKindFor, AUDITOR_SIGNATURE_ROLE, HR_OFFICER_SIGNATURE_ROLE } from "@/lib/signature-roles"
+import {
+  roleKindFor,
+  AUDITOR_SIGNATURE_ROLE,
+  HR_OFFICER_SIGNATURE_ROLE,
+  FINANCE_OFFICER_SIGNATURE_ROLE,
+} from "@/lib/signature-roles"
 import {
   requireModuleScope,
   requireScope,
@@ -41,6 +46,7 @@ import {
 import { effectiveViolationStatus } from "@/lib/violation-status"
 import { saveDataUrlAttachment } from "@/lib/attachments-server"
 import { assertNotArchived, logRecordEvent } from "@/app/actions/lifecycle"
+import { deptForClassification } from "@/lib/lifecycle"
 
 function str(v: FormDataEntryValue | null, fallback = "") {
   return v == null ? fallback : String(v)
@@ -158,10 +164,20 @@ export async function createIncidentFull(formData: FormData) {
   const title = str(formData.get("title")).trim()
   if (!title) throw new Error("نوع الحادثة مطلوب")
 
-  const routedTo = str(formData.get("routedTo"))
-  if (routedTo !== "hr" && routedTo !== "finance") {
-    throw new Error("يجب اختيار جهة تحويل الحادثة: الموارد البشرية أو المالية")
-  }
+  // التصنيف هو المصدر الوحيد للتوجيه: داخلية → HR، خارجية → المالية.
+  // routedTo القديم يُقبل كبديل (توافق خلفي) لكن يُشتق التصنيف منه ثم تُطبَّق القاعدة.
+  const rawClass = str(formData.get("classification"))
+  const legacyRouted = str(formData.get("routedTo"))
+  const classification =
+    rawClass === "internal" || rawClass === "external"
+      ? rawClass
+      : legacyRouted === "finance"
+        ? "external"
+        : legacyRouted === "hr"
+          ? "internal"
+          : ""
+  if (!classification) throw new Error("يجب تحديد تصنيف الحادثة: داخلية أو خارجية")
+  const routedTo = deptForClassification(classification)
 
   // Auto document number: INC-YYYY-### (تسلسل مستقل لكل مؤسسة، يُصفّر كل سنة).
   const year = new Date().getFullYear()
@@ -185,6 +201,7 @@ export async function createIncidentFull(formData: FormData) {
       organizationId,
       documentNo,
       title,
+      classification,
       routedTo,
       hrStatus: routedTo === "hr" ? "pending" : null,
       financeStatus: routedTo === "finance" ? "pending" : null,
@@ -381,7 +398,7 @@ function isPermitApprover(role: string, department: string): boolean {
   return role === "admin" || department === "المدير العام" || department === "مفتش السلامة"
 }
 
-// اعتماد أو رفض تصريح عمل من قِبل المدير، مع تسجيل اسم المعتمِد والتاريخ والسب��.
+// اعتماد أو رفض تصريح عمل من قِبل المدير، مع تسجيل اسم ال��عتمِد والتاريخ والسب��.
 // مقيّد بمؤسسة المعتمِد: لا يمكن اعتماد تصريح تابع لمؤسسة أخرى.
 export async function updatePermitStatus(
   permitId: number,
@@ -925,6 +942,44 @@ export async function getAiViolationSignatureInfo(): Promise<
     if (!entry) continue
     if (s.kind === auditorKind) entry.auditor = s.url ?? ""
     else if (s.kind === hrKind) entry.hrOfficer = s.url ?? ""
+  }
+  return result
+}
+
+// توقيعات الحوادث الرسمية المخزّنة كمرفقات (المدقّق، مسؤول HR، مسؤول المالية) لكل حادثة
+// في نطاق المستخدم. تُدمَج في نافذة التفاصيل مع توقيعات النموذج (المُبلّغ/السلامة/HR/المدير العام).
+export async function getIncidentSignatureInfo(): Promise<
+  Record<number, { auditor: string; hrOfficer: string; financeOfficer: string }>
+> {
+  const scope = await requireModuleScope("incidents")
+  const rows = await db
+    .select({ id: incident.id })
+    .from(incident)
+    .where(scopeWhere({ organizationId: incident.organizationId, userId: incident.userId }, scope))
+  const ids = rows.map((r) => r.id)
+  if (ids.length === 0) return {}
+
+  const auditorKind = roleKindFor(AUDITOR_SIGNATURE_ROLE.key)
+  const hrKind = roleKindFor(HR_OFFICER_SIGNATURE_ROLE.key)
+  const finKind = roleKindFor(FINANCE_OFFICER_SIGNATURE_ROLE.key)
+  const sigs = await db
+    .select({ recordId: attachment.recordId, kind: attachment.kind, url: attachment.url })
+    .from(attachment)
+    .where(
+      and(
+        eq(attachment.organizationId, scope.organizationId),
+        eq(attachment.module, "incidents"),
+        inArray(attachment.recordId, ids),
+        inArray(attachment.kind, [auditorKind, hrKind, finKind]),
+      ),
+    )
+
+  const result: Record<number, { auditor: string; hrOfficer: string; financeOfficer: string }> = {}
+  for (const s of sigs) {
+    const entry = (result[s.recordId] ??= { auditor: "", hrOfficer: "", financeOfficer: "" })
+    if (s.kind === auditorKind) entry.auditor = s.url ?? ""
+    else if (s.kind === hrKind) entry.hrOfficer = s.url ?? ""
+    else if (s.kind === finKind) entry.financeOfficer = s.url ?? ""
   }
   return result
 }

@@ -6,7 +6,8 @@ import { StatusBadge, SeverityBadge } from "@/components/status-badge"
 import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { requireModule } from "@/lib/session"
-import { getIncidents, deleteIncident, getCompany } from "@/app/actions/hse"
+import { getIncidents, deleteIncident, getCompany, getIncidentSignatureInfo } from "@/app/actions/hse"
+import { AUDITOR_SIGNATURE_ROLE, FINANCE_OFFICER_SIGNATURE_ROLE, HR_OFFICER_SIGNATURE_ROLE } from "@/lib/signature-roles"
 import { getServerT } from "@/lib/i18n/server"
 import { severityLabel, statusLabel } from "@/lib/i18n/labels"
 import { formatParties } from "@/lib/incident-types"
@@ -19,7 +20,14 @@ import { IncidentFormDialog } from "./incident-form"
 import { LifecycleFilterBar } from "@/components/lifecycle/lifecycle-filter-bar"
 import { DeptBadge, DueDateBadge, LifecycleBadge, SourceBadge } from "@/components/lifecycle/lifecycle-badges"
 import { LifecycleActions } from "@/components/lifecycle/lifecycle-actions"
-import { applyLifecycleFilters, isArchived, lifecycleLabel, lifecycleUi, normalizeLifecycle } from "@/lib/lifecycle"
+import {
+  applyLifecycleFilters,
+  classificationLabel,
+  isArchived,
+  lifecycleLabel,
+  lifecycleUi,
+  normalizeLifecycle,
+} from "@/lib/lifecycle"
 
 type Incident = Awaited<ReturnType<typeof getIncidents>>[number]
 
@@ -29,7 +37,12 @@ export default async function IncidentsPage({
   searchParams: Promise<{ status?: string; dept?: string; source?: string }>
 }) {
   const user = await requireModule("incidents")
-  const [incidents, companyProfile, sp] = await Promise.all([getIncidents(), getCompany().catch(() => null), searchParams])
+  const [incidents, companyProfile, sp, sigInfo] = await Promise.all([
+    getIncidents(),
+    getCompany().catch(() => null),
+    searchParams,
+    getIncidentSignatureInfo().catch(() => ({}) as Awaited<ReturnType<typeof getIncidentSignatureInfo>>),
+  ])
   const { t, locale } = await getServerT()
   const isAdmin = user.role === "admin"
   const emailLocale = locale === "en" ? "en" : "ar"
@@ -62,6 +75,13 @@ export default async function IncidentsPage({
     { key: "status", header: t("incidents.colStatus"), render: (r) => <LifecycleBadge status={r.lifecycleStatus} locale={emailLocale} /> },
     { key: "source", header: lc.source, render: (r) => <SourceBadge source={r.source} locale={emailLocale} /> },
     { key: "incidentDate", header: t("incidents.colDate"), render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.incidentDate ?? "-"}</span> },
+    {
+      key: "classification",
+      header: lc.classification,
+      render: (r) => (
+        <span className="text-xs text-muted-foreground whitespace-nowrap">{classificationLabel(r.classification, emailLocale)}</span>
+      ),
+    },
     { key: "routedTo", header: t("incidents.colRoutedTo"), render: (r) => <DeptBadge dept={r.assignedDept ?? r.routedTo} locale={emailLocale} /> },
     { key: "dueDate", header: lc.dueDateCol, render: (r) => <DueDateBadge dueDate={r.dueDate} status={r.lifecycleStatus} locale={emailLocale} /> },
     {
@@ -75,6 +95,7 @@ export default async function IncidentsPage({
             recordId={r.id}
             status={r.lifecycleStatus}
             assignedDept={r.assignedDept}
+            classification={r.classification}
             isAdmin={isAdmin}
             locale={emailLocale}
           />
@@ -87,6 +108,7 @@ export default async function IncidentsPage({
             fields={[
               { label: t("incidents.fIncidentNo"), value: r.documentNo || "-" },
               { label: t("incidents.fIncidentType"), value: r.title },
+              { label: lc.classification, value: classificationLabel(r.classification, emailLocale) },
               { label: t("incidents.fRoutedTo"), value: r.routedTo === "hr" ? t("incidents.routedHr") : r.routedTo === "finance" ? t("incidents.routedFinance") : t("incidents.notRouted") },
               { label: t("incidents.fLocation"), value: r.location || "-" },
               { label: t("incidents.fIncidentDate"), value: r.incidentDate ?? "-" },
@@ -106,11 +128,21 @@ export default async function IncidentsPage({
               { label: t("incidents.fAuthorityName"), value: r.authorityName || "-" },
               { label: t("incidents.fRecommendations"), value: r.recommendations || "-" },
             ]}
+            // قسم التوقيعات الرسمية (5 خانات، بلا تكرار): المُبلّغ، مدير السلامة، المدقّق،
+            // ثم توقيع الجهة المعالجة وفق التصنيف (HR للداخلية / المالية للخارجية)، والمدير العام.
+            // توقيع HR من النموذج وتوقيع مسؤول HR المرفق يُوحَّدان في خانة واحدة (الأحدث يغلب).
             signatures={[
               { label: t("incidents.sigReporter"), value: r.reporterSignature || "" },
               { label: t("incidents.sigSafety"), value: r.safetySignature || "" },
-              { label: t("incidents.sigHr"), value: r.hrSignature || "" },
+              { label: AUDITOR_SIGNATURE_ROLE.label, value: sigInfo[r.id]?.auditor || "" },
+              r.classification === "external"
+                ? { label: FINANCE_OFFICER_SIGNATURE_ROLE.label, value: sigInfo[r.id]?.financeOfficer || "" }
+                : { label: t("incidents.sigHr"), value: sigInfo[r.id]?.hrOfficer || r.hrSignature || "" },
               { label: t("incidents.sigGm"), value: r.gmSignature || "" },
+            ]}
+            extraSignatureRoles={[
+              AUDITOR_SIGNATURE_ROLE,
+              r.classification === "external" ? FINANCE_OFFICER_SIGNATURE_ROLE : HR_OFFICER_SIGNATURE_ROLE,
             ]}
             initialAttachments={[]}
             lifecycle={{ status: r.lifecycleStatus, source: r.source, assignedDept: r.assignedDept ?? r.routedTo }}

@@ -40,6 +40,8 @@ export function ReferDialog({
   recordId,
   locale = "ar",
   defaultDept,
+  lockedDept,
+  lockedReason,
   onReferred,
 }: {
   open: boolean
@@ -48,13 +50,16 @@ export function ReferDialog({
   recordId: number
   locale?: L
   defaultDept?: Dept | null
+  // عند تمريرها تُقفَل الجهة على قيمة واحدة (قاعدة تصنيف الحوادث: داخلية→HR، خارجية→المالية).
+  lockedDept?: Dept | null
+  lockedReason?: string
   // يُستدعى بعد نجاح الإحالة إن اختار المستخدم إرسال البريد أيضاً (يفتح نافذة البريد).
   onReferred?: (opts: { alsoEmail: boolean }) => void
 }) {
   const s = lifecycleUi(locale)
   const router = useRouter()
   const { toast } = useToast()
-  const [dept, setDept] = useState<Dept | "">(defaultDept ?? "")
+  const [dept, setDept] = useState<Dept | "">(lockedDept ?? defaultDept ?? "")
   const [notes, setNotes] = useState("")
   const [dueDate, setDueDate] = useState("")
   const [alsoEmail, setAlsoEmail] = useState(false)
@@ -86,18 +91,19 @@ export function ReferDialog({
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <Label>{s.dept}</Label>
-            <Select value={dept} onValueChange={(v) => setDept(v as Dept)} disabled={busy}>
-              <SelectTrigger>
+            <Select value={dept} onValueChange={(v) => setDept(v as Dept)} disabled={busy || !!lockedDept}>
+              <SelectTrigger aria-readonly={!!lockedDept}>
                 <SelectValue placeholder={s.dept} />
               </SelectTrigger>
               <SelectContent>
-                {DEPTS.map((d) => (
+                {(lockedDept ? [lockedDept] : DEPTS).map((d) => (
                   <SelectItem key={d} value={d}>
                     {deptLabel(d, locale)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {lockedDept && lockedReason && <p className="text-xs text-muted-foreground text-pretty">{lockedReason}</p>}
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor={`refer-notes-${recordId}`}>{s.notes}</Label>
