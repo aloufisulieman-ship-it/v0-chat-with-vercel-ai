@@ -40,9 +40,39 @@ export const user = pgTable("user", {
   // برنامج البريد المفضّل لإرسال التقارير: "microsoft" | "google" | "device" | "copy" | null.
   // null = اسأل في كل مرة. يُحفظ عند تفعيل "اجعله خياري الافتراضي" في نافذة الاختيار.
   preferredEmailProvider: text("preferred_email_provider"),
+  // حالة الحساب بعد اعتماده: active | suspended | banned — منفصلة تماماً عن status
+  // (pending/approved/rejected = مرحلة تسجيل الحساب). suspended/banned يُمنعان من الدخول
+  // على مستوى الخادم (hook تسجيل الدخول + حارس الجلسة).
+  accountStatus: text("account_status").notNull().default("active"),
+  // آخر دخول ناجح — يُسجَّل فعلياً عند كل sign-in (لا يُشتق من الجلسات).
+  lastLoginAt: timestamp("last_login_at"),
+  lastLoginIp: text("last_login_ip").default(""),
+  lastLoginDevice: text("last_login_device").default(""),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
+
+// سجل تدقيق تغييرات المستخدمين (إدراج فقط): من غيّر، على من، أي حقل، القيمة قبل/بعد.
+// action: role_change | account_status_change | password_reset | permissions_change | ...
+export const userAuditLog = pgTable(
+  "user_audit_log",
+  {
+    id: serial("id").primaryKey(),
+    actorId: text("actor_id").notNull(),
+    actorName: text("actor_name").notNull().default(""),
+    actorEmail: text("actor_email").notNull().default(""),
+    targetUserId: text("target_user_id").notNull(),
+    targetEmail: text("target_email").notNull().default(""),
+    action: text("action").notNull(),
+    field: text("field").notNull().default(""),
+    oldValue: text("old_value").default(""),
+    newValue: text("new_value").default(""),
+    note: text("note").default(""),
+    ip: text("ip").default(""),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("user_audit_log_target_idx").on(t.targetUserId), index("user_audit_log_created_idx").on(t.createdAt)],
+)
 
 // ---------- حسابات البريد المرتبطة (OAuth) للإرسال المباشر من بريد المستخدم ----------
 // صف واحد لكل (مستخدم، مزوّد). الرموز مُشفَّرة بـ AES-256-GCM بمفتاح ENCRYPTION_KEY
