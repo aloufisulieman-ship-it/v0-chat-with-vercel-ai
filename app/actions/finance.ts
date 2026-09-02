@@ -8,9 +8,46 @@ import { requireModule, requireModuleScope, assertWritable } from "@/lib/session
 import { normalizeFinanceStatus, type FinanceStatus } from "@/lib/finance-status"
 import { hasRoleSignature } from "@/lib/signature-check"
 import { FINANCE_OFFICER_SIGNATURE_ROLE } from "@/lib/signature-roles"
+import { assertNotArchived, logRecordEvent } from "@/app/actions/lifecycle"
+import { normalizeLifecycle } from "@/lib/lifecycle"
 
 function str(v: FormDataEntryValue | null, fallback = "") {
   return v == null ? fallback : String(v)
+}
+
+// مزامنة دورة الحياة الموحّدة مع مسار المالية القديم.
+function lifecycleFromFinance(financeStatus: FinanceStatus, now: Date, closer: string, settlement: string) {
+  if (financeStatus === "closed") {
+    return {
+      lifecycleStatus: "archived",
+      closureAction: `تسوية رقم ${settlement}`,
+      lifecycleClosedAt: now,
+      lifecycleClosedBy: closer,
+      archivedAt: now,
+    }
+  }
+  return { lifecycleStatus: financeStatus === "in_review" ? "in_progress" : "referred", archivedAt: null }
+}
+
+async function logFinanceTransition(
+  module: "violations" | "incidents",
+  recordId: number,
+  organizationId: string,
+  from: string | null | undefined,
+  financeStatus: FinanceStatus,
+  actor: { id: string; name: string },
+  note: string,
+) {
+  const fromStatus = normalizeLifecycle(from)
+  const to = financeStatus === "closed" ? "closed" : financeStatus === "in_review" ? "in_progress" : "referred"
+  if (fromStatus === to || to === "referred") return
+  const base = { organizationId, module, recordId, userId: actor.id, userName: actor.name }
+  if (to === "closed") {
+    await logRecordEvent({ ...base, event: "closed", fromStatus, toStatus: "closed", note })
+    await logRecordEvent({ ...base, event: "archived", fromStatus: "closed", toStatus: "archived" })
+  } else {
+    await logRecordEvent({ ...base, event: "in_progress", fromStatus, toStatus: "in_progress" })
+  }
 }
 
 /* ---------------- قراءة المخالفات الخارجية المحوّلة للمالية ---------------- */
@@ -60,6 +97,7 @@ function buildFinanceUpdate(formData: FormData, closerName: string) {
 
   // مزامنة حالة السجل الرئيسية مع مسار المالية للحفاظ على مؤشرات مفتوح/مغلق.
   const mainStatus = financeStatus === "closed" ? "closed" : financeStatus === "in_review" ? "in_progress" : "open"
+  const now = new Date()
 
   return {
     financeStatus,
@@ -68,7 +106,8 @@ function buildFinanceUpdate(formData: FormData, closerName: string) {
     status: mainStatus,
     // سجّل المُغلِق والتاريخ عند الإغلاق فقط؛ وامسحهما إذا أُعيد فتح الحالة.
     financeClosedBy: financeStatus === "closed" ? closerName : "",
-    financeClosedAt: financeStatus === "closed" ? new Date() : null,
+    financeClosedAt: financeStatus === "closed" ? now : null,
+    ...lifecycleFromFinance(financeStatus, now, closerName, settlementNumber),
   }
 }
 
@@ -94,10 +133,18 @@ export async function updateFinanceViolation(formData: FormData) {
     }
   }
 
+  await assertNotArchived("violations", id, closer.organizationId)
+  const [before] = await db
+    .select({ lifecycleStatus: violation.lifecycleStatus })
+    .from(violation)
+    .where(and(eq(violation.id, id), eq(violation.organizationId, closer.organizationId)))
+    .limit(1)
+  const update = buildFinanceUpdate(formData, closer.name)
   await db
     .update(violation)
-    .set(buildFinanceUpdate(formData, closer.name))
+    .set(update)
     .where(and(eq(violation.id, id), eq(violation.organizationId, closer.organizationId)))
+  await logFinanceTransition("violations", id, closer.organizationId, before?.lifecycleStatus, update.financeStatus, closer, update.settlementNumber)
 
   revalidatePath("/finance")
   revalidatePath("/violations")
@@ -126,10 +173,18 @@ export async function updateFinanceIncident(formData: FormData) {
     }
   }
 
+  await assertNotArchived("incidents", id, closer.organizationId)
+  const [before] = await db
+    .select({ lifecycleStatus: incident.lifecycleStatus })
+    .from(incident)
+    .where(and(eq(incident.id, id), eq(incident.organizationId, closer.organizationId)))
+    .limit(1)
+  const update = buildFinanceUpdate(formData, closer.name)
   await db
     .update(incident)
-    .set(buildFinanceUpdate(formData, closer.name))
+    .set(update)
     .where(and(eq(incident.id, id), eq(incident.organizationId, closer.organizationId), eq(incident.routedTo, "finance")))
+  await logFinanceTransition("incidents", id, closer.organizationId, before?.lifecycleStatus, update.financeStatus, closer, update.settlementNumber)
 
   revalidatePath("/finance")
   revalidatePath("/incidents")

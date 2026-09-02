@@ -24,12 +24,15 @@ export function AttachmentsManager({
   initial,
   signatureRoles,
   hideSignatures,
+  readOnly = false,
 }: {
   module: string
   recordId: number
   initial: AttachmentRow[]
   signatureRoles?: SignatureRole[]
   hideSignatures?: boolean
+  // وضع القراءة فقط (السجل المؤرشف): عرض المرفقات دون رفع/حذف/توقيع.
+  readOnly?: boolean
 }) {
   const { t } = useI18n()
   const [items, setItems] = useState<AttachmentRow[]>(initial)
@@ -121,6 +124,7 @@ export function AttachmentsManager({
               {photos.length}
             </span>
           </h4>
+          {!readOnly && (
           <Button
             type="button"
             size="sm"
@@ -136,6 +140,7 @@ export function AttachmentsManager({
             )}
             {uploadingCount > 0 ? t("attachments.uploadingCount").replace("{count}", String(uploadingCount)) : t("attachments.addPhotos")}
           </Button>
+          )}
           <input
             ref={inputRef}
             type="file"
@@ -161,7 +166,7 @@ export function AttachmentsManager({
                   className="aspect-square w-full object-cover"
                   crossOrigin="anonymous"
                 />
-                <button
+                {!readOnly && <button
                   type="button"
                   onClick={() => remove(p.id)}
                   disabled={isPending}
@@ -169,7 +174,7 @@ export function AttachmentsManager({
                   aria-label={t("attachments.deletePhoto")}
                 >
                   <Trash2 className="size-3.5" />
-                </button>
+                </button>}
               </figure>
             ))}
           </div>
@@ -213,7 +218,7 @@ export function AttachmentsManager({
                   >
                     <Download className="size-3.5" /> {t("attachments.open")}
                   </a>
-                  <button
+                  {!readOnly && <button
                     type="button"
                     onClick={() => remove(d.id)}
                     disabled={isPending}
@@ -221,7 +226,7 @@ export function AttachmentsManager({
                     aria-label={t("attachments.deleteFile")}
                   >
                     <Trash2 className="size-3.5" />
-                  </button>
+                  </button>}
                 </li>
               )
             })}
@@ -230,7 +235,7 @@ export function AttachmentsManager({
       )}
 
       {/* Role-named official signatures (violations, incidents, ...) */}
-      {!hideSignatures && useRoles && (
+      {!hideSignatures && !readOnly && useRoles && (
         <RoleSignatures
           module={module}
           recordId={recordId}
@@ -241,7 +246,7 @@ export function AttachmentsManager({
       )}
 
       {/* Free-form signatures (modules without role config) */}
-      {!hideSignatures && !useRoles && (
+      {!hideSignatures && !readOnly && !useRoles && (
       <section className="flex flex-col gap-3">
         <h4 className="flex items-center gap-2 text-sm font-semibold text-foreground">
           <PenLine className="size-4 text-muted-foreground" />
@@ -262,7 +267,7 @@ export function AttachmentsManager({
                   className="h-24 w-full object-contain p-2"
                   crossOrigin="anonymous"
                 />
-                <button
+                {!readOnly && <button
                   type="button"
                   onClick={() => remove(s.id)}
                   disabled={isPending}
@@ -270,7 +275,7 @@ export function AttachmentsManager({
                   aria-label={t("attachments.deleteSignature")}
                 >
                   <Trash2 className="size-3.5" />
-                </button>
+                </button>}
               </figure>
             ))}
           </div>
