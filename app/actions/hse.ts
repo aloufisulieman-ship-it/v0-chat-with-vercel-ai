@@ -23,7 +23,12 @@ import {
 } from "@/lib/db/schema"
 import { and, desc, eq, inArray, isNotNull } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
-import { roleKindFor, AUDITOR_SIGNATURE_ROLE, HR_OFFICER_SIGNATURE_ROLE } from "@/lib/signature-roles"
+import {
+  roleKindFor,
+  AUDITOR_SIGNATURE_ROLE,
+  HR_OFFICER_SIGNATURE_ROLE,
+  FINANCE_OFFICER_SIGNATURE_ROLE,
+} from "@/lib/signature-roles"
 import {
   requireModuleScope,
   requireScope,
@@ -39,49 +44,9 @@ import {
   severityLabels as detectionSeverityLabels,
 } from "@/lib/ai-monitoring"
 import { effectiveViolationStatus } from "@/lib/violation-status"
-import { put } from "@vercel/blob"
-
-// Convert a base64 data URL (e.g. "data:image/png;base64,....") into a Blob.
-function dataUrlToBlob(dataUrl: string): { blob: Blob; ext: string } | null {
-  const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl)
-  if (!match) return null
-  const contentType = match[1]
-  const bytes = Buffer.from(match[2], "base64")
-  const ext = contentType.split("/")[1]?.split("+")[0] || "png"
-  return { blob: new Blob([bytes], { type: contentType }), ext }
-}
-
-// Upload one base64 data URL as an attachment row tied to a record.
-async function saveDataUrlAttachment(
-  userId: string,
-  organizationId: string,
-  module: string,
-  recordId: number,
-  kind: string,
-  dataUrl: string,
-  baseName: string,
-) {
-  const parsed = dataUrlToBlob(dataUrl)
-  if (!parsed) return
-  const filename = `${baseName}.${parsed.ext}`
-  const key = `hse/${userId}/${module}/${recordId}/${Date.now()}-${filename}`
-  // المتجر المربوط عام (public) — كما في بقية مسارات الرفع (الكاميرات/التسجيلات/إثباتات
-  // اللقطات). يجب أن يطابق access نوع المتجر وإلا فشل الرفع. التحكم بالوصول يبقى على
-  // مستوى التطبيق عبر وسيط /api/file المقيّد بالمستخدم/المؤسسة.
-  const uploaded = await put(key, parsed.blob, { access: "public", addRandomSuffix: true })
-  await db.insert(attachment).values({
-    userId,
-    organizationId,
-    module,
-    recordId,
-    kind,
-    pathname: uploaded.pathname,
-    url: uploaded.url,
-    filename,
-    contentType: parsed.blob.type,
-    size: parsed.blob.size,
-  })
-}
+import { saveDataUrlAttachment } from "@/lib/attachments-server"
+import { assertNotArchived, logRecordEvent } from "@/app/actions/lifecycle"
+import { deptForClassification } from "@/lib/lifecycle"
 
 function str(v: FormDataEntryValue | null, fallback = "") {
   return v == null ? fallback : String(v)
@@ -199,10 +164,20 @@ export async function createIncidentFull(formData: FormData) {
   const title = str(formData.get("title")).trim()
   if (!title) throw new Error("نوع الحادثة مطلوب")
 
-  const routedTo = str(formData.get("routedTo"))
-  if (routedTo !== "hr" && routedTo !== "finance") {
-    throw new Error("يجب اختيار جهة تحويل الحادثة: الموارد البشرية أو المالية")
-  }
+  // التصنيف هو المصدر الوحيد للتوجيه: داخلية → HR، خارجية → المالية.
+  // routedTo القديم يُقبل كبديل (توافق خلفي) لكن يُشتق التصنيف منه ثم تُطبَّق القاعدة.
+  const rawClass = str(formData.get("classification"))
+  const legacyRouted = str(formData.get("routedTo"))
+  const classification =
+    rawClass === "internal" || rawClass === "external"
+      ? rawClass
+      : legacyRouted === "finance"
+        ? "external"
+        : legacyRouted === "hr"
+          ? "internal"
+          : ""
+  if (!classification) throw new Error("يجب تحديد تصنيف الحادثة: داخلية أو خارجية")
+  const routedTo = deptForClassification(classification)
 
   // Auto document number: INC-YYYY-### (تسلسل مستقل لكل مؤسسة، يُصفّر كل سنة).
   const year = new Date().getFullYear()
@@ -226,6 +201,7 @@ export async function createIncidentFull(formData: FormData) {
       organizationId,
       documentNo,
       title,
+      classification,
       routedTo,
       hrStatus: routedTo === "hr" ? "pending" : null,
       financeStatus: routedTo === "finance" ? "pending" : null,
@@ -252,10 +228,21 @@ export async function createIncidentFull(formData: FormData) {
       hrSignature: str(formData.get("hrSignature")),
       gmSignature: str(formData.get("gmSignature")),
       managerSignature: str(formData.get("safetySignature")),
+      // دورة الحياة: النموذج يختار الجهة عند الإنشاء، فيُعدّ السجل محالاً مباشرةً.
+      source: "manual",
+      lifecycleStatus: "referred",
+      assignedDept: routedTo,
+      referredBy: str(formData.get("reportedBy")),
+      referredAt: new Date(),
     })
     .returning({ id: incident.id })
 
   const recordId = inserted.id
+  {
+    const base = { organizationId, module: "incidents" as const, recordId, userId, userName: str(formData.get("reportedBy")) }
+    await logRecordEvent({ ...base, event: "created", toStatus: "new" })
+    await logRecordEvent({ ...base, event: "referred", fromStatus: "new", toStatus: "referred", meta: { dept: routedTo } })
+  }
 
   // Persist the four official signatures as role-named attachments so they
   // render once in the official signatures section and in the PDF export.
@@ -304,6 +291,7 @@ export async function createIncidentFull(formData: FormData) {
 export async function deleteIncident(id: number) {
   await assertWritable()
   const scope = await requireModuleScope("incidents")
+  await assertNotArchived("incidents", id, scope.organizationId)
   await db
     .delete(incident)
     .where(scopeWhere({ organizationId: incident.organizationId, userId: incident.userId }, scope, eq(incident.id, id)))
@@ -410,7 +398,7 @@ function isPermitApprover(role: string, department: string): boolean {
   return role === "admin" || department === "المدير العام" || department === "مفتش السلامة"
 }
 
-// اعتماد أو رفض تصريح عمل من قِبل المدير، مع تسجيل اسم المعتمِد والتاريخ والسب��.
+// اعتماد أو رفض تصريح عمل من قِبل المدير، مع تسجيل اسم ال��عتمِد والتاريخ والسب��.
 // مقيّد بمؤسسة المعتمِد: لا يمكن اعتماد تصريح تابع لمؤسسة أخرى.
 export async function updatePermitStatus(
   permitId: number,
@@ -958,6 +946,44 @@ export async function getAiViolationSignatureInfo(): Promise<
   return result
 }
 
+// توقيعات الحوادث الرسمية المخزّنة كمرفقات (المدقّق، مسؤول HR، مسؤول المالية) لكل حادثة
+// في نطاق المستخدم. تُدمَج في نافذة التفاصيل مع توقيعات النموذج (المُبلّغ/السلامة/HR/المدير العام).
+export async function getIncidentSignatureInfo(): Promise<
+  Record<number, { auditor: string; hrOfficer: string; financeOfficer: string }>
+> {
+  const scope = await requireModuleScope("incidents")
+  const rows = await db
+    .select({ id: incident.id })
+    .from(incident)
+    .where(scopeWhere({ organizationId: incident.organizationId, userId: incident.userId }, scope))
+  const ids = rows.map((r) => r.id)
+  if (ids.length === 0) return {}
+
+  const auditorKind = roleKindFor(AUDITOR_SIGNATURE_ROLE.key)
+  const hrKind = roleKindFor(HR_OFFICER_SIGNATURE_ROLE.key)
+  const finKind = roleKindFor(FINANCE_OFFICER_SIGNATURE_ROLE.key)
+  const sigs = await db
+    .select({ recordId: attachment.recordId, kind: attachment.kind, url: attachment.url })
+    .from(attachment)
+    .where(
+      and(
+        eq(attachment.organizationId, scope.organizationId),
+        eq(attachment.module, "incidents"),
+        inArray(attachment.recordId, ids),
+        inArray(attachment.kind, [auditorKind, hrKind, finKind]),
+      ),
+    )
+
+  const result: Record<number, { auditor: string; hrOfficer: string; financeOfficer: string }> = {}
+  for (const s of sigs) {
+    const entry = (result[s.recordId] ??= { auditor: "", hrOfficer: "", financeOfficer: "" })
+    if (s.kind === auditorKind) entry.auditor = s.url ?? ""
+    else if (s.kind === hrKind) entry.hrOfficer = s.url ?? ""
+    else if (s.kind === finKind) entry.financeOfficer = s.url ?? ""
+  }
+  return result
+}
+
 export async function createViolationFull(formData: FormData) {
   await assertWritable()
   const { userId, organizationId } = await requireModuleScope("violations")
@@ -1015,10 +1041,21 @@ export async function createViolationFull(formData: FormData) {
       editorSignature: str(formData.get("editorSignature")),
       violatorSignature: str(formData.get("violatorSignature")),
       managerSignature: str(formData.get("managerSignature")),
+      // دورة الحياة: التصنيف المختار عند الإنشاء يحيل السجل مباشرةً للجهة المقابلة.
+      source: "manual",
+      lifecycleStatus: "referred",
+      assignedDept: isExternal ? "finance" : "hr",
+      referredBy: str(formData.get("detectedBy")),
+      referredAt: new Date(),
     })
     .returning({ id: violation.id })
 
   const recordId = inserted.id
+  {
+    const base = { organizationId, module: "violations" as const, recordId, userId, userName: str(formData.get("detectedBy")) }
+    await logRecordEvent({ ...base, event: "created", toStatus: "new" })
+    await logRecordEvent({ ...base, event: "referred", fromStatus: "new", toStatus: "referred", meta: { dept: isExternal ? "finance" : "hr" } })
+  }
 
   // Persist evidence photos (sent as a JSON array of base64 data URLs) as
   // real attachments so they show up in the details dialog and PDF export.
@@ -1089,6 +1126,19 @@ export async function acceptDetectionAsViolation(
     // مُحوّل مسبقاً — أعد رقم المخالفة القائم دون إنشاء تكرار.
     return { documentNo: det.linkedViolationNo }
   }
+  // حماية إضافية من التحويل المزدوج: هل توجد مخالفة مرتبطة بهذا الاكتشاف أصلاً؟
+  const [already] = await db
+    .select({ documentNo: violation.documentNo })
+    .from(violation)
+    .where(and(eq(violation.organizationId, organizationId), eq(violation.sourceDetectionId, detectionId)))
+    .limit(1)
+  if (already?.documentNo) {
+    await db
+      .update(aiDetection)
+      .set({ status: "converted", linkedViolationNo: already.documentNo })
+      .where(and(eq(aiDetection.id, detectionId), eq(aiDetection.organizationId, organizationId)))
+    return { documentNo: already.documentNo }
+  }
 
   const actorRows = await db.select({ name: user.name }).from(user).where(eq(user.id, userId)).limit(1)
   const actor = actorRows[0]?.name || "مستخدم"
@@ -1128,22 +1178,45 @@ export async function acceptDetectionAsViolation(
       category,
       entryMode: "electronic",
       detectedBy: det.inspectorName || actor,
-      violationDate: now.toISOString().slice(0, 10),
-      violationTime: now.toTimeString().slice(0, 5),
+      // تاريخ/وقت الرصد الفعلي من الاكتشاف (لا وقت التحويل).
+      violationDate: (det.detectedAt ?? now).toISOString().slice(0, 10),
+      violationTime: (det.detectedAt ?? now).toTimeString().slice(0, 5),
       place: det.cameraLocation || "",
       description,
       status: "open",
       hrStatus: isExternal ? null : "pending",
       financeStatus: isExternal ? "pending" : null,
       settlementNumber: "",
+      // دورة الحياة: مصدر ثابت "رصد آلي"، محالة مباشرةً للجهة حسب التصنيف.
+      source: "ai_detection",
+      lifecycleStatus: "referred",
+      assignedDept: isExternal ? "finance" : "hr",
+      referredBy: actor,
+      referredAt: now,
+      aiConfidence: det.confidenceScore ?? null,
+      aiSeverity: det.severity ?? "",
+      aiCameraId: det.cameraId ?? "",
+      sourceDetectionId: det.id,
     })
     .returning({ id: violation.id })
 
   const recordId = inserted.id
 
+  await logRecordEvent({
+    organizationId,
+    module: "violations",
+    recordId,
+    event: "converted_from_ai",
+    fromStatus: "",
+    toStatus: "referred",
+    userId,
+    userName: actor,
+    meta: { detectionId: det.id, confidence: det.confidenceScore, severity: det.severity, cameraId: det.cameraId, dept: isExternal ? "finance" : "hr" },
+  })
+
   // أرفق لقطة الإثبات كمرفق صورة للمخالفة — أفضل جهد لا يُفشل العملية.
   // اللقطات تُخزَّن في ai_detections.snapshotUrl كـ data URL بصيغة base64 (ناتج
-  // canvas.toDataURL من الكاميرا)، لا كرابط http. لذا نمرّرها مباشرةً إلى
+  // canvas.toDataURL من الك��ميرا)، لا كرابط http. لذا نمرّرها مباشرةً إلى
   // saveDataUrlAttachment التي ترفعها إلى Blob وتحفظ رابط URL فقط في جدول المرفقات
   // (لا يُخزَّن الـ base64 الضخم في قاعدة البيانات). ندعم أيضاً حالة رابط http
   // القديمة كخيار احتياطي بجلبها وتحويلها إلى data URL.
@@ -1185,6 +1258,7 @@ export async function updateViolation(formData: FormData) {
 
   const id = Number(formData.get("id"))
   if (!Number.isFinite(id)) throw new Error("معرّف غير صالح")
+  await assertNotArchived("violations", id, organizationId)
 
   const employeeName = str(formData.get("employeeName")).trim()
   if (!employeeName) throw new Error("اسم الموظف مطلوب")
@@ -1262,6 +1336,7 @@ export async function deleteViolation(id: number) {
     .where(and(eq(violation.id, id), eq(violation.organizationId, organizationId)))
     .limit(1)
   if (!v[0]) throw new Error("المخالفة غير موجودة")
+  await assertNotArchived("violations", id, organizationId)
   const canDelete = isManager || v[0].userId === userId
   if (!canDelete) throw new Error("غير مصرح لك بالحذف")
   await db.delete(violation).where(and(eq(violation.id, id), eq(violation.organizationId, organizationId)))

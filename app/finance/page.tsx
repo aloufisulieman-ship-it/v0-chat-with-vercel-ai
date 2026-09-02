@@ -6,6 +6,9 @@ import { Eye, Banknote, Ban, CheckCircle2 } from "lucide-react"
 import { requireModule } from "@/lib/session"
 import { getFinanceIncidents, getFinanceViolations, updateFinanceIncident, updateFinanceViolation } from "@/app/actions/finance"
 import { getServerT } from "@/lib/i18n/server"
+import { getNotifications } from "@/app/actions/lifecycle"
+import { DeptInbox } from "@/components/lifecycle/dept-inbox"
+import { DeptTabs } from "@/components/lifecycle/dept-tabs"
 import { statusLabel, categoryLabel } from "@/lib/i18n/labels"
 import { normalizeFinanceStatus } from "@/lib/finance-status"
 import { FINANCE_OFFICER_SIGNATURE_ROLE } from "@/lib/signature-roles"
@@ -14,8 +17,8 @@ import { FinanceActionCard } from "./finance-action-card"
 
 export default async function FinancePage() {
   const user = await requireModule("finance")
-  const { t } = await getServerT()
-  const [violations, incidents] = await Promise.all([getFinanceViolations(), getFinanceIncidents()])
+  const { t, locale } = await getServerT()
+  const [violations, incidents, inbox] = await Promise.all([getFinanceViolations(), getFinanceIncidents(), getNotifications("finance")])
 
   const allItems = [...violations, ...incidents]
   const pending = allItems.filter((v) => normalizeFinanceStatus(v.financeStatus) !== "closed").length
@@ -40,9 +43,19 @@ export default async function FinancePage() {
         <KpiCard label={t("finance.kpiClosed")} value={closed} icon={CheckCircle2} tone="primary" />
       </div>
 
-      <section className="mt-8">
-        <h2 className="mb-3 text-lg font-semibold text-foreground">{t("finance.violationsSection")}</h2>
-        {activeViolations.length === 0 ? (
+      <div className="mt-6">
+        <DeptInbox dept="finance" items={inbox} locale={locale === "en" ? "en" : "ar"} />
+      </div>
+
+      {/* تبويبان: المخالفات الخارجية | الحوادث الخارجية (طرف متضرر من خارج المنشأة) */}
+      <DeptTabs
+        violationsLabel={t("finance.violationsSection")}
+        incidentsLabel={t("finance.incidentsSection")}
+        violationsCount={activeViolations.length}
+        incidentsCount={activeIncidents.length}
+        defaultTab={activeViolations.length === 0 && activeIncidents.length > 0 ? "incidents" : "violations"}
+        violations={
+        activeViolations.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
             {t("finance.noViolations")}
           </p>
@@ -61,6 +74,7 @@ export default async function FinancePage() {
                 initialReceipt={v.paymentReceiptUrl ?? ""}
                 closedBy={v.financeClosedBy ?? ""}
                 closedAt={v.financeClosedAt ? v.financeClosedAt.toISOString() : ""}
+                lifecycle={{ status: v.lifecycleStatus, source: v.source, dueDate: v.dueDate, referralNotes: v.referralNotes, referredBy: v.referredBy }}
                 rows={[
                   { label: t("finance.violationNo"), value: <span dir="ltr" className="font-mono text-xs">{v.documentNo || "-"}</span> },
                   { label: t("finance.offenderCompany"), value: v.companyName || v.employeeName },
@@ -107,12 +121,10 @@ export default async function FinancePage() {
               />
             ))}
           </div>
-        )}
-      </section>
-
-      <section className="mt-8">
-        <h2 className="mb-3 text-lg font-semibold text-foreground">{t("finance.incidentsSection")}</h2>
-        {activeIncidents.length === 0 ? (
+        )
+        }
+        incidents={
+        activeIncidents.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
             {t("finance.noIncidents")}
           </p>
@@ -131,6 +143,7 @@ export default async function FinancePage() {
                 initialReceipt={incident.paymentReceiptUrl ?? ""}
                 closedBy={incident.financeClosedBy ?? ""}
                 closedAt={incident.financeClosedAt ? incident.financeClosedAt.toISOString() : ""}
+                lifecycle={{ status: incident.lifecycleStatus, source: incident.source, dueDate: incident.dueDate, referralNotes: incident.referralNotes, referredBy: incident.referredBy }}
                 rows={[
                   { label: t("finance.incidentNo"), value: <span dir="ltr" className="font-mono text-xs">{incident.documentNo || "-"}</span> },
                   { label: t("finance.incidentType"), value: incident.title },
@@ -170,8 +183,9 @@ export default async function FinancePage() {
               />
             ))}
           </div>
-        )}
-      </section>
+        )
+        }
+      />
     </AppShell>
   )
 }

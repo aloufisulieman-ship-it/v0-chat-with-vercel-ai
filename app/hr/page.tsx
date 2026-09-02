@@ -6,6 +6,9 @@ import { Eye, Users, Ban, AlertTriangle } from "lucide-react"
 import { requireModule } from "@/lib/session"
 import { getHrViolations, getHrIncidents, updateHrViolation, updateHrIncident } from "@/app/actions/hr"
 import { getServerT } from "@/lib/i18n/server"
+import { getNotifications } from "@/app/actions/lifecycle"
+import { DeptInbox } from "@/components/lifecycle/dept-inbox"
+import { DeptTabs } from "@/components/lifecycle/dept-tabs"
 import { statusLabel, severityLabel, categoryLabel } from "@/lib/i18n/labels"
 import { formatParties } from "@/lib/incident-types"
 import { normalizeHrStatus, parseHrAttachments } from "@/lib/hr-status"
@@ -14,8 +17,8 @@ import { HrActionCard } from "./hr-action-card"
 
 export default async function HrPage() {
   const user = await requireModule("hr")
-  const { t } = await getServerT()
-  const [violations, incidents] = await Promise.all([getHrViolations(), getHrIncidents()])
+  const { t, locale } = await getServerT()
+  const [violations, incidents, inbox] = await Promise.all([getHrViolations(), getHrIncidents(), getNotifications("hr")])
 
   // القوائم النشطة تستبعد المغلقة: بمجرد الإغلاق تختفي المخالفة/الحادثة من قسم HR
   // وتظهر ضمن سجلّي "المخالفات"/"الحوادث" العامّين. عدّادات الـ KPI تبقى على القوائم
@@ -37,10 +40,19 @@ export default async function HrPage() {
         <KpiCard label={t("hr.kpiPending")} value={pendingViolations + pendingIncidents} icon={Users} tone="primary" />
       </div>
 
-      {/* القائمة الأولى: المخالفات المحوّلة للموارد البشرية */}
-      <section className="mt-8">
-        <h2 className="mb-3 text-lg font-semibold text-foreground">{t("hr.violationsSection")}</h2>
-        {activeViolations.length === 0 ? (
+      <div className="mt-6">
+        <DeptInbox dept="hr" items={inbox} locale={locale === "en" ? "en" : "ar"} />
+      </div>
+
+      {/* تبويبان: المخالفات المحوّلة للموارد البشرية | الحوادث الداخلية (طرف متضرر موظف) */}
+      <DeptTabs
+        violationsLabel={t("hr.violationsSection")}
+        incidentsLabel={t("hr.incidentsSection")}
+        violationsCount={pendingViolations}
+        incidentsCount={pendingIncidents}
+        defaultTab={pendingViolations === 0 && pendingIncidents > 0 ? "incidents" : "violations"}
+        violations={
+        activeViolations.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
             {t("hr.noViolations")}
           </p>
@@ -58,6 +70,7 @@ export default async function HrPage() {
                 initialAttachments={parseHrAttachments(v.hrAttachmentUrl)}
                 closedBy={v.hrClosedBy ?? ""}
                 closedAt={v.hrClosedAt ? v.hrClosedAt.toISOString() : ""}
+                lifecycle={{ status: v.lifecycleStatus, source: v.source, dueDate: v.dueDate, referralNotes: v.referralNotes, referredBy: v.referredBy }}
                 rows={[
                   { label: t("hr.violationNo"), value: <span dir="ltr" className="font-mono text-xs">{v.documentNo || "-"}</span> },
                   { label: t("hr.employeeName"), value: v.employeeName },
@@ -100,13 +113,10 @@ export default async function HrPage() {
               />
             ))}
           </div>
-        )}
-      </section>
-
-      {/* القائمة الثانية: الحوادث الداخلية المحوّلة (طرف متضرر موظف) */}
-      <section className="mt-10">
-        <h2 className="mb-3 text-lg font-semibold text-foreground">{t("hr.incidentsSection")}</h2>
-        {activeIncidents.length === 0 ? (
+        )
+        }
+        incidents={
+        activeIncidents.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
             {t("hr.noIncidents")}
           </p>
@@ -124,6 +134,7 @@ export default async function HrPage() {
                 initialAttachments={parseHrAttachments(i.hrAttachmentUrl)}
                 closedBy={i.hrClosedBy ?? ""}
                 closedAt={i.hrClosedAt ? i.hrClosedAt.toISOString() : ""}
+                lifecycle={{ status: i.lifecycleStatus, source: i.source, dueDate: i.dueDate, referralNotes: i.referralNotes, referredBy: i.referredBy }}
                 rows={[
                   { label: t("hr.incidentNo"), value: <span dir="ltr" className="font-mono text-xs">{i.documentNo || "-"}</span> },
                   { label: t("hr.type"), value: i.title },
@@ -165,8 +176,9 @@ export default async function HrPage() {
               />
             ))}
           </div>
-        )}
-      </section>
+        )
+        }
+      />
     </AppShell>
   )
 }

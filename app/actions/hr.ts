@@ -8,6 +8,22 @@ import { requireModule, requireModuleScope, assertWritable } from "@/lib/session
 import { normalizeHrStatus, type HrStatus } from "@/lib/hr-status"
 import { hasRoleSignature } from "@/lib/signature-check"
 import { HR_OFFICER_SIGNATURE_ROLE } from "@/lib/signature-roles"
+import { assertNotArchived, logRecordEvent } from "@/app/actions/lifecycle"
+import { normalizeLifecycle } from "@/lib/lifecycle"
+
+// مزامنة دورة الحياة الموحّدة مع مسار HR القديم: pending→referred، in_review→in_progress،
+// closed→archived (مع أحداث سجل الحركة).
+function lifecycleFromHr(hrStatus: HrStatus, now: Date, closer: string) {
+  if (hrStatus === "closed") {
+    return {
+      lifecycleStatus: "archived",
+      lifecycleClosedAt: now,
+      lifecycleClosedBy: closer,
+      archivedAt: now,
+    }
+  }
+  return { lifecycleStatus: hrStatus === "in_review" ? "in_progress" : "referred", archivedAt: null }
+}
 
 function str(v: FormDataEntryValue | null, fallback = "") {
   return v == null ? fallback : String(v)
@@ -63,6 +79,7 @@ function buildHrUpdate(formData: FormData, closerName: string) {
 
   // مزامنة حالة السجل الرئيسية مع مسار HR للحفاظ على مؤشرات مفتوح/مغلق.
   const mainStatus = hrStatus === "closed" ? "closed" : hrStatus === "in_review" ? "in_progress" : "open"
+  const now = new Date()
 
   return {
     hrAction,
@@ -73,7 +90,31 @@ function buildHrUpdate(formData: FormData, closerName: string) {
     status: mainStatus,
     // سجّل المُغلِق والتاريخ عند الإغلاق فقط؛ وامسحهما إذا أُعيد فتح الحالة.
     hrClosedBy: hrStatus === "closed" ? closerName : "",
-    hrClosedAt: hrStatus === "closed" ? new Date() : null,
+    hrClosedAt: hrStatus === "closed" ? now : null,
+    closureAction: hrStatus === "closed" ? hrAction : undefined,
+    ...lifecycleFromHr(hrStatus, now, closerName),
+  }
+}
+
+// يسجّل أحداث دورة الحياة الناتجة عن تغيير حالة HR.
+async function logHrTransition(
+  module: "violations" | "incidents",
+  recordId: number,
+  organizationId: string,
+  from: string | null | undefined,
+  hrStatus: HrStatus,
+  actor: { id: string; name: string },
+  note: string,
+) {
+  const fromStatus = normalizeLifecycle(from)
+  const to = hrStatus === "closed" ? "closed" : hrStatus === "in_review" ? "in_progress" : "referred"
+  if (fromStatus === to || (to === "referred" && fromStatus === "referred")) return
+  const base = { organizationId, module, recordId, userId: actor.id, userName: actor.name }
+  if (to === "closed") {
+    await logRecordEvent({ ...base, event: "closed", fromStatus, toStatus: "closed", note })
+    await logRecordEvent({ ...base, event: "archived", fromStatus: "closed", toStatus: "archived" })
+  } else if (to === "in_progress") {
+    await logRecordEvent({ ...base, event: "in_progress", fromStatus, toStatus: "in_progress" })
   }
 }
 
@@ -99,10 +140,19 @@ export async function updateHrViolation(formData: FormData) {
     }
   }
 
+  await assertNotArchived("violations", id, closer.organizationId)
+  const [before] = await db
+    .select({ lifecycleStatus: violation.lifecycleStatus })
+    .from(violation)
+    .where(and(eq(violation.id, id), eq(violation.organizationId, closer.organizationId)))
+    .limit(1)
+
+  const update = buildHrUpdate(formData, closer.name)
   await db
     .update(violation)
-    .set(buildHrUpdate(formData, closer.name))
+    .set(update)
     .where(and(eq(violation.id, id), eq(violation.organizationId, closer.organizationId)))
+  await logHrTransition("violations", id, closer.organizationId, before?.lifecycleStatus, update.hrStatus, closer, update.hrAction)
 
   revalidatePath("/hr")
   revalidatePath("/violations")
@@ -131,10 +181,19 @@ export async function updateHrIncident(formData: FormData) {
     }
   }
 
+  await assertNotArchived("incidents", id, closer.organizationId)
+  const [before] = await db
+    .select({ lifecycleStatus: incident.lifecycleStatus })
+    .from(incident)
+    .where(and(eq(incident.id, id), eq(incident.organizationId, closer.organizationId)))
+    .limit(1)
+
+  const update = buildHrUpdate(formData, closer.name)
   await db
     .update(incident)
-    .set(buildHrUpdate(formData, closer.name))
+    .set(update)
     .where(and(eq(incident.id, id), eq(incident.organizationId, closer.organizationId), eq(incident.routedTo, "hr")))
+  await logHrTransition("incidents", id, closer.organizationId, before?.lifecycleStatus, update.hrStatus, closer, update.hrAction)
 
   revalidatePath("/hr")
   revalidatePath("/incidents")

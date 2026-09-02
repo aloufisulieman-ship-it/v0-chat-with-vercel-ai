@@ -40,9 +40,39 @@ export const user = pgTable("user", {
   // برنامج البريد المفضّل لإرسال التقارير: "microsoft" | "google" | "device" | "copy" | null.
   // null = اسأل في كل مرة. يُحفظ عند تفعيل "اجعله خياري الافتراضي" في نافذة الاختيار.
   preferredEmailProvider: text("preferred_email_provider"),
+  // حالة الحساب بعد اعتماده: active | suspended | banned — منفصلة تماماً عن status
+  // (pending/approved/rejected = مرحلة تسجيل الحساب). suspended/banned يُمنعان من الدخول
+  // على مستوى الخادم (hook تسجيل الدخول + حارس الجلسة).
+  accountStatus: text("account_status").notNull().default("active"),
+  // آخر دخول ناجح — يُسجَّل فعلياً عند كل sign-in (لا يُشتق من الجلسات).
+  lastLoginAt: timestamp("last_login_at"),
+  lastLoginIp: text("last_login_ip").default(""),
+  lastLoginDevice: text("last_login_device").default(""),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
+
+// سجل تدقيق تغييرات المستخدمين (إدراج فقط): من غيّر، على من، أي حقل، القيمة قبل/بعد.
+// action: role_change | account_status_change | password_reset | permissions_change | ...
+export const userAuditLog = pgTable(
+  "user_audit_log",
+  {
+    id: serial("id").primaryKey(),
+    actorId: text("actor_id").notNull(),
+    actorName: text("actor_name").notNull().default(""),
+    actorEmail: text("actor_email").notNull().default(""),
+    targetUserId: text("target_user_id").notNull(),
+    targetEmail: text("target_email").notNull().default(""),
+    action: text("action").notNull(),
+    field: text("field").notNull().default(""),
+    oldValue: text("old_value").default(""),
+    newValue: text("new_value").default(""),
+    note: text("note").default(""),
+    ip: text("ip").default(""),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("user_audit_log_target_idx").on(t.targetUserId), index("user_audit_log_created_idx").on(t.createdAt)],
+)
 
 // ---------- حسابات البريد المرتبطة (OAuth) للإرسال المباشر من بريد المستخدم ----------
 // صف واحد لكل (مستخدم، مزوّد). الرموز مُشفَّرة بـ AES-256-GCM بمفتاح ENCRYPTION_KEY
@@ -123,6 +153,29 @@ export const company = pgTable("company", {
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
 
+// ---------- دورة الحياة الموحّدة للمخالفة والحادث ----------
+// source: "ai_detection" | "manual" (ثابت بعد الإنشاء).
+// lifecycleStatus: "new" | "referred" | "in_progress" | "closed" | "archived".
+// assignedDept: "hr" | "finance" (قابل للتوسع). الحقول القديمة (hrStatus/financeStatus/
+// category...) تبقى وتُحدَّث تزامنياً للتوافق مع الشاشات القائمة.
+const lifecycleColumns = {
+  source: text("source").notNull().default("manual"),
+  lifecycleStatus: text("lifecycle_status").notNull().default("new"),
+  assignedDept: text("assigned_dept"),
+  referralNotes: text("referral_notes").default(""),
+  dueDate: date("due_date"),
+  referredBy: text("referred_by").default(""),
+  referredAt: timestamp("referred_at"),
+  closureAction: text("closure_action").default(""),
+  closureEvidenceUrl: text("closure_evidence_url").default(""),
+  lifecycleClosedAt: timestamp("lifecycle_closed_at"),
+  lifecycleClosedBy: text("lifecycle_closed_by").default(""),
+  archivedAt: timestamp("archived_at"),
+  reopenReason: text("reopen_reason").default(""),
+  reopenedBy: text("reopened_by").default(""),
+  reopenedAt: timestamp("reopened_at"),
+}
+
 export const incident = pgTable("incident", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
@@ -154,6 +207,9 @@ export const incident = pgTable("incident", {
   managerSignature: text("manager_signature").default(""),
   // جهة التحويل التشغيلية: hr | finance. تبقى null للحوادث القديمة غير الموجّهة.
   routedTo: text("routed_to"),
+  // تصنيف الحادثة: internal (طرف متضرر موظف → الموارد البشرية) | external (طرف خارجي → المالية).
+  // يحدّد جهة الإحالة المسموحة حصراً — لا يُسمح بإحالة الخارجي إلى HR.
+  classification: text("classification").notNull().default("internal"),
   hrAction: text("hr_action").default(""),
   hrActionDate: date("hr_action_date"),
   hrNotes: text("hr_notes").default(""),
@@ -169,6 +225,7 @@ export const incident = pgTable("incident", {
   paymentReceiptUrl: text("payment_receipt_url").default(""),
   financeClosedBy: text("finance_closed_by").default(""),
   financeClosedAt: timestamp("finance_closed_at"),
+  ...lifecycleColumns,
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
@@ -349,7 +406,7 @@ export const violation = pgTable("violation", {
   category: text("category").default("internal"),
   // مصدر إدخال المخالفة: electronic (عبر النظام) | manual (نموذج ورقي ممسوح).
   entryMode: text("entry_mode").notNull().default("electronic"),
-  // اسم المفتش/الموظف الذ���������� رصد المخالفة (يُعبّأ تلقائياً عند الرصد بالذكاء الاصطناعي).
+  // اسم المفتش/الموظف الذي رصد المخالفة (يُعبّأ تلقائياً عند الرصد بالذكاء الاصطناعي).
   detectedBy: text("detected_by").default(""),
   internalAction: text("internal_action").default(""),
   violationDate: date("violationDate"),
@@ -370,20 +427,64 @@ export const violation = pgTable("violation", {
   hrStatus: text("hr_status"),
   hrClosedBy: text("hr_closed_by").default(""),
   hrClosedAt: timestamp("hr_closed_at"),
-  // م��فقات قرار الموارد البشرية (JSON array من data URLs، بنفس آلية الصور/التواقيع).
+  // مرفقات قرار الموارد البشرية (JSON array من data URLs، بنفس آلية الصور/التواقيع).
   hrAttachmentUrl: text("hr_attachment_url").default(""),
   // مسار الإحالة إلى المالية للمخالفات الخارجية: pending | in_review | closed (null يُعامل كـ pending).
   financeStatus: text("finance_status"),
   settlementNumber: text("settlement_number").default(""),
-  // إيصال الدفع مخزّن كـ data URL واحد (بنفس آلية رفع الملفات في ال��ظام).
+  // إيصال الدفع مخزّن كـ data URL واحد (بنفس آلية رفع الملفات في النظام).
   paymentReceiptUrl: text("payment_receipt_url").default(""),
   financeClosedBy: text("finance_closed_by").default(""),
   financeClosedAt: timestamp("finance_closed_at"),
   // ربط المخالفة بدخول مركبة مفتوح في موديول تتبع المركبات (nullable). يُستخدم لحجب
   // خروج المركبة طالما هناك مخالفة مرتبطة بدخولها الحالي.
   entryId: integer("entry_id"),
+  ...lifecycleColumns,
+  // بيانات الرصد الآلي المنسوخة عند التحويل من المراقبة الذكية (source = ai_detection).
+  aiConfidence: integer("ai_confidence"),
+  aiSeverity: text("ai_severity").default(""),
+  aiCameraId: text("ai_camera_id").default(""),
+  sourceDetectionId: integer("source_detection_id"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
+
+// سجل حركة السجل (تدقيق، إدراج فقط): كل انتقال في دورة حياة مخالفة/حادث.
+// event: created | converted_from_ai | referred | in_progress | closed | archived | reopened.
+export const recordEvent = pgTable(
+  "record_event",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: text("organizationId").notNull(),
+    module: text("module").notNull(), // violations | incidents
+    recordId: integer("record_id").notNull(),
+    event: text("event").notNull(),
+    fromStatus: text("from_status").default(""),
+    toStatus: text("to_status").default(""),
+    userId: text("user_id").default(""),
+    userName: text("user_name").default(""),
+    note: text("note").default(""),
+    meta: text("meta").default(""), // JSON
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("record_event_module_record_idx").on(t.module, t.recordId)],
+)
+
+// إشعار داخلي عام موجّه لجهة (hr | finance) داخل المؤسسة — يُستخدم لإحالات المخالفات/الحوادث.
+export const appNotification = pgTable(
+  "app_notification",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: text("organizationId").notNull(),
+    targetModule: text("target_module").notNull(),
+    module: text("module").notNull(),
+    recordId: integer("record_id").notNull(),
+    title: text("title").notNull(),
+    message: text("message").notNull().default(""),
+    read: boolean("read").notNull().default(false),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("app_notification_org_target_idx").on(t.organizationId, t.targetModule, t.read)],
+)
 
 // ملاحظات وإيجابيات الجولة الميدانية.
 // kind: "observation" (ملاحظة/شبه حادثة) أو "positive" (ملاحظة إيجابية).
@@ -419,7 +520,7 @@ export const attachment = pgTable("attachment", {
 })
 
 // ---------- المراقبة الذكية بالذكاء الاصطناعي (كاميرات ساحات الرافعات) ----------
-// detectionType: أحد ����لأنواع الستة (no_ppe / traffic_congestion / unsafe_stacking /
+// detectionType: أحد الأنواع الستة (no_ppe / traffic_congestion / unsafe_stacking /
 //   overspeed / restricted_area / pedestrian_near_forklift).
 // severity: low / medium / high / critical.
 // status: new / acknowledged / resolved / false_positive / converted.
@@ -472,7 +573,7 @@ export const aiMonitoringNotification = pgTable("ai_monitoring_notifications", {
 })
 
 // كاميرات الهاتف المتصلة حالياً — سجل واحد لكل كاميرا (userId + cameraId فريد).
-// يُحدّث lastFrameUrl و lastSeenAt مع كل استدعا�� لمسار /api/ai-monitoring/analyze،
+// يُحدّث lastFrameUrl و lastSeenAt مع كل استدعاء لمسار /api/ai-monitoring/analyze،
 // ما يتيح للوحة المدير عرض بث "شبه حي" لكل كاميرا نشطة.
 export const activeCameraStream = pgTable(
   "active_camera_streams",
@@ -501,7 +602,7 @@ export const webrtcSignal = pgTable(
   {
     id: serial("id").primaryKey(),
     cameraId: text("camera_id").notNull(), // جلسة الكاميرا الهدف
-    viewerSessionId: text("viewer_session_id").notNull(), // جلسة تف��وض المشاهد (تسمح بإعادة الاتصال)
+    viewerSessionId: text("viewer_session_id").notNull(), // جلسة تفويض المشاهد (تسمح بإعادة الاتصال)
     sender: text("sender").notNull(), // "camera" | "viewer"
     kind: text("kind").notNull(), // "offer" | "answer" | "ice"
     payload: text("payload").notNull(), // SDP أو مرشّح ICE مُرمَّز JSON
@@ -616,13 +717,13 @@ export const equipment = pgTable(
     id: serial("id").primaryKey(),
     userId: text("userId").notNull(),
     organizationId: text("organizationId").notNull(),
-    // لوحة المركبة الرسمية — المُعرّف المستخدم للمطابقة مع القراءة ال��صرية.
+    // لوحة المركبة الرسمية — المُعرّف المستخدم للمطابقة مع القراءة البصرية.
     plateNumber: text("plate_number").notNull().default(""),
     // نوع المعدة: forklift | tuktuk | truck | crane | other.
     equipmentType: text("equipment_type").notNull().default("forklift"),
     // الشركة المالكة أو الجهة المسؤولة عن المعدة.
     ownerCompany: text("owner_company").notNull().default(""),
-    // اسم السائق/المستخ��م المخوّل بتشغيل المعدة.
+    // اسم السائق/المستخدم المخوّل بتشغيل المعدة.
     driverName: text("driver_name").notNull().default(""),
     // رقم داخلي/كود أصل اختياري (غير مستخدم في المطابقة، للعرض فقط).
     internalCode: text("internal_code").notNull().default(""),
@@ -799,7 +900,7 @@ export const violationType = pgTable(
   }),
 )
 
-// فئات الجولة التفتيشية للمؤسسة (نص عربي حر + أيقونة + لون ��ن مجموعة جاهزة).
+// فئات الجولة التفتيشية للمؤسسة (نص عربي حر + أيقونة + لون من مجموعة جاهزة).
 export const inspectionCategory = pgTable(
   "inspection_categories",
   {

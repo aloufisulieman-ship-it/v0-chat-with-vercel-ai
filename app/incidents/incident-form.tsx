@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useTransition } from "react"
-import { AlertTriangle, PenLine, X, ChevronRight, ChevronLeft, Plus, Trash2, Users, Camera, ImageIcon } from "lucide-react"
+import { AlertTriangle, PenLine, X, ChevronRight, ChevronLeft, Plus, Trash2, Users, Camera, ImageIcon, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -118,7 +118,7 @@ export function IncidentFormDialog({ defaultReporter = "" }: { defaultReporter?:
   const [isPending, startTransition] = useTransition()
 
   const initialForm = {
-    title: "", routedTo: "", location: "", severity: "low", status: "open",
+    title: "", classification: "", routedTo: "", location: "", severity: "low", status: "open",
     incidentDate: "", incidentTime: "",
     description: "", directCauses: "", rootCauses: "",
     propertyDamage: "", damageCost: "", immediateActions: "",
@@ -220,15 +220,31 @@ export function IncidentFormDialog({ defaultReporter = "" }: { defaultReporter?:
         {step === 1 && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1 sm:col-span-2">
-              <Label>{t("incidentForm.routeTo")} <span className="text-destructive">*</span></Label>
-              <Select value={form.routedTo} onValueChange={v => setForm(f => ({ ...f, routedTo: v }))}>
-                <SelectTrigger><SelectValue placeholder={t("incidentForm.routePlaceholder")} /></SelectTrigger>
+              <Label>{t("incidentForm.classification")} <span className="text-destructive">*</span></Label>
+              {/* التصنيف يحدّد جهة التحويل تلقائياً وحصرياً: داخلية → HR، خارجية → المالية. */}
+              <Select
+                value={form.classification}
+                onValueChange={v => setForm(f => ({ ...f, classification: v, routedTo: v === "external" ? "finance" : "hr" }))}
+              >
+                <SelectTrigger><SelectValue placeholder={t("incidentForm.classificationPlaceholder")} /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="hr">{t("incidentForm.routeHr")}</SelectItem>
-                  <SelectItem value="finance">{t("incidentForm.routeFinance")}</SelectItem>
+                  <SelectItem value="internal">{t("incidentForm.classInternal")}</SelectItem>
+                  <SelectItem value="external">{t("incidentForm.classExternal")}</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">{t("incidentForm.routeHint")}</p>
+              {form.classification ? (
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <ArrowLeft className="size-3.5 rtl:rotate-0 ltr:rotate-180" aria-hidden />
+                  <span>
+                    {t("incidentForm.routeTo")}:{" "}
+                    <span className="font-medium text-foreground">
+                      {form.classification === "external" ? t("incidentForm.routeFinance") : t("incidentForm.routeHr")}
+                    </span>
+                  </span>
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">{t("incidentForm.routeHint")}</p>
+              )}
             </div>
             <div className="flex flex-col gap-1 sm:col-span-2">
               <Label>{t("incidentForm.incidentType")} <span className="text-destructive">*</span></Label>
@@ -452,7 +468,7 @@ export function IncidentFormDialog({ defaultReporter = "" }: { defaultReporter?:
             {step === 1 ? t("incidentForm.cancel") : t("incidentForm.previous")}
           </Button>
           {step < 3 ? (
-            <Button type="button" onClick={() => setStep(s => s + 1)} disabled={step === 1 && (!form.title || !form.routedTo)} className="gap-1">
+            <Button type="button" onClick={() => setStep(s => s + 1)} disabled={step === 1 && (!form.title || !form.classification)} className="gap-1">
               {t("incidentForm.next")} <ChevronLeft className="size-4 rtl:rotate-0 ltr:rotate-180" />
             </Button>
           ) : (

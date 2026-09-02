@@ -7,6 +7,7 @@ import { put, del } from "@vercel/blob"
 import { requireScope, assertWritable } from "@/lib/session"
 import { hasRoleSignature } from "@/lib/signature-check"
 import { roleKindFor } from "@/lib/signature-roles"
+import { assertNotArchived } from "@/app/actions/lifecycle"
 
 export type AttachmentRow = {
   id: number
@@ -89,6 +90,10 @@ export async function uploadAttachment(formData: FormData) {
   if (!module || !recordId || !file) {
     throw new Error("بيانات المرفق غير مكتملة")
   }
+  // السجلات المؤرشفة للقراءة فقط — لا مرفقات جديدة.
+  if (module === "violations" || module === "incidents") {
+    await assertNotArchived(module, recordId, organizationId)
+  }
 
   const safeName = file.name?.replace(/[^\w.\-]+/g, "_") || `${kind}.png`
   const key = `hse/${userId}/${module}/${recordId}/${Date.now()}-${safeName}`
@@ -127,6 +132,9 @@ export async function deleteAttachment(id: number) {
 
   const row = rows[0]
   if (!row) return
+  if (row.module === "violations" || row.module === "incidents") {
+    await assertNotArchived(row.module, row.recordId, organizationId)
+  }
 
   try {
     if (row.url) await del(row.url)
