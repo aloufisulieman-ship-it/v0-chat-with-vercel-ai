@@ -38,7 +38,9 @@ const TRANSITIONS: Record<LifecycleStatus, LifecycleStatus[]> = {
   referred: ["in_progress", "closed"],
   in_progress: ["closed"],
   closed: ["archived"],
-  archived: ["new", "in_progress"], // إعادة فتح (أدمن فقط)
+  // المؤرشف مقفول: لا انتقالات عادية. إعادة الفتح مسار مستقل (reopenRecord، أدمن فقط)
+  // لا يمرّ عبر canTransition كي لا تظهر "بدء المعالجة" على سجل مؤرشف.
+  archived: [],
 }
 
 export function canTransition(from: LifecycleStatus, to: LifecycleStatus): boolean {
@@ -187,7 +189,7 @@ export function lifecycleUi(locale: L = "ar") {
     dueDate: "تاريخ الاستحقاق (اختياري)",
     alsoEmail: "إرسال التقرير بالبريد أيضاً",
     closeTitle: "إغلاق السجل",
-    closeDesc: "سجّل الإجراء المتخذ. يُؤرشَف السجل تلقائياً بعد الإغلاق.",
+    closeDesc: "سجّل الإجراء المتخذ. يُؤرشَف السجل تلقائياً بعد ال��غلاق.",
     closureAction: "الإجراء المتخذ (إلزامي)",
     evidence: "ملف إثبات (اختياري)",
     reopenTitle: "إعادة فتح سجل مؤرشف",

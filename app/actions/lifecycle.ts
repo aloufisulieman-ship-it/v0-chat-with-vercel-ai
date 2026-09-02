@@ -91,7 +91,7 @@ export async function getRecordEvents(module: LifecycleModule, recordId: number)
         eq(recordEvent.recordId, recordId),
       ),
     )
-    .orderBy(desc(recordEvent.createdAt))
+    .orderBy(desc(recordEvent.createdAt), desc(recordEvent.id))
 }
 
 /* ---------------- الانتقالات ---------------- */
