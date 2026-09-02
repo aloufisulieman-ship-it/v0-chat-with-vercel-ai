@@ -7,24 +7,15 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { AttachmentsManager, fileUrl } from "@/components/attachments-manager"
+import { EmailProviderDialog } from "@/components/email-provider-dialog"
 import { getAttachments, type AttachmentRow } from "@/app/actions/attachments"
 import { downloadElementPdf, elementToPdf } from "@/lib/pdf"
-import {
-  buildEmailContent,
-  exportReportByEmail,
-  emailExportNotice,
-  emailExportLabels,
-  type EmailExportContext,
-  type EmailSenderInfo,
-} from "@/lib/email-export"
+import { buildEmailContent, type EmailExportContext, type EmailSenderInfo } from "@/lib/email-export"
 import { signatureRoles as signatureRolesConfig, labelForSignatureKind } from "@/lib/signature-roles"
 import { toast } from "@/hooks/use-toast"
 import { useI18n } from "@/lib/i18n/client"
@@ -101,16 +92,11 @@ export function RecordDetailsDialog({
 }) {
   const { t, locale } = useI18n()
   const emailLocale = locale === "en" ? "en" : "ar"
-  const ui = emailExportLabels(emailLocale)
   const [open, setOpen] = useState(false)
   const [attachments, setAttachments] = useState<AttachmentRow[]>(initialAttachments)
   const [busy, setBusy] = useState<"pdf" | "email" | null>(null)
-  // نافذة تجهيز البريد: اسم الجهة المستلمة وبريدها (اختياريان). زر "فتح تطبيق البريد"
-  // يولّد PDF ثم يفتح بريد الجهاز والمرفق بداخله عبر سلسلة التراجع في lib/email-export.
+  // نافذة اختيار برنامج البريد (EmailProviderDialog).
   const [emailOpen, setEmailOpen] = useState(false)
-  const [emailTo, setEmailTo] = useState("")
-  const [recipientName, setRecipientName] = useState("")
-  const [sending, setSending] = useState(false)
   const reportRef = useRef<HTMLDivElement | null>(null)
   // أدرج أدوار التوقيع الإضافية (مثل توقيع موظف HR/المالية) بعد الأدوار الافتراضية
   // للوحدة، مع تفادي التكرار إن وُجد مفتاح مطابق.
@@ -289,24 +275,14 @@ export function RecordDetailsDialog({
     }
   }
 
-  // الإرسال بالبريد عبر تطبيق البريد في الجهاز مع إرفاق PDF تلقائياً:
-  // نولّد تقرير PDF الكامل (صفحة A4 واحدة، بلا تكرار تواقيع) ثم نمرّره لسلسلة
-  // التراجع الموحّدة: Web Share (جوال) → ملف .eml (Outlook/سطح المكتب) → mailto (احتياط).
-  // نص الرسالة يُبنى من القالب الرسمي في lib/email-export ولا يحوي أي تعليمات للمستخدم.
-  async function sendEmail() {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    const to = emailTo.trim()
-    if (to && !emailRegex.test(to)) {
-      toast({ title: t("recordDetails.invalidEmail"), variant: "destructive" })
-      return
-    }
-    setSending(true)
-    let el: HTMLElement | null = null
+  // يبني PDF التقرير (صفحة A4 واحدة، بلا تكرار تواقيع) ونص الرسالة الرسمي، ويمرّرهما
+  // لنافذة اختيار برنامج البريد (EmailProviderDialog) التي تنفّذ الإرسال حسب الخيار:
+  // Outlook/Gmail (OAuth من بريد المستخدم) | تطبيق البريد على الجهاز | نسخ + تنزيل.
+  async function buildEmailPayload(recipientName: string) {
+    const el = await buildReportElement()
     try {
-      el = await buildReportElement()
       const pdf = await elementToPdf(el, { singlePage: true })
       const pdfBlob = pdf.output("blob")
-
       const content = emailContext
         ? buildEmailContent(emailContext, { recipientName, sender: emailSender, locale: emailLocale })
         : {
@@ -316,24 +292,9 @@ export function RecordDetailsDialog({
             body: t("recordDetails.mailReport").replace("{title}", title),
             fileName: `${fileBase}.pdf`,
           }
-
-      const method = await exportReportByEmail({ pdfBlob, content, to: to || undefined })
-      const notice = emailExportNotice(method, emailLocale)
-      toast({ title: notice.title, description: notice.description, variant: method === "mailto" ? "destructive" : "default" })
-      setEmailOpen(false)
-      setEmailTo("")
-      setRecipientName("")
-    } catch (err) {
-      // إلغاء المستخدم لقائمة المشاركة ليس خطأً.
-      if (err instanceof Error && err.name === "AbortError") return
-      toast({
-        title: t("recordDetails.emailFailedTitle"),
-        description: err instanceof Error ? err.message : t("recordDetails.genericError"),
-        variant: "destructive",
-      })
+      return { pdfBlob, content }
     } finally {
-      if (el) document.body.removeChild(el)
-      setSending(false)
+      document.body.removeChild(el)
     }
   }
 
@@ -440,49 +401,8 @@ export function RecordDetailsDialog({
       </DialogContent>
     </Dialog>
 
-    {/* نافذة تجهيز البريد — تفتح تطبيق البريد في الجهاز مع تقرير PDF مرفقاً تلقائياً */}
-    <Dialog open={emailOpen} onOpenChange={(v) => !sending && setEmailOpen(v)}>
-      <DialogContent dir={emailLocale === "ar" ? "rtl" : "ltr"} className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>{ui.title}</DialogTitle>
-          <DialogDescription>{ui.description}</DialogDescription>
-        </DialogHeader>
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor={`email-name-${recordId}`}>{ui.recipientName}</Label>
-            <Input
-              id={`email-name-${recordId}`}
-              placeholder={ui.recipientNamePlaceholder}
-              value={recipientName}
-              onChange={(e) => setRecipientName(e.target.value)}
-              disabled={sending}
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor={`email-to-${recordId}`}>{ui.recipientEmail}</Label>
-            <Input
-              id={`email-to-${recordId}`}
-              type="email"
-              dir="ltr"
-              placeholder="name@example.com"
-              value={emailTo}
-              onChange={(e) => setEmailTo(e.target.value)}
-              disabled={sending}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground">{ui.attachNote}</p>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setEmailOpen(false)} disabled={sending}>
-            {t("recordDetails.cancel")}
-          </Button>
-          <Button onClick={sendEmail} disabled={sending} className="gap-2">
-            {sending ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />}
-            {sending ? ui.preparing : ui.openMail}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    {/* نافذة اختيار برنامج البريد — Outlook/Gmail (OAuth) أو تطبيق الجهاز أو نسخ + تنزيل */}
+    <EmailProviderDialog open={emailOpen} onOpenChange={setEmailOpen} locale={emailLocale} build={buildEmailPayload} />
     </>
   )
 }
