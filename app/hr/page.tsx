@@ -8,6 +8,7 @@ import { getHrViolations, getHrIncidents, updateHrViolation, updateHrIncident } 
 import { getServerT } from "@/lib/i18n/server"
 import { getNotifications } from "@/app/actions/lifecycle"
 import { DeptInbox } from "@/components/lifecycle/dept-inbox"
+import { DeptTabs } from "@/components/lifecycle/dept-tabs"
 import { statusLabel, severityLabel, categoryLabel } from "@/lib/i18n/labels"
 import { formatParties } from "@/lib/incident-types"
 import { normalizeHrStatus, parseHrAttachments } from "@/lib/hr-status"
@@ -112,13 +113,10 @@ export default async function HrPage() {
               />
             ))}
           </div>
-        )}
-      </section>
-
-      {/* القائمة الثانية: الحوادث الداخلية المحوّلة (طرف متضرر موظف) */}
-      <section className="mt-10">
-        <h2 className="mb-3 text-lg font-semibold text-foreground">{t("hr.incidentsSection")}</h2>
-        {activeIncidents.length === 0 ? (
+        )
+        }
+        incidents={
+        activeIncidents.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
             {t("hr.noIncidents")}
           </p>
@@ -178,8 +176,9 @@ export default async function HrPage() {
               />
             ))}
           </div>
-        )}
-      </section>
+        )
+        }
+      />
     </AppShell>
   )
 }

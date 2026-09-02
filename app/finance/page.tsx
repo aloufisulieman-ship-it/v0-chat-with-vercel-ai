@@ -8,6 +8,7 @@ import { getFinanceIncidents, getFinanceViolations, updateFinanceIncident, updat
 import { getServerT } from "@/lib/i18n/server"
 import { getNotifications } from "@/app/actions/lifecycle"
 import { DeptInbox } from "@/components/lifecycle/dept-inbox"
+import { DeptTabs } from "@/components/lifecycle/dept-tabs"
 import { statusLabel, categoryLabel } from "@/lib/i18n/labels"
 import { normalizeFinanceStatus } from "@/lib/finance-status"
 import { FINANCE_OFFICER_SIGNATURE_ROLE } from "@/lib/signature-roles"
@@ -46,9 +47,15 @@ export default async function FinancePage() {
         <DeptInbox dept="finance" items={inbox} locale={locale === "en" ? "en" : "ar"} />
       </div>
 
-      <section className="mt-8">
-        <h2 className="mb-3 text-lg font-semibold text-foreground">{t("finance.violationsSection")}</h2>
-        {activeViolations.length === 0 ? (
+      {/* تبويبان: المخالفات الخارجية | الحوادث الخارجية (طرف متضرر من خارج المنشأة) */}
+      <DeptTabs
+        violationsLabel={t("finance.violationsSection")}
+        incidentsLabel={t("finance.incidentsSection")}
+        violationsCount={activeViolations.length}
+        incidentsCount={activeIncidents.length}
+        defaultTab={activeViolations.length === 0 && activeIncidents.length > 0 ? "incidents" : "violations"}
+        violations={
+        activeViolations.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
             {t("finance.noViolations")}
           </p>
@@ -114,12 +121,10 @@ export default async function FinancePage() {
               />
             ))}
           </div>
-        )}
-      </section>
-
-      <section className="mt-8">
-        <h2 className="mb-3 text-lg font-semibold text-foreground">{t("finance.incidentsSection")}</h2>
-        {activeIncidents.length === 0 ? (
+        )
+        }
+        incidents={
+        activeIncidents.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
             {t("finance.noIncidents")}
           </p>
@@ -178,8 +183,9 @@ export default async function FinancePage() {
               />
             ))}
           </div>
-        )}
-      </section>
+        )
+        }
+      />
     </AppShell>
   )
 }
