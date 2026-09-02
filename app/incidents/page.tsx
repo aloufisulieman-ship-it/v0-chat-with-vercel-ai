@@ -16,13 +16,25 @@ import { HrClosureBlock } from "@/components/hr-closure-block"
 import { FinanceStatusBadge } from "@/components/finance-status-badge"
 import { FinanceClosureBlock } from "@/components/finance-closure-block"
 import { IncidentFormDialog } from "./incident-form"
+import { LifecycleFilterBar } from "@/components/lifecycle/lifecycle-filter-bar"
+import { DeptBadge, LifecycleBadge, SourceBadge } from "@/components/lifecycle/lifecycle-badges"
+import { LifecycleActions } from "@/components/lifecycle/lifecycle-actions"
+import { applyLifecycleFilters, isArchived, lifecycleLabel, lifecycleUi, normalizeLifecycle } from "@/lib/lifecycle"
 
 type Incident = Awaited<ReturnType<typeof getIncidents>>[number]
 
-export default async function IncidentsPage() {
+export default async function IncidentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string; dept?: string; source?: string }>
+}) {
   const user = await requireModule("incidents")
-  const [incidents, companyProfile] = await Promise.all([getIncidents(), getCompany().catch(() => null)])
-  const { t } = await getServerT()
+  const [incidents, companyProfile, sp] = await Promise.all([getIncidents(), getCompany().catch(() => null), searchParams])
+  const { t, locale } = await getServerT()
+  const isAdmin = user.role === "admin"
+  const emailLocale = locale === "en" ? "en" : "ar"
+  const lc = lifecycleUi(emailLocale)
+  const lf = applyLifecycleFilters(incidents, sp)
   const notifiedLabel = (v: string | null) => (v === "yes" ? t("incidents.yes") : t("incidents.no"))
   // بيانات المُرسل المُلحقة تلقائياً بتوقيع رسالة البريد الرسمية.
   const emailSender: EmailSenderInfo = {
@@ -47,22 +59,24 @@ export default async function IncidentsPage() {
     { key: "location", header: t("incidents.colLocation"), render: (r) => <span className="text-muted-foreground">{r.location || "-"}</span> },
     { key: "reportedBy", header: t("incidents.colReporter"), render: (r) => <span className="text-muted-foreground">{r.reportedBy || "-"}</span> },
     { key: "severity", header: t("incidents.colSeverity"), render: (r) => <SeverityBadge severity={r.severity ?? "low"} /> },
-    { key: "status", header: t("incidents.colStatus"), render: (r) => <StatusBadge status={r.status ?? "open"} /> },
+    { key: "status", header: t("incidents.colStatus"), render: (r) => <LifecycleBadge status={r.lifecycleStatus} locale={emailLocale} /> },
+    { key: "source", header: lc.source, render: (r) => <SourceBadge source={r.source} locale={emailLocale} /> },
     { key: "incidentDate", header: t("incidents.colDate"), render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.incidentDate ?? "-"}</span> },
-    {
-      key: "routedTo", header: t("incidents.colRoutedTo"),
-      render: (r) => r.routedTo === "hr"
-        ? <HrStatusBadge hrStatus={r.hrStatus} />
-        : r.routedTo === "finance"
-          ? <FinanceStatusBadge financeStatus={r.financeStatus} />
-          : <span className="text-xs text-muted-foreground">{t("incidents.notRouted")}</span>,
-    },
+    { key: "routedTo", header: t("incidents.colRoutedTo"), render: (r) => <DeptBadge dept={r.assignedDept ?? r.routedTo} locale={emailLocale} /> },
     {
       key: "actions",
       header: "",
       className: "text-left",
       render: (r) => (
         <div className="flex items-center justify-end gap-1">
+          <LifecycleActions
+            module="incidents"
+            recordId={r.id}
+            status={r.lifecycleStatus}
+            assignedDept={r.assignedDept}
+            isAdmin={isAdmin}
+            locale={emailLocale}
+          />
           <RecordDetailsDialog
             module="incidents"
             recordId={r.id}
@@ -77,7 +91,7 @@ export default async function IncidentsPage() {
               { label: t("incidents.fIncidentDate"), value: r.incidentDate ?? "-" },
               { label: t("incidents.fIncidentTime"), value: r.incidentTime || "-" },
               { label: t("incidents.fSeverity"), value: r.severity ? severityLabel(t, r.severity) : "-" },
-              { label: t("incidents.fStatus"), value: r.status ? statusLabel(t, r.status) : "-" },
+              { label: t("incidents.fStatus"), value: lifecycleLabel(normalizeLifecycle(r.lifecycleStatus), emailLocale) },
               { label: t("incidents.fReporter"), value: r.reportedBy || "-" },
               { label: t("incidents.fDescription"), value: r.description || "-" },
               { label: t("incidents.fDirectCauses"), value: r.directCauses || "-" },
@@ -98,6 +112,7 @@ export default async function IncidentsPage() {
               { label: t("incidents.sigGm"), value: r.gmSignature || "" },
             ]}
             initialAttachments={[]}
+            lifecycle={{ status: r.lifecycleStatus, source: r.source, assignedDept: r.assignedDept ?? r.routedTo }}
             emailSender={emailSender}
             emailContext={{
               kind: "incident",
@@ -108,7 +123,7 @@ export default async function IncidentsPage() {
               location: r.location || "",
               severity: r.severity ? severityLabel(t, r.severity) : "",
               injuries: injuriesText(r),
-              status: r.status ? statusLabel(t, r.status) : "",
+              status: lifecycleLabel(normalizeLifecycle(r.lifecycleStatus), emailLocale),
             }}
             extraSection={
               r.routedTo === "hr" ? (
@@ -131,7 +146,7 @@ export default async function IncidentsPage() {
               ) : undefined
             }
           />
-          <DeleteButton id={r.id} action={deleteIncident} />
+          {!isArchived(r) && <DeleteButton id={r.id} action={deleteIncident} />}
         </div>
       ),
     },
@@ -151,9 +166,10 @@ export default async function IncidentsPage() {
         <KpiCard label={t("incidents.kpiClosed")} value={closed} icon={CheckCircle2} tone="primary" />
       </div>
 
-      <div className="mt-6">
-        <h2 className="mb-3 text-lg font-semibold text-foreground">{t("incidents.registryTitle")}</h2>
-        <DataTable columns={columns} rows={incidents} emptyMessage={t("incidents.emptyMessage")} />
+      <div className="mt-6 flex flex-col gap-3">
+        <h2 className="text-lg font-semibold text-foreground">{t("incidents.registryTitle")}</h2>
+        <LifecycleFilterBar locale={emailLocale} counts={lf.counts} status={lf.status} dept={lf.dept} source={lf.source} />
+        <DataTable columns={columns} rows={lf.filtered} emptyMessage={t("incidents.emptyMessage")} />
       </div>
     </AppShell>
   )

@@ -6,6 +6,8 @@ import { Eye, Users, Ban, AlertTriangle } from "lucide-react"
 import { requireModule } from "@/lib/session"
 import { getHrViolations, getHrIncidents, updateHrViolation, updateHrIncident } from "@/app/actions/hr"
 import { getServerT } from "@/lib/i18n/server"
+import { getNotifications } from "@/app/actions/lifecycle"
+import { DeptInbox } from "@/components/lifecycle/dept-inbox"
 import { statusLabel, severityLabel, categoryLabel } from "@/lib/i18n/labels"
 import { formatParties } from "@/lib/incident-types"
 import { normalizeHrStatus, parseHrAttachments } from "@/lib/hr-status"
@@ -14,8 +16,8 @@ import { HrActionCard } from "./hr-action-card"
 
 export default async function HrPage() {
   const user = await requireModule("hr")
-  const { t } = await getServerT()
-  const [violations, incidents] = await Promise.all([getHrViolations(), getHrIncidents()])
+  const { t, locale } = await getServerT()
+  const [violations, incidents, inbox] = await Promise.all([getHrViolations(), getHrIncidents(), getNotifications("hr")])
 
   // القوائم النشطة تستبعد المغلقة: بمجرد الإغلاق تختفي المخالفة/الحادثة من قسم HR
   // وتظهر ضمن سجلّي "المخالفات"/"الحوادث" العامّين. عدّادات الـ KPI تبقى على القوائم
@@ -35,6 +37,10 @@ export default async function HrPage() {
         <KpiCard label={t("hr.kpiViolations")} value={violations.length} icon={Ban} tone="blue" />
         <KpiCard label={t("hr.kpiIncidents")} value={incidents.length} icon={AlertTriangle} tone="accent" />
         <KpiCard label={t("hr.kpiPending")} value={pendingViolations + pendingIncidents} icon={Users} tone="primary" />
+      </div>
+
+      <div className="mt-6">
+        <DeptInbox dept="hr" items={inbox} locale={locale === "en" ? "en" : "ar"} />
       </div>
 
       {/* القائمة الأولى: المخالفات المحوّلة للموارد البشرية */}

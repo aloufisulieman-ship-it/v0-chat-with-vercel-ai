@@ -20,6 +20,10 @@ import { FinanceClosureBlock } from "@/components/finance-closure-block"
 import { EntryModeBadge } from "@/components/entry-mode-badge"
 import { ViolationFormDialog } from "./violation-form"
 import { ViolationEditDialog } from "./violation-edit-dialog"
+import { LifecycleFilterBar } from "@/components/lifecycle/lifecycle-filter-bar"
+import { DeptBadge, LifecycleBadge, SourceBadge } from "@/components/lifecycle/lifecycle-badges"
+import { LifecycleActions } from "@/components/lifecycle/lifecycle-actions"
+import { applyLifecycleFilters, isArchived, lifecycleLabel, lifecycleUi, normalizeLifecycle } from "@/lib/lifecycle"
 
 type Violation = Awaited<ReturnType<typeof getViolations>>[number]
 
@@ -31,7 +35,14 @@ async function handleDelete(id: number) {
 export default async function ViolationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ evidence?: string; from?: string; detectedBy?: string }>
+  searchParams: Promise<{
+    evidence?: string
+    from?: string
+    detectedBy?: string
+    status?: string
+    dept?: string
+    source?: string
+  }>
 }) {
   const user = await requireModule("violations")
   const [violations, employees, operational, aiSignatureInfo, companyProfile] = await Promise.all([
@@ -71,6 +82,11 @@ export default async function ViolationsPage({
   const closed = violations.filter((v) => isViolationClosed(v)).length
   const open = violations.length - closed
 
+  // تصفية دورة الحياة (تبويبات الحالة + الجهة + المصدر) من عنوان الصفحة.
+  const emailLocale = locale === "en" ? "en" : "ar"
+  const lc = lifecycleUi(emailLocale)
+  const lf = applyLifecycleFilters(violations, sp)
+
   const columns: Column<Violation>[] = [
     { key: "employeeName", header: t("violations.colEmployee"), render: (r) => <span className="font-medium">{r.employeeName}</span> },
     { key: "employeeNo", header: t("violations.colEmployeeNo"), render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.employeeNo || "-"}</span> },
@@ -78,21 +94,29 @@ export default async function ViolationsPage({
     { key: "place", header: t("violations.colPlace"), render: (r) => <MissingOriginalField value={r.place} /> },
     { key: "detectedBy", header: t("violations.colDetectedBy"), render: (r) => r.detectedBy ? <span className="text-muted-foreground">{r.detectedBy}</span> : <span className="text-muted-foreground">-</span> },
     { key: "violationDate", header: t("violations.colDate"), render: (r) => <span className="font-mono text-xs text-muted-foreground" dir="ltr">{r.violationDate ?? "-"}</span> },
-    { key: "status", header: t("violations.colStatus"), render: (r) => <StatusBadge status={effectiveViolationStatus(r)} /> },
-    { key: "entryMode", header: t("violations.colSource"), render: (r) => <EntryModeBadge entryMode={r.entryMode} /> },
+    { key: "status", header: t("violations.colStatus"), render: (r) => <LifecycleBadge status={r.lifecycleStatus} locale={emailLocale} /> },
     {
-      key: "referral", header: t("violations.colReferral"),
-      render: (r) =>
-        r.category === "external" ? (
-          <FinanceStatusBadge financeStatus={r.financeStatus} />
-        ) : (
-          <HrStatusBadge hrStatus={r.hrStatus} />
-        ),
+      key: "source", header: t("violations.colSource"),
+      render: (r) => (
+        <div className="flex flex-wrap items-center gap-1">
+          <SourceBadge source={r.source} locale={emailLocale} />
+          {r.source !== "ai_detection" && <EntryModeBadge entryMode={r.entryMode} />}
+        </div>
+      ),
     },
+    { key: "referral", header: lc.assignedTo, render: (r) => <DeptBadge dept={r.assignedDept} locale={emailLocale} /> },
     {
       key: "actions", header: "", className: "text-left",
       render: (r) => (
         <div className="flex items-center justify-end gap-1">
+          <LifecycleActions
+            module="violations"
+            recordId={r.id}
+            status={r.lifecycleStatus}
+            assignedDept={r.assignedDept}
+            isAdmin={isAdmin}
+            locale={emailLocale}
+          />
           <RecordDetailsDialog
             module="violations"
             recordId={r.id}
@@ -113,8 +137,9 @@ export default async function ViolationsPage({
               { label: t("violations.fDescription"), value: r.description || NOT_IN_SOURCE },
               { label: t("violations.fWitnesses"), value: r.witnesses || "-" },
               { label: t("violations.fProposedAction"), value: r.proposedAction || "-" },
-              { label: t("violations.fStatus"), value: statusLabel(t, effectiveViolationStatus(r)) },
+              { label: t("violations.fStatus"), value: lifecycleLabel(normalizeLifecycle(r.lifecycleStatus), emailLocale) },
             ]}
+            lifecycle={{ status: r.lifecycleStatus, source: r.source, assignedDept: r.assignedDept }}
             signatures={[
               { label: t("violations.sigViolator"), value: r.violatorSignature || "" },
               { label: t("violations.sigReporter"), value: r.editorSignature || "" },
@@ -141,7 +166,7 @@ export default async function ViolationsPage({
               location: r.place || "",
               // لا يوجد حقل خطورة في سجل المخالفة؛ يُحذف سطره تلقائياً من الرسالة.
               classification: r.category ? categoryLabel(t, r.category) : "",
-              status: statusLabel(t, effectiveViolationStatus(r)),
+              status: lifecycleLabel(normalizeLifecycle(r.lifecycleStatus), emailLocale),
             }}
             extraSection={
               r.category === "external" ? (
@@ -164,8 +189,9 @@ export default async function ViolationsPage({
               )
             }
           />
-          {isAdmin && <ViolationEditDialog violation={r} />}
-          <DeleteButton id={r.id} action={handleDelete} />
+          {/* المؤرشف للقراءة فقط: لا تعديل ولا حذف (الخادم يرفضها أيضاً). */}
+          {isAdmin && !isArchived(r) && <ViolationEditDialog violation={r} />}
+          {!isArchived(r) && <DeleteButton id={r.id} action={handleDelete} />}
         </div>
       ),
     },
@@ -191,9 +217,10 @@ export default async function ViolationsPage({
         <KpiCard label={t("violations.openInProgress")} value={open} icon={Clock} tone="accent" />
         <KpiCard label={t("violations.closed")} value={closed} icon={CheckCircle2} tone="primary" />
       </div>
-      <div className="mt-6">
-        <h2 className="mb-3 text-lg font-semibold text-foreground">{t("violations.registryTitle")}</h2>
-        <DataTable columns={columns} rows={violations} emptyMessage={t("violations.emptyMessage")} />
+      <div className="mt-6 flex flex-col gap-3">
+        <h2 className="text-lg font-semibold text-foreground">{t("violations.registryTitle")}</h2>
+        <LifecycleFilterBar locale={emailLocale} counts={lf.counts} status={lf.status} dept={lf.dept} source={lf.source} />
+        <DataTable columns={columns} rows={lf.filtered} emptyMessage={t("violations.emptyMessage")} />
       </div>
     </AppShell>
   )

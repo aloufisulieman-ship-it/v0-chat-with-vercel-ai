@@ -1,8 +1,13 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { Eye, Download, Mail, Loader2, PenLine } from "lucide-react"
+import { Eye, Download, Mail, Loader2, PenLine, Lock } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { cn } from "@/lib/utils"
+import { isArchived, lifecycleUi, type LifecycleModule } from "@/lib/lifecycle"
+import { DeptBadge, LifecycleBadge, SourceBadge } from "@/components/lifecycle/lifecycle-badges"
+import { RecordTimeline } from "@/components/lifecycle/record-timeline"
 import {
   Dialog,
   DialogContent,
@@ -65,6 +70,7 @@ export function RecordDetailsDialog({
   extraSignatureRoles,
   emailContext,
   emailSender,
+  lifecycle,
 }: {
   module: string
   recordId: number
@@ -75,6 +81,13 @@ export function RecordDetailsDialog({
   signatures?: DetailField[]
   initialAttachments: AttachmentRow[]
   trigger?: React.ReactNode
+  // دورة الحياة (مخالفات/حوادث فقط): شارات الحالة/المصدر/الجهة، تبويب سجل الحركة،
+  // ووضع القراءة فقط عند الأرشفة (يبقى PDF/البريد متاحين).
+  lifecycle?: {
+    status: string | null | undefined
+    source: string | null | undefined
+    assignedDept?: string | null
+  }
   // بيانات القالب الرسمي لرسالة البريد (مخالفة/حادث). عند غيابها يُستخدم قالب عام.
   emailContext?: EmailExportContext
   // بيانات المُرسل (اسم الشركة/الهاتف/البريد) المُلحقة تلقائياً بتوقيع الرسالة.
@@ -92,11 +105,15 @@ export function RecordDetailsDialog({
 }) {
   const { t, locale } = useI18n()
   const emailLocale = locale === "en" ? "en" : "ar"
+  const lc = lifecycleUi(emailLocale)
+  const archived = !!lifecycle && isArchived({ lifecycleStatus: lifecycle.status })
+  const isLifecycleModule = module === "violations" || module === "incidents"
   const [open, setOpen] = useState(false)
   const [attachments, setAttachments] = useState<AttachmentRow[]>(initialAttachments)
   const [busy, setBusy] = useState<"pdf" | "email" | null>(null)
   // نافذة اختيار برنامج البريد (EmailProviderDialog).
   const [emailOpen, setEmailOpen] = useState(false)
+  const [tab, setTab] = useState<"details" | "timeline">("details")
   const reportRef = useRef<HTMLDivElement | null>(null)
   // أدرج أدوار التوقيع الإضافية (مثل توقيع موظف HR/المالية) بعد الأدوار الافتراضية
   // للوحدة، مع تفادي التكرار إن وُجد مفتاح مطابق.
@@ -312,7 +329,24 @@ export function RecordDetailsDialog({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {subtitle && <DialogDescription>{subtitle}</DialogDescription>}
+          {lifecycle && (
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <LifecycleBadge status={lifecycle.status} locale={emailLocale} />
+              <SourceBadge source={lifecycle.source} locale={emailLocale} />
+              {lifecycle.assignedDept && <DeptBadge dept={lifecycle.assignedDept} locale={emailLocale} />}
+            </div>
+          )}
         </DialogHeader>
+
+        {archived && (
+          <div
+            role="status"
+            className="flex items-start gap-2 rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground"
+          >
+            <Lock className="mt-0.5 size-4 shrink-0" aria-hidden />
+            <span>{lc.archivedNotice}</span>
+          </div>
+        )}
 
         <div className="flex flex-wrap gap-2 border-b border-border pb-4">
           <Button size="sm" onClick={handleDownload} disabled={busy !== null} className="gap-1.5">
@@ -331,6 +365,25 @@ export function RecordDetailsDialog({
           </Button>
         </div>
 
+        {/* تبويب سجل الحركة يظهر فقط لوحدات دورة الحياة (مخالفات/حوادث) */}
+        {isLifecycleModule && lifecycle && (
+          <Tabs value={tab} onValueChange={(v) => setTab(v as "details" | "timeline")}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="details">{lc.details}</TabsTrigger>
+              <TabsTrigger value="timeline">{lc.timeline}</TabsTrigger>
+            </TabsList>
+            <TabsContent value="timeline" className="pt-2">
+              <RecordTimeline
+                module={module as LifecycleModule}
+                recordId={recordId}
+                locale={emailLocale}
+                enabled={open && tab === "timeline"}
+              />
+            </TabsContent>
+          </Tabs>
+        )}
+
+        <div className={cn("flex flex-col gap-4", isLifecycleModule && lifecycle && tab === "timeline" && "hidden")}>
         {/* عرض الحقول على الشاشة */}
         <div ref={reportRef} className="rounded-lg border border-border">
           <dl className="divide-y divide-border text-sm">
@@ -364,6 +417,7 @@ export function RecordDetailsDialog({
           initial={attachments}
           signatureRoles={moduleRoles}
           hideSignatures={!!signatures}
+          readOnly={archived}
         />
 
         {signatures && signatures.length > 0 && (
@@ -398,6 +452,7 @@ export function RecordDetailsDialog({
             </div>
           </section>
         )}
+        </div>
       </DialogContent>
     </Dialog>
 

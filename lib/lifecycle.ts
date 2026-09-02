@@ -97,6 +97,28 @@ export function eventLabel(e: LifecycleEvent | string, locale: L = "ar"): string
   return (locale === "en" ? en : ar)[e] ?? e
 }
 
+// تصفية صفوف حسب searchParams (status/dept/source) وحساب عدّادات التبويبات.
+export function applyLifecycleFilters<T extends { lifecycleStatus?: string | null; assignedDept?: string | null; source?: string | null }>(
+  rows: T[],
+  sp: { status?: string; dept?: string; source?: string },
+) {
+  const counts = { all: rows.length } as Record<LifecycleStatus | "all", number>
+  for (const st of LIFECYCLE_STATUSES) counts[st] = 0
+  for (const r of rows) counts[normalizeLifecycle(r.lifecycleStatus)]++
+
+  const status = sp.status && (LIFECYCLE_STATUSES as string[]).includes(sp.status) ? sp.status : ""
+  const dept = sp.dept && (DEPTS as string[]).includes(sp.dept) ? sp.dept : ""
+  const source = sp.source === "ai_detection" || sp.source === "manual" ? sp.source : ""
+
+  const filtered = rows.filter((r) => {
+    if (status && normalizeLifecycle(r.lifecycleStatus) !== status) return false
+    if (dept && (r.assignedDept ?? "") !== dept) return false
+    if (source && (r.source ?? "manual") !== source) return false
+    return true
+  })
+  return { filtered, counts, status, dept, source }
+}
+
 // ألوان شارات الحالة (Tailwind tokens فقط).
 export function lifecycleBadgeClass(s: LifecycleStatus): string {
   switch (s) {

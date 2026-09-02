@@ -6,6 +6,8 @@ import { Eye, Banknote, Ban, CheckCircle2 } from "lucide-react"
 import { requireModule } from "@/lib/session"
 import { getFinanceIncidents, getFinanceViolations, updateFinanceIncident, updateFinanceViolation } from "@/app/actions/finance"
 import { getServerT } from "@/lib/i18n/server"
+import { getNotifications } from "@/app/actions/lifecycle"
+import { DeptInbox } from "@/components/lifecycle/dept-inbox"
 import { statusLabel, categoryLabel } from "@/lib/i18n/labels"
 import { normalizeFinanceStatus } from "@/lib/finance-status"
 import { FINANCE_OFFICER_SIGNATURE_ROLE } from "@/lib/signature-roles"
@@ -14,8 +16,8 @@ import { FinanceActionCard } from "./finance-action-card"
 
 export default async function FinancePage() {
   const user = await requireModule("finance")
-  const { t } = await getServerT()
-  const [violations, incidents] = await Promise.all([getFinanceViolations(), getFinanceIncidents()])
+  const { t, locale } = await getServerT()
+  const [violations, incidents, inbox] = await Promise.all([getFinanceViolations(), getFinanceIncidents(), getNotifications("finance")])
 
   const allItems = [...violations, ...incidents]
   const pending = allItems.filter((v) => normalizeFinanceStatus(v.financeStatus) !== "closed").length
@@ -38,6 +40,10 @@ export default async function FinancePage() {
         <KpiCard label={t("finance.kpiIncidents")} value={incidents.length} icon={Banknote} tone="blue" />
         <KpiCard label={t("finance.kpiPending")} value={pending} icon={Banknote} tone="accent" />
         <KpiCard label={t("finance.kpiClosed")} value={closed} icon={CheckCircle2} tone="primary" />
+      </div>
+
+      <div className="mt-6">
+        <DeptInbox dept="finance" items={inbox} locale={locale === "en" ? "en" : "ar"} />
       </div>
 
       <section className="mt-8">
