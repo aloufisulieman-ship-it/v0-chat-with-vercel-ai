@@ -21,7 +21,7 @@ import {
   user,
   aiDetection,
 } from "@/lib/db/schema"
-import { and, desc, eq, inArray, isNotNull } from "drizzle-orm"
+import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import {
   roleKindFor,
@@ -393,7 +393,7 @@ export async function deletePermit(id: number) {
   revalidatePath("/permits")
 }
 
-// يحدد ما إذا كان المستخدم يملك صلاحية اعتماد/رفض التصاريح (مدير).
+// يحدد ما إذا كان المستخدم يملك صلاح��ة اعتماد/رفض التصاريح (مدير).
 function isPermitApprover(role: string, department: string): boolean {
   return role === "admin" || department === "المدير العام" || department === "مفتش السلامة"
 }
@@ -1123,7 +1123,7 @@ export async function acceptDetectionAsViolation(
     .limit(1)
   if (!det) throw new Error("الاكتشاف غير موجود")
   if (det.status === "converted" && det.linkedViolationNo) {
-    // مُحوّل مسبقاً — أعد رقم المخالفة القائم دون إنشاء تكرار.
+    // مُحوّل مسبقاً — أعد رقم المخالف�� القائم دون إنشاء تكرار.
     return { documentNo: det.linkedViolationNo }
   }
   // حماية إضافية من التحويل المزدوج: هل توجد مخالفة مرتبطة بهذا الاكتشاف أصلاً؟
@@ -1432,11 +1432,78 @@ export async function deleteObservation(id: number) {
 }
 
 /* ---------------- Dashboard aggregates ---------------- */
+// نقطة شهرية في اتجاه الحوادث. monthKey = "YYYY-MM" (تُنسَّق في الواجهة حسب اللغة).
+// كل سلسلة لها عدّان: حسب شهر الوقوع (occurrence) وحسب شهر التسجيل (registration).
+export type TrendPoint = {
+  monthKey: string
+  incidentsByOccurrence: number
+  incidentsByRegistration: number
+  forkliftByOccurrence: number
+  forkliftByRegistration: number
+}
+
+// اتجاه الحوادث لآخر 12 شهراً عبر generate_series حتى تظهر الأشهر الفارغة بقيمة 0.
+// - الحوادث: التجميع على COALESCE(incidentDate, createdAt) للوقوع، وعلى createdAt للتسجيل.
+//   لا تُستبعد المؤرشفة/المغلقة (الاتجاه تاريخي)؛ يُستبعد الملغى فقط.
+// - سلسلة ثانية: رصد كاميرات ساحات الرافعات (ai_detections) لأنواع الرافعات فقط،
+//   باستثناء الإنذارات الكاذبة. الوقوع = detected_at، التسجيل = createdAt.
+async function getIncidentTrend(scope: Awaited<ReturnType<typeof requireScope>>): Promise<TrendPoint[]> {
+  const userFilter = scope.isManager ? sql`true` : sql`"userId" = ${scope.userId}`
+  const result = await db.execute(sql`
+    with months as (
+      select (date_trunc('month', now()) - (g * interval '1 month')) as m
+      from generate_series(11, 0, -1) as g
+    ),
+    inc as (
+      select
+        date_trunc('month', coalesce("incidentDate"::timestamp, "createdAt")) as m_occ,
+        date_trunc('month', "createdAt") as m_reg
+      from incident
+      where "organizationId" = ${scope.organizationId}
+        and ${userFilter}
+        and coalesce(status, '') <> 'cancelled'
+        and coalesce(lifecycle_status, '') <> 'cancelled'
+    ),
+    fk as (
+      select
+        date_trunc('month', detected_at) as m_occ,
+        date_trunc('month', "createdAt") as m_reg
+      from ai_detections
+      where "organizationId" = ${scope.organizationId}
+        and ${userFilter}
+        and status <> 'false_positive'
+        and detection_type in ('pedestrian_near_forklift', 'overspeed', 'restricted_area', 'traffic_congestion')
+    )
+    select
+      to_char(months.m, 'YYYY-MM') as month_key,
+      (select count(*) from inc where inc.m_occ = months.m)::int as inc_occ,
+      (select count(*) from inc where inc.m_reg = months.m)::int as inc_reg,
+      (select count(*) from fk where fk.m_occ = months.m)::int as fk_occ,
+      (select count(*) from fk where fk.m_reg = months.m)::int as fk_reg
+    from months
+    order by months.m
+  `)
+  const rows = result.rows as Array<{
+    month_key: string
+    inc_occ: number
+    inc_reg: number
+    fk_occ: number
+    fk_reg: number
+  }>
+  return rows.map((r) => ({
+    monthKey: r.month_key,
+    incidentsByOccurrence: Number(r.inc_occ) || 0,
+    incidentsByRegistration: Number(r.inc_reg) || 0,
+    forkliftByOccurrence: Number(r.fk_occ) || 0,
+    forkliftByRegistration: Number(r.fk_reg) || 0,
+  }))
+}
+
 export async function getDashboardData() {
   const scope = await requireScope()
   // العزل بين المؤسسات صارم (organizationId دائماً)؛ وداخل المؤسسة يرى المديرُ كل
   // السجلات والموظفُ سجلاته فقط عبر scopeWhere.
-  const [inc, ins, per, rsk, act, obs, vio] = await Promise.all([
+  const [inc, ins, per, rsk, act, obs, vio, trend] = await Promise.all([
     db.select().from(incident).where(scopeWhere({ organizationId: incident.organizationId, userId: incident.userId }, scope)),
     db.select().from(inspection).where(scopeWhere({ organizationId: inspection.organizationId, userId: inspection.userId }, scope)),
     db.select().from(permit).where(scopeWhere({ organizationId: permit.organizationId, userId: permit.userId }, scope)),
@@ -1448,8 +1515,12 @@ export async function getDashboardData() {
       .from(violation)
       .where(scopeWhere({ organizationId: violation.organizationId, userId: violation.userId }, scope))
       .orderBy(desc(violation.createdAt)),
+    getIncidentTrend(scope).catch((err) => {
+      console.error("[dashboard] incident trend query failed:", err instanceof Error ? err.message : err)
+      return [] as TrendPoint[]
+    }),
   ])
-  return { incidents: inc, inspections: ins, permits: per, risks: rsk, actions: act, observations: obs, violations: vio }
+  return { incidents: inc, inspections: ins, permits: per, risks: rsk, actions: act, observations: obs, violations: vio, trend }
 }
 
 /* ---------------- Reports ---------------- */

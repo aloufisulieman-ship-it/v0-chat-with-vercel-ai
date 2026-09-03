@@ -11,7 +11,7 @@ import { ReportsClient } from "./reports-client"
 
 export default async function ReportsPage() {
   const user = await requireModule("reports")
-  const { incidents, inspections, permits, risks, actions } = await getDashboardData()
+  const { incidents, inspections, permits, risks, actions, trend } = await getDashboardData()
   const { locale, t } = await getServerT()
 
   const openIncidents = incidents.filter((i) => i.status !== "closed").length
@@ -24,18 +24,7 @@ export default async function ReportsPage() {
       ? Math.round(inspections.reduce((s, i) => s + (i.compliance ?? 0), 0) / inspections.length)
       : 0
 
-  // اتجاه الحوادث حسب الشهر (آخر 6 أشهر) — أسماء الأشهر عبر Intl حسب اللغة.
-  const now = new Date()
-  const monthFmt = new Intl.DateTimeFormat(locale === "en" ? "en-US" : "ar", { month: "long" })
-  const trend: { month: string; incidents: number }[] = []
-  for (let k = 5; k >= 0; k--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - k, 1)
-    const count = incidents.filter((i) => {
-      const ref = i.incidentDate ? new Date(i.incidentDate) : new Date(i.createdAt)
-      return ref.getFullYear() === d.getFullYear() && ref.getMonth() === d.getMonth()
-    }).length
-    trend.push({ month: monthFmt.format(d), incidents: count })
-  }
+  // اتجاه الحوادث (12 شهراً) يأتي محسوباً من الخادم ضمن getDashboardData.
 
   // الحوادث حسب النوع
   const typeCounts = new Map<string, number>()

@@ -24,7 +24,7 @@ import { effectiveViolationStatus, isViolationClosed } from "@/lib/violation-sta
 export default async function DashboardPage() {
   const user = await requireOrgUser()
   const { locale, t } = await getServerT()
-  const { incidents, inspections, permits, risks, actions, observations, violations } = await getDashboardData()
+  const { incidents, inspections, permits, risks, actions, observations, violations, trend } = await getDashboardData()
 
   // مفتوحة = غير مغلقة وفق الحالة الفعلية (مسار الإحالة) لا الحالة المخزّنة.
   const openViolations = violations.filter((v) => !isViolationClosed(v)).length
@@ -43,18 +43,8 @@ export default async function DashboardPage() {
       ? Math.round(inspections.reduce((s, i) => s + (i.compliance ?? 0), 0) / inspections.length)
       : 0
 
-  // اتجاه الحوادث حسب الشهر (آخر 6 أشهر) — أسماء الأشهر عبر Intl حسب اللغة.
-  const now = new Date()
-  const monthFmt = new Intl.DateTimeFormat(locale === "en" ? "en-US" : "ar", { month: "long" })
-  const trend: { month: string; incidents: number }[] = []
-  for (let k = 5; k >= 0; k--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - k, 1)
-    const count = incidents.filter((i) => {
-      const ref = i.incidentDate ? new Date(i.incidentDate) : new Date(i.createdAt)
-      return ref.getFullYear() === d.getFullYear() && ref.getMonth() === d.getMonth()
-    }).length
-    trend.push({ month: monthFmt.format(d), incidents: count })
-  }
+  // اتجاه الحوادث (12 شهراً، وقوع/تسجيل، مع سلسلة الرافعات) يُحسب في الخادم داخل
+  // getDashboardData عبر generate_series؛ الواجهة تنسّق أسماء الأشهر حسب اللغة.
 
   // الحوادث حسب النوع
   const typeCounts = new Map<string, number>()
