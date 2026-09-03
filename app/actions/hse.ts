@@ -1123,7 +1123,7 @@ export async function acceptDetectionAsViolation(
     .limit(1)
   if (!det) throw new Error("الاكتشاف غير موجود")
   if (det.status === "converted" && det.linkedViolationNo) {
-    // مُحوّل مسبقاً — أعد رق�� المخالف�� القائم دون إنشاء تكرار.
+    // مُحوّل مسبقاً — أعد رق���� المخالف�� القائم دون إنشاء تكرار.
     return { documentNo: det.linkedViolationNo }
   }
   // حماية إضافية من التحويل المزدوج: هل توجد مخالفة مرتبطة بهذا الاكتشاف أصلاً؟
@@ -1563,6 +1563,31 @@ export async function getIncidentTypeBreakdown(): Promise<IncidentTypeBreakdownR
     total: Number(r.total) || 0,
     open: Number(r.open) || 0,
   }))
+}
+
+// عدد الحوادث الحرجة المفتوحة التي لا يرتبط بها أي إجراء تصحيحي. الرابط الوحيد المتاح في
+// المخطط الحالي هو نصّي: corrective_action.source يحوي رقم وثيقة الحادث (documentNo)،
+// لذا نطابق عليه داخل المؤسسة نفسها. تُستخدم لشارة التنبيه في رسم توزيع الخطورة.
+export async function getCriticalWithoutAction(): Promise<number> {
+  const scope = await requireScope()
+  const userFilter = scope.isManager ? sql`true` : sql`i."userId" = ${scope.userId}`
+  const result = await db.execute(sql`
+    select count(*)::int as n
+    from incident i
+    where i."organizationId" = ${scope.organizationId}
+      and ${userFilter}
+      and i.severity = 'critical'
+      and i.status in ('open', 'in_progress', 'investigating')
+      and coalesce(i.lifecycle_status, '') <> 'cancelled'
+      and not exists (
+        select 1 from corrective_action a
+        where a."organizationId" = i."organizationId"
+          and coalesce(i."documentNo", '') <> ''
+          and a.source ilike '%' || i."documentNo" || '%'
+      )
+  `)
+  const row = result.rows[0] as { n?: number } | undefined
+  return Number(row?.n) || 0
 }
 
 export async function getDashboardData() {

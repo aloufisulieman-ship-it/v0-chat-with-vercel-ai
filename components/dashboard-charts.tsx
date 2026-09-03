@@ -17,7 +17,8 @@ import {
   CartesianGrid,
 } from "recharts"
 import Link from "next/link"
-import { ArrowDown, ArrowUp, Minus } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { AlertCircle, ArrowDown, ArrowUp, Minus } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip as UiTooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -505,37 +506,237 @@ export function IncidentTypeChartSkeleton() {
   )
 }
 
-export function SeverityChart({ data }: { data: { name: string; value: number; fill: string }[] }) {
-  const { t } = useI18n()
-  const hasData = data.some((d) => d.value > 0)
+// ===== توزيع الخطورة — دونات بمركز تفاعلي وحلقة خارجية للمفتوح/المغلق =====
+
+type SeveritySlice = {
+  severity: Severity
+  label: string
+  total: number
+  open: number
+  closed: number
+  previous: number
+  fill: string
+}
+
+// يجمع صفوف (شهر × نوع × خطورة) في شريحة واحدة لكل مستوى خطورة بترتيب منطقي ثابت،
+// مع مجموع الفترة السابقة للمقارنة. الترتيب لا يتغيّر حسب العدد أبداً.
+function aggregateBySeverity(data: IncidentTypeBreakdownPoint[], period: ChartPeriod, labelOf: (s: Severity) => string): SeveritySlice[] {
+  const { current, previous } = periodMonthKeys(period)
+  const cur = new Set(current)
+  const prev = new Set(previous)
+  const acc: Record<Severity, { total: number; open: number; previous: number }> = {
+    low: { total: 0, open: 0, previous: 0 },
+    medium: { total: 0, open: 0, previous: 0 },
+    high: { total: 0, open: 0, previous: 0 },
+    critical: { total: 0, open: 0, previous: 0 },
+  }
+  for (const p of data) {
+    if (cur.has(p.monthKey)) {
+      acc[p.severity].total += p.total
+      acc[p.severity].open += p.open
+    } else if (prev.has(p.monthKey)) {
+      acc[p.severity].previous += p.total
+    }
+  }
+  return SEVERITIES.map((s) => ({
+    severity: s,
+    label: labelOf(s),
+    total: acc[s].total,
+    open: acc[s].open,
+    closed: acc[s].total - acc[s].open,
+    previous: acc[s].previous,
+    fill: SEVERITY_FILL[s],
+  }))
+}
+
+export function SeverityChart({ data, criticalWithoutAction = 0 }: { data: IncidentTypeBreakdownPoint[]; criticalWithoutAction?: number }) {
+  const { t, locale } = useI18n()
+  const router = useRouter()
+  const { period } = useChartPeriod()
+  const [active, setActive] = useState<Severity | null>(null)
+  const numLocale = locale === "en" ? "en-US" : "ar-EG"
+  const fmt = (n: number) => n.toLocaleString(numLocale)
+
+  const slices = useMemo(() => aggregateBySeverity(data, period, (s) => t(`severity.${s}`)), [data, period, t])
+  const total = slices.reduce((s, x) => s + x.total, 0)
+  const hasData = total > 0
+  const visible = slices.filter((s) => s.total > 0)
+
+  // بيانات الحلقة الخارجية: لكل مستوى خطورة شريحتان متجاورتان (مفتوح داكن، مغلق شفاف) بنفس ترتيب الدونات.
+  const ring = visible.flatMap((s) => [
+    { key: `${s.severity}-open`, severity: s.severity, value: s.open, fill: s.fill, opacity: 1, kind: "open" as const },
+    { key: `${s.severity}-closed`, severity: s.severity, value: s.closed, fill: s.fill, opacity: 0.3, kind: "closed" as const },
+  ]).filter((x) => x.value > 0)
+
+  const activeSlice = active ? slices.find((s) => s.severity === active) : null
+  const critical = slices[3]
+  const criticalDelta = critical.total - critical.previous
+
+  const goTo = (s: Severity) => router.push(`/incidents?severity=${s}`)
+
   return (
     <Card className="p-5">
-      <h3 className="mb-1 text-base font-semibold text-foreground">{t("dashboardCharts.severityTitle")}</h3>
-      <p className="mb-4 text-xs text-muted-foreground">{t("dashboardCharts.severitySubtitle")}</p>
+      <div className="mb-1 flex items-start justify-between gap-2">
+        <h3 className="text-base font-semibold text-foreground">{t("dashboardCharts.severityTitle")}</h3>
+        {criticalWithoutAction > 0 && (
+          <Link
+            href="/actions"
+            className="inline-flex items-center gap-1 rounded-full border border-destructive/40 bg-destructive/10 px-2 py-0.5 text-[11px] font-semibold text-destructive hover:bg-destructive/15"
+            title={t("dashboardCharts.criticalNoActionHint")}
+          >
+            <AlertCircle className="size-3" aria-hidden />
+            {t("dashboardCharts.criticalNoAction").replace("{n}", fmt(criticalWithoutAction))}
+          </Link>
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground">{t("dashboardCharts.severitySubtitle")}</p>
+      {/* مؤشر المقارنة بالفترة السابقة للحرجة: أحمر عند الارتفاع، أخضر عند الانخفاض. */}
+      {(critical.total > 0 || critical.previous > 0) && (
+        <p
+          className={cn(
+            "mt-1 inline-flex items-center gap-1 text-[11px] font-medium tabular-nums",
+            criticalDelta > 0 ? "text-destructive" : criticalDelta < 0 ? "text-[oklch(0.55_0.17_150)]" : "text-muted-foreground",
+          )}
+        >
+          {criticalDelta > 0 ? <ArrowUp className="size-3" aria-hidden /> : criticalDelta < 0 ? <ArrowDown className="size-3" aria-hidden /> : <Minus className="size-3" aria-hidden />}
+          {t("dashboardCharts.criticalDelta")
+            .replace("{delta}", `${criticalDelta > 0 ? "+" : criticalDelta < 0 ? "−" : ""}${fmt(Math.abs(criticalDelta))}`)}
+        </p>
+      )}
+
       {!hasData ? (
-        <EmptyState />
+        <div className="flex h-[240px] flex-col items-center justify-center gap-1 text-center">
+          <p className="text-sm font-medium text-foreground">{t("dashboardCharts.trendEmptyTitle")}</p>
+          <p className="text-xs text-muted-foreground text-pretty">{t("dashboardCharts.byTypeEmptyHint")}</p>
+        </div>
       ) : (
         <>
-          <ResponsiveContainer width="100%" height={220}>
-            <PieChart>
-              <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={3}>
-                {data.map((entry, i) => (
-                  <Cell key={i} fill={entry.fill} />
-                ))}
-              </Pie>
-              <Tooltip contentStyle={tooltipStyle} />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="mt-2 flex flex-wrap justify-center gap-3">
-            {data.map((s) => (
-              <div key={s.name} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <span className="size-2.5 rounded-full" style={{ backgroundColor: s.fill }} />
-                {s.name} ({s.value})
-              </div>
-            ))}
+          <div className="relative mt-3 h-[220px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                {/* الحلقة الخارجية الرفيعة: مفتوح/مغلق داخل كل مستوى */}
+                <Pie data={ring} dataKey="value" cx="50%" cy="50%" innerRadius={88} outerRadius={94} startAngle={90} endAngle={-270} isAnimationActive={false} stroke="none">
+                  {ring.map((r) => (
+                    <Cell key={r.key} fill={r.fill} fillOpacity={active && active !== r.severity ? r.opacity * 0.3 : r.opacity} />
+                  ))}
+                </Pie>
+                {/* الدونات الرئيسية بترتيب الخطورة الثابت */}
+                <Pie
+                  data={visible}
+                  dataKey="total"
+                  nameKey="label"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={56}
+                  outerRadius={82}
+                  paddingAngle={2}
+                  startAngle={90}
+                  endAngle={-270}
+                  stroke="none"
+                  onMouseEnter={(_, i) => setActive(visible[i]?.severity ?? null)}
+                  onMouseLeave={() => setActive(null)}
+                  onClick={(_, i) => visible[i] && goTo(visible[i].severity)}
+                  className="cursor-pointer"
+                >
+                  {visible.map((s) => (
+                    <Cell
+                      key={s.severity}
+                      fill={s.fill}
+                      fillOpacity={active && active !== s.severity ? 0.35 : 1}
+                      style={{ transition: "fill-opacity 150ms", outline: "none" }}
+                    />
+                  ))}
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+            {/* المركز التفاعلي: الإجمالي افتراضياً، وعند المرور عدد الشريحة ونسبتها */}
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center" aria-live="polite">
+              {activeSlice ? (
+                <>
+                  <span className="text-2xl font-bold tabular-nums leading-none" style={{ color: activeSlice.fill }}>
+                    {fmt(activeSlice.total)}
+                  </span>
+                  <span className="mt-1 text-[11px] font-medium text-foreground">{activeSlice.label}</span>
+                  <span className="text-[11px] tabular-nums text-muted-foreground">{fmt(Math.round((activeSlice.total / total) * 100))}%</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-3xl font-bold tabular-nums leading-none text-foreground">{fmt(total)}</span>
+                  <span className="mt-1 text-xs text-muted-foreground">{t("dashboardCharts.incidentUnit")}</span>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Legend: كل بند قابل للنقر ويبرز شريحته، مع العدد والنسبة */}
+          <ul className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
+            {slices.map((s) => {
+              const pct = total > 0 ? Math.round((s.total / total) * 100) : 0
+              return (
+                <li key={s.severity}>
+                  <button
+                    type="button"
+                    onClick={() => goTo(s.severity)}
+                    onMouseEnter={() => setActive(s.severity)}
+                    onMouseLeave={() => setActive(null)}
+                    onFocus={() => setActive(s.severity)}
+                    onBlur={() => setActive(null)}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-2 rounded-md px-1.5 py-1 text-xs transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                      active === s.severity && "bg-muted/60",
+                      s.total === 0 && "text-muted-foreground/60",
+                    )}
+                    aria-label={`${s.label}: ${s.total} (${pct}%)`}
+                  >
+                    <span className="inline-flex items-center gap-1.5 text-foreground">
+                      <span className="size-2.5 rounded-full" style={{ backgroundColor: s.fill, opacity: s.total === 0 ? 0.4 : 1 }} />
+                      {s.label}
+                    </span>
+                    <span className="tabular-nums text-muted-foreground">
+                      <span className="font-semibold text-foreground">{fmt(s.total)}</span> ({fmt(pct)}%)
+                    </span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+
+          {/* مفتاح الحلقة الخارجية + تفصيل مفتوح/مغلق */}
+          <div className="mt-3 border-t border-border pt-2 text-[11px] text-muted-foreground">
+            <div className="mb-1.5 flex items-center gap-3">
+              <span className="inline-flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-foreground/70" /> {t("dashboardCharts.openShort")}</span>
+              <span className="inline-flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-foreground/25" /> {t("dashboardCharts.closedShort")}</span>
+            </div>
+            <ul className="flex flex-wrap gap-x-3 gap-y-0.5 tabular-nums">
+              {visible.map((s) => (
+                <li key={s.severity} className="inline-flex items-center gap-1">
+                  <span className="size-1.5 rounded-full" style={{ backgroundColor: s.fill }} />
+                  {s.label}: <span className="text-foreground">{fmt(s.open)}</span> / {fmt(s.closed)}
+                </li>
+              ))}
+            </ul>
           </div>
         </>
       )}
+    </Card>
+  )
+}
+
+export function SeverityChartSkeleton() {
+  return (
+    <Card className="p-5" aria-busy="true">
+      <div className="flex flex-col gap-2">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-3 w-44" />
+      </div>
+      <div className="mt-3 flex h-[220px] items-center justify-center">
+        <Skeleton className="size-44 rounded-full" />
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        {[0, 1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-5" />
+        ))}
+      </div>
     </Card>
   )
 }

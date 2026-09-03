@@ -65,12 +65,13 @@ export function AppShell({
             البداية (اليمين)، فنحجز مساحتها بـ lg:start-72 (عرض القائمة w-72) لتغطي الحاوية
             منطقة المحتوى (اليسار) فقط، ويتوسّط الشعار منتصفها أفقيًا وعموديًا عبر
             left/top 50% + translate(-50%,-50%). يبقى ثابتًا في منتصف الشاشة المرئية أثناء
-            التمرير (fixed) بلا تكرار. z-0 يضعها خلف كل المحتوى (العمود z-10 والهيدر z-30)،
-            مع pointer-events:none وخلفية شفافة تمامًا. الشفافية 0.03 (الحد الأقصى المسموح) على
-            الصورة نفسها فقط حتى لا تُضعِف وضوح بيانات الرسوم والبطاقات. */}
+            التمرير (fixed) بلا تكرار. -z-10 داخل سياق التراص الخاص بالعمود (relative z-10) يضعها
+            خلف البطاقات المعتمة فعلياً (وليس فوقها كما يحدث مع z-0 مقابل عناصر غير موضَّعة)،
+            فلا تظهر خلف الرسوم إطلاقاً وتبقى مرئية في فراغات الصفحة فقط. الشفافية 0.03 (الحد
+            الأقصى المسموح) على الصورة نفسها مع pointer-events:none وخلفية شفافة تمامًا. */}
         <div
           aria-hidden="true"
-          className="pointer-events-none fixed inset-y-0 start-0 end-0 z-0 overflow-hidden bg-transparent lg:start-72"
+          className="pointer-events-none fixed inset-y-0 start-0 end-0 -z-10 overflow-hidden bg-transparent lg:start-72"
         >
           <img
             src="/raqeeb-watermark.png"

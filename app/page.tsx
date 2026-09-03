@@ -20,14 +20,19 @@ import {
   IncidentTypeChart,
   IncidentTypeChartSkeleton,
   SeverityChart,
+  SeverityChartSkeleton,
 } from "@/components/dashboard-charts"
 import { ChartPeriodProvider } from "@/components/dashboard-period"
 import { StatusBadge, SeverityBadge } from "@/components/status-badge"
 import { requireOrgUser } from "@/lib/session"
-import { getDashboardData, getIncidentTypeBreakdown, type IncidentTypeBreakdownRow } from "@/app/actions/hse"
-import { SEVERITIES, SEVERITY_FILL } from "@/lib/severity-colors"
+import {
+  getCriticalWithoutAction,
+  getDashboardData,
+  getIncidentTypeBreakdown,
+  type IncidentTypeBreakdownRow,
+} from "@/app/actions/hse"
 import { getServerT } from "@/lib/i18n/server"
-import { incidentTypeLabel, severityLabel, categoryLabel } from "@/lib/i18n/labels"
+import { incidentTypeLabel, categoryLabel } from "@/lib/i18n/labels"
 import { effectiveViolationStatus, isViolationClosed } from "@/lib/violation-status"
 
 export default async function DashboardPage() {
@@ -68,12 +73,9 @@ export default async function DashboardPage() {
     if (!typeLabels[ty]) typeLabels[ty] = incidentTypeLabel(t, ty)
   }
 
-  // توزيع الخطورة — نفس لوحة الألوان المستخدمة في أعمدة النوع المكدّسة.
-  const severityData = SEVERITIES.map((s) => ({
-    name: severityLabel(t, s),
-    value: incidents.filter((i) => i.severity === s).length,
-    fill: SEVERITY_FILL[s],
-  }))
+  // توزيع الخطورة يستهلك نفس التجميع (شهر × خطورة × مفتوح) فيتبع فلتر الفترة المشترك،
+  // مع عدّاد مستقل للحرجة المفتوحة بلا إجراء تصحيحي لشارة التنبيه.
+  const criticalNoActionPromise = getCriticalWithoutAction().catch(() => 0)
 
   const priorityActions = [...actions]
     .filter((a) => a.status !== "closed")
@@ -106,7 +108,9 @@ export default async function DashboardPage() {
         <div className="lg:col-span-2">
           <IncidentTrendChart data={trend} />
         </div>
-        <SeverityChart data={severityData} />
+        <Suspense fallback={<SeverityChartSkeleton />}>
+          <SeverityChartLoader promise={typeBreakdownPromise} alertPromise={criticalNoActionPromise} />
+        </Suspense>
       </div>
 
       {/* رسم مستقل للكشوفات الذكية أسفل اتجاه الحوادث — لا يُخلَط بالحوادث المسجّلة. */}
@@ -237,6 +241,11 @@ async function IncidentTypeChartLoader({
 }) {
   const data = await promise
   return <IncidentTypeChart data={data} labels={labels} />
+}
+
+async function SeverityChartLoader({ promise, alertPromise }: { promise: Promise<IncidentTypeBreakdownRow[]>; alertPromise: Promise<number> }) {
+  const [data, criticalWithoutAction] = await Promise.all([promise, alertPromise])
+  return <SeverityChart data={data} criticalWithoutAction={criticalWithoutAction} />
 }
 
 function MiniStat({ label, value, tone }: { label: string; value: number; tone?: "positive" }) {

@@ -3,13 +3,23 @@ import { BarChart3, TrendingUp, ShieldCheck, Activity, ClipboardCheck } from "lu
 import { AppShell } from "@/components/app-shell"
 import { Card } from "@/components/ui/card"
 import { KpiCard } from "@/components/kpi-card"
-import { IncidentTrendChart, IncidentTypeChart, IncidentTypeChartSkeleton, SeverityChart } from "@/components/dashboard-charts"
+import {
+  IncidentTrendChart,
+  IncidentTypeChart,
+  IncidentTypeChartSkeleton,
+  SeverityChart,
+  SeverityChartSkeleton,
+} from "@/components/dashboard-charts"
 import { ChartPeriodProvider } from "@/components/dashboard-period"
 import { requireModule } from "@/lib/session"
-import { getDashboardData, getIncidentTypeBreakdown, type IncidentTypeBreakdownRow } from "@/app/actions/hse"
-import { SEVERITIES, SEVERITY_FILL } from "@/lib/severity-colors"
+import {
+  getCriticalWithoutAction,
+  getDashboardData,
+  getIncidentTypeBreakdown,
+  type IncidentTypeBreakdownRow,
+} from "@/app/actions/hse"
 import { getServerT } from "@/lib/i18n/server"
-import { incidentTypeLabel, severityLabel } from "@/lib/i18n/labels"
+import { incidentTypeLabel } from "@/lib/i18n/labels"
 import { ReportsClient } from "./reports-client"
 
 export default async function ReportsPage() {
@@ -37,12 +47,7 @@ export default async function ReportsPage() {
     if (!typeLabels[ty]) typeLabels[ty] = incidentTypeLabel(t, ty)
   }
 
-  // توزيع الخطورة — اللوحة الموحَّدة.
-  const severityData = SEVERITIES.map((s) => ({
-    name: severityLabel(t, s),
-    value: incidents.filter((i) => i.severity === s).length,
-    fill: SEVERITY_FILL[s],
-  }))
+  const criticalNoActionPromise = getCriticalWithoutAction().catch(() => 0)
 
   return (
     <AppShell
@@ -69,7 +74,9 @@ export default async function ReportsPage() {
           <div className="lg:col-span-2">
             <IncidentTrendChart data={trend} />
           </div>
-          <SeverityChart data={severityData} />
+          <Suspense fallback={<SeverityChartSkeleton />}>
+            <SeverityLoader promise={typeBreakdownPromise} alertPromise={criticalNoActionPromise} />
+          </Suspense>
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-4">
@@ -117,4 +124,9 @@ async function TypeChartLoader({
 }) {
   const data = await promise
   return <IncidentTypeChart data={data} labels={labels} />
+}
+
+async function SeverityLoader({ promise, alertPromise }: { promise: Promise<IncidentTypeBreakdownRow[]>; alertPromise: Promise<number> }) {
+  const [data, criticalWithoutAction] = await Promise.all([promise, alertPromise])
+  return <SeverityChart data={data} criticalWithoutAction={criticalWithoutAction} />
 }
