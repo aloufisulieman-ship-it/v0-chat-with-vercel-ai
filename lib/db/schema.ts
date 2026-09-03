@@ -555,6 +555,10 @@ export const aiDetection = pgTable("ai_detections", {
   notes: text("notes").default(""),
   // رقم المخالفة المرتبطة (VIO-YYYY-###) عند تحويل الاكتشاف إلى مخالفة رسمية.
   linkedViolationNo: text("linked_violation_no").default(""),
+  // روابط التحويل الرقمية (مصدر الحقيقة لمنع العدّ المزدوج في الرسوم):
+  // الكشف المحوَّل يُحسب مرة واحدة في سجلّه الرسمي ولا يُعدّ بنداً مفتوحاً في رسم الكشوفات.
+  convertedToIncidentId: integer("converted_to_incident_id"),
+  convertedToViolationId: integer("converted_to_violation_id"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
