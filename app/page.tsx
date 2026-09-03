@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import Link from "next/link"
 import {
   AlertTriangle,
@@ -13,10 +14,18 @@ import {
 import { AppShell } from "@/components/app-shell"
 import { KpiCard } from "@/components/kpi-card"
 import { Card } from "@/components/ui/card"
-import { IncidentTrendChart, IncidentTypeChart, SeverityChart } from "@/components/dashboard-charts"
+import {
+  DetectionTrendChart,
+  IncidentTrendChart,
+  IncidentTypeChart,
+  IncidentTypeChartSkeleton,
+  SeverityChart,
+} from "@/components/dashboard-charts"
+import { ChartPeriodProvider } from "@/components/dashboard-period"
 import { StatusBadge, SeverityBadge } from "@/components/status-badge"
 import { requireOrgUser } from "@/lib/session"
-import { getDashboardData } from "@/app/actions/hse"
+import { getDashboardData, getIncidentTypeBreakdown, type IncidentTypeBreakdownRow } from "@/app/actions/hse"
+import { SEVERITIES, SEVERITY_FILL } from "@/lib/severity-colors"
 import { getServerT } from "@/lib/i18n/server"
 import { incidentTypeLabel, severityLabel, categoryLabel } from "@/lib/i18n/labels"
 import { effectiveViolationStatus, isViolationClosed } from "@/lib/violation-status"
@@ -24,7 +33,8 @@ import { effectiveViolationStatus, isViolationClosed } from "@/lib/violation-sta
 export default async function DashboardPage() {
   const user = await requireOrgUser()
   const { locale, t } = await getServerT()
-  const { incidents, inspections, permits, risks, actions, observations, violations, trend } = await getDashboardData()
+  const { incidents, inspections, permits, risks, actions, observations, violations, trend, detectionTrend } =
+    await getDashboardData()
 
   // مفتوحة = غير مغلقة وفق الحالة الفعلية (مسار الإحالة) لا الحالة المخزّنة.
   const openViolations = violations.filter((v) => !isViolationClosed(v)).length
@@ -46,25 +56,23 @@ export default async function DashboardPage() {
   // اتجاه الحوادث (12 شهراً، وقوع/تسجيل، مع سلسلة الرافعات) يُحسب في الخادم داخل
   // getDashboardData عبر generate_series؛ الواجهة تنسّق أسماء الأشهر حسب اللغة.
 
-  // الحوادث حسب النوع
-  const typeCounts = new Map<string, number>()
-  incidents.forEach((i) => typeCounts.set(i.type ?? "near_miss", (typeCounts.get(i.type ?? "near_miss") ?? 0) + 1))
-  const typeData = Array.from(typeCounts.entries()).map(([type, count]) => ({
-    type: incidentTypeLabel(t, type),
-    count,
-  }))
-
-  // توزيع الخطورة
-  const sevFill: Record<string, string> = {
-    low: "var(--color-chart-1)",
-    medium: "var(--color-chart-2)",
-    high: "var(--color-chart-3)",
-    critical: "var(--color-destructive)",
+  // الحوادث حسب النوع: التجميع (شهر × نوع × خطورة) يُجلَب في الخادم بشكل مستقل ويُبَثّ عبر
+  // Suspense حتى يظهر هيكل تحميل بدل تأخير الصفحة كلها. تسميات الأنواع تُحَلّ هنا (خادم) وتُمرَّر كخريطة.
+  const typeBreakdownPromise = getIncidentTypeBreakdown().catch((err) => {
+    console.error("[dashboard] type breakdown failed:", err instanceof Error ? err.message : err)
+    return []
+  })
+  const typeLabels: Record<string, string> = {}
+  for (const i of incidents) {
+    const ty = i.type || "near_miss"
+    if (!typeLabels[ty]) typeLabels[ty] = incidentTypeLabel(t, ty)
   }
-  const severityData = ["low", "medium", "high", "critical"].map((s) => ({
+
+  // توزيع الخطورة — نفس لوحة الألوان المستخدمة في أعمدة النوع المكدّسة.
+  const severityData = SEVERITIES.map((s) => ({
     name: severityLabel(t, s),
     value: incidents.filter((i) => i.severity === s).length,
-    fill: sevFill[s],
+    fill: SEVERITY_FILL[s],
   }))
 
   const priorityActions = [...actions]
@@ -92,6 +100,8 @@ export default async function DashboardPage() {
         <MiniStat label={t("dashboard.totalPermits")} value={permits.length} />
       </div>
 
+      {/* مزوّد فترة مشترك: تغيير الفترة في أي رسم يحرّك رسم الاتجاه ورسم النوع معاً. */}
+      <ChartPeriodProvider>
       <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <IncidentTrendChart data={trend} />
@@ -99,8 +109,15 @@ export default async function DashboardPage() {
         <SeverityChart data={severityData} />
       </div>
 
+      {/* رسم مستقل للكشوفات الذكية أسفل اتجاه الحوادث — لا يُخلَط بالحوادث المسجّلة. */}
+      <div className="mt-4">
+        <DetectionTrendChart data={detectionTrend} />
+      </div>
+
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <IncidentTypeChart data={typeData} />
+        <Suspense fallback={<IncidentTypeChartSkeleton />}>
+          <IncidentTypeChartLoader promise={typeBreakdownPromise} labels={typeLabels} />
+        </Suspense>
         <Card className="p-5">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-base font-semibold text-foreground">{t("dashboard.priorityActions")}</h3>
@@ -134,6 +151,7 @@ export default async function DashboardPage() {
           )}
         </Card>
       </div>
+      </ChartPeriodProvider>
 
       <Card className="mt-4 p-5">
         <div className="mb-4 flex items-center justify-between">
@@ -207,6 +225,18 @@ export default async function DashboardPage() {
       </Card>
     </AppShell>
   )
+}
+
+// مكوّن خادمي غير متزامن يُنتظَر داخل Suspense فيظهر الهيكل حتى وصول بيانات التجميع.
+async function IncidentTypeChartLoader({
+  promise,
+  labels,
+}: {
+  promise: Promise<IncidentTypeBreakdownRow[]>
+  labels: Record<string, string>
+}) {
+  const data = await promise
+  return <IncidentTypeChart data={data} labels={labels} />
 }
 
 function MiniStat({ label, value, tone }: { label: string; value: number; tone?: "positive" }) {

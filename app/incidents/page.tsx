@@ -1,4 +1,5 @@
-import { AlertTriangle, AlertOctagon, CheckCircle2, Clock } from "lucide-react"
+import Link from "next/link"
+import { AlertTriangle, AlertOctagon, CheckCircle2, Clock, X } from "lucide-react"
 import { AppShell } from "@/components/app-shell"
 import { KpiCard } from "@/components/kpi-card"
 import { DataTable, type Column } from "@/components/data-table"
@@ -9,7 +10,7 @@ import { requireModule } from "@/lib/session"
 import { getIncidents, deleteIncident, getCompany, getIncidentSignatureInfo } from "@/app/actions/hse"
 import { AUDITOR_SIGNATURE_ROLE, FINANCE_OFFICER_SIGNATURE_ROLE, HR_OFFICER_SIGNATURE_ROLE } from "@/lib/signature-roles"
 import { getServerT } from "@/lib/i18n/server"
-import { severityLabel, statusLabel } from "@/lib/i18n/labels"
+import { incidentTypeLabel, severityLabel, statusLabel } from "@/lib/i18n/labels"
 import { formatParties } from "@/lib/incident-types"
 import type { EmailSenderInfo } from "@/lib/email-export"
 import { HrStatusBadge } from "@/components/hr-status-badge"
@@ -34,7 +35,7 @@ type Incident = Awaited<ReturnType<typeof getIncidents>>[number]
 export default async function IncidentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; dept?: string; source?: string }>
+  searchParams: Promise<{ status?: string; dept?: string; source?: string; type?: string }>
 }) {
   const user = await requireModule("incidents")
   const [incidents, companyProfile, sp, sigInfo] = await Promise.all([
@@ -48,6 +49,9 @@ export default async function IncidentsPage({
   const emailLocale = locale === "en" ? "en" : "ar"
   const lc = lifecycleUi(emailLocale)
   const lf = applyLifecycleFilters(incidents, sp)
+  // فلتر النوع القادم من رسم "الحوادث حسب النوع" في لوحة التحكم (?type=injury ...).
+  const typeFilter = (sp.type ?? "").trim()
+  const rows = typeFilter ? lf.filtered.filter((i) => (i.type || "near_miss") === typeFilter) : lf.filtered
   const notifiedLabel = (v: string | null) => (v === "yes" ? t("incidents.yes") : t("incidents.no"))
   // بيانات المُرسل المُلحقة تلقائياً بتوقيع رسالة البريد الرسمية.
   const emailSender: EmailSenderInfo = {
@@ -202,7 +206,22 @@ export default async function IncidentsPage({
       <div className="mt-6 flex flex-col gap-3">
         <h2 className="text-lg font-semibold text-foreground">{t("incidents.registryTitle")}</h2>
         <LifecycleFilterBar locale={emailLocale} counts={lf.counts} status={lf.status} dept={lf.dept} source={lf.source} />
-        <DataTable columns={columns} rows={lf.filtered} emptyMessage={t("incidents.emptyMessage")} />
+        {typeFilter && (
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground">{t("incidents.filteredByType")}</span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-medium text-foreground">
+              {incidentTypeLabel(t, typeFilter)}
+              <Link
+                href="/incidents"
+                className="rounded-full p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"
+                aria-label={t("incidents.clearTypeFilter")}
+              >
+                <X className="size-3" aria-hidden />
+              </Link>
+            </span>
+          </div>
+        )}
+        <DataTable columns={columns} rows={rows} emptyMessage={t("incidents.emptyMessage")} />
       </div>
     </AppShell>
   )

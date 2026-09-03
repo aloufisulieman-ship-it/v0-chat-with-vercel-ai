@@ -66,8 +66,8 @@ export function AppShell({
             منطقة المحتوى (اليسار) فقط، ويتوسّط الشعار منتصفها أفقيًا وعموديًا عبر
             left/top 50% + translate(-50%,-50%). يبقى ثابتًا في منتصف الشاشة المرئية أثناء
             التمرير (fixed) بلا تكرار. z-0 يضعها خلف كل المحتوى (العمود z-10 والهيدر z-30)،
-            مع pointer-events:none وخلفية شفافة تمامًا. الشفافية 0.06 على الصورة نفسها فقط
-            فلا تؤثر على وضوح النصوص والبطاقات. */}
+            مع pointer-events:none وخلفية شفافة تمامًا. الشفافية 0.03 (الحد الأقصى المسموح) على
+            الصورة نفسها فقط حتى لا تُضعِف وضوح بيانات الرسوم والبطاقات. */}
         <div
           aria-hidden="true"
           className="pointer-events-none fixed inset-y-0 start-0 end-0 z-0 overflow-hidden bg-transparent lg:start-72"
@@ -75,7 +75,7 @@ export function AppShell({
           <img
             src="/raqeeb-watermark.png"
             alt=""
-            className="absolute left-1/2 top-1/2 h-[380px] w-[380px] max-w-[80vw] -translate-x-1/2 -translate-y-1/2 object-contain opacity-[0.06]"
+            className="absolute left-1/2 top-1/2 h-[380px] w-[380px] max-w-[80vw] -translate-x-1/2 -translate-y-1/2 object-contain opacity-[0.03]"
           />
         </div>
 

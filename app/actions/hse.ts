@@ -1123,7 +1123,7 @@ export async function acceptDetectionAsViolation(
     .limit(1)
   if (!det) throw new Error("الاكتشاف غير موجود")
   if (det.status === "converted" && det.linkedViolationNo) {
-    // مُحوّل مسبقاً — أعد رقم المخالف�� القائم دون إنشاء تكرار.
+    // مُحوّل مسبقاً — أعد رق�� المخالف�� القائم دون إنشاء تكرار.
     return { documentNo: det.linkedViolationNo }
   }
   // حماية إضافية من التحويل المزدوج: هل توجد مخالفة مرتبطة بهذا الاكتشاف أصلاً؟
@@ -1219,7 +1219,7 @@ export async function acceptDetectionAsViolation(
   // canvas.toDataURL من الك��ميرا)، لا كرابط http. لذا نمرّرها مباشرةً إلى
   // saveDataUrlAttachment التي ترفعها إلى Blob وتحفظ رابط URL فقط في جدول المرفقات
   // (لا يُخزَّن الـ base64 الضخم في قاعدة البيانات). ندعم أيضاً حالة رابط http
-  // القديمة كخيار احتياطي بجلبها وتحويلها إلى data URL.
+  // القديمة كخيار احتياطي بجلبها وتحويلها إ��ى data URL.
   try {
     const snap = det.snapshotUrl?.trim() || ""
     if (snap.startsWith("data:image")) {
@@ -1238,9 +1238,10 @@ export async function acceptDetectionAsViolation(
   }
 
   // حدّث الاكتشاف: الحالة "converted" + الربط برقم المخالفة الجديد (داخل نفس المؤسسة).
+  // convertedToViolationId هو الرابط الرقمي الذي تعتمده رسوم الاتجاه لمنع العدّ المزدوج.
   await db
     .update(aiDetection)
-    .set({ status: "converted", linkedViolationNo: documentNo, resolvedBy: actor })
+    .set({ status: "converted", linkedViolationNo: documentNo, convertedToViolationId: recordId, resolvedBy: actor })
     .where(and(eq(aiDetection.id, detectionId), eq(aiDetection.organizationId, organizationId)))
 
   revalidatePath("/ai-monitoring")
@@ -1433,20 +1434,25 @@ export async function deleteObservation(id: number) {
 
 /* ---------------- Dashboard aggregates ---------------- */
 // نقطة شهرية في اتجاه الحوادث. monthKey = "YYYY-MM" (تُنسَّق في الواجهة حسب اللغة).
-// كل سلسلة لها عدّان: حسب شهر الوقوع (occurrence) وحسب شهر التسجيل (registration).
+// عدّان: حسب شهر الوقوع (occurrence) وحسب شهر التسجيل (registration). الحوادث المسجّلة فقط —
+// الحادث الناتج عن تحويل كشف ذكي يُحسب هنا مرة واحدة (سجلّه في incident) ولا يظهر في رسم الكشوفات.
 export type TrendPoint = {
   monthKey: string
   incidentsByOccurrence: number
   incidentsByRegistration: number
-  forkliftByOccurrence: number
-  forkliftByRegistration: number
+}
+
+// نقطة شهرية في اتجاه كشوفات المراقبة الذكية، مقسّمة بالنوع، مع عدّاد منفصل للمحوَّلة.
+// byType يشمل الكشوفات غير المحوَّلة فقط (بنود مفتوحة/مؤكَّدة)؛ converted تُعرض بلون مختلف.
+export type DetectionTrendPoint = {
+  monthKey: string
+  byType: Record<string, number>
+  converted: number
 }
 
 // اتجاه الحوادث لآخر 12 شهراً عبر generate_series حتى تظهر الأشهر الفارغة بقيمة 0.
-// - الحوادث: التجميع على COALESCE(incidentDate, createdAt) للوقوع، وعلى createdAt للتسجيل.
-//   لا تُستبعد المؤرشفة/المغلقة (الاتجاه تاريخي)؛ يُستبعد الملغى فقط.
-// - سلسلة ثانية: رصد كاميرات ساحات الرافعات (ai_detections) لأنواع الرافعات فقط،
-//   باستثناء الإنذارات الكاذبة. الوقوع = detected_at، التسجيل = createdAt.
+// التجميع على COALESCE(incidentDate, createdAt) للوقوع، وعلى createdAt للتسجيل.
+// لا تُستبعد المؤرشفة/المغلقة (الاتجاه تاريخي)؛ يُستبعد الملغى فقط.
 async function getIncidentTrend(scope: Awaited<ReturnType<typeof requireScope>>): Promise<TrendPoint[]> {
   const userFilter = scope.isManager ? sql`true` : sql`"userId" = ${scope.userId}`
   const result = await db.execute(sql`
@@ -1463,39 +1469,99 @@ async function getIncidentTrend(scope: Awaited<ReturnType<typeof requireScope>>)
         and ${userFilter}
         and coalesce(status, '') <> 'cancelled'
         and coalesce(lifecycle_status, '') <> 'cancelled'
-    ),
-    fk as (
-      select
-        date_trunc('month', detected_at) as m_occ,
-        date_trunc('month', "createdAt") as m_reg
-      from ai_detections
-      where "organizationId" = ${scope.organizationId}
-        and ${userFilter}
-        and status <> 'false_positive'
-        and detection_type in ('pedestrian_near_forklift', 'overspeed', 'restricted_area', 'traffic_congestion')
     )
     select
       to_char(months.m, 'YYYY-MM') as month_key,
       (select count(*) from inc where inc.m_occ = months.m)::int as inc_occ,
-      (select count(*) from inc where inc.m_reg = months.m)::int as inc_reg,
-      (select count(*) from fk where fk.m_occ = months.m)::int as fk_occ,
-      (select count(*) from fk where fk.m_reg = months.m)::int as fk_reg
+      (select count(*) from inc where inc.m_reg = months.m)::int as inc_reg
     from months
     order by months.m
   `)
-  const rows = result.rows as Array<{
-    month_key: string
-    inc_occ: number
-    inc_reg: number
-    fk_occ: number
-    fk_reg: number
-  }>
+  const rows = result.rows as Array<{ month_key: string; inc_occ: number; inc_reg: number }>
   return rows.map((r) => ({
     monthKey: r.month_key,
     incidentsByOccurrence: Number(r.inc_occ) || 0,
     incidentsByRegistration: Number(r.inc_reg) || 0,
-    forkliftByOccurrence: Number(r.fk_occ) || 0,
-    forkliftByRegistration: Number(r.fk_reg) || 0,
+  }))
+}
+
+// اتجاه كشوفات المراقبة الذكية لآخر 12 شهراً حسب detected_at، مقسّماً بالنوع.
+// - تُستبعد الإنذارات الكاذبة (false_positive) كلياً.
+// - الكشف المحوَّل إلى حادثة/مخالفة (converted_to_* أو status = converted) لا يُعدّ بنداً
+//   مفتوحاً ضمن نوعه؛ يُجمَع في عدّاد "converted" مستقل ليُعرض بلون مختلف بدل إخفائه.
+async function getDetectionTrend(scope: Awaited<ReturnType<typeof requireScope>>): Promise<DetectionTrendPoint[]> {
+  const userFilter = scope.isManager ? sql`true` : sql`"userId" = ${scope.userId}`
+  const result = await db.execute(sql`
+    with months as (
+      select (date_trunc('month', now()) - (g * interval '1 month')) as m
+      from generate_series(11, 0, -1) as g
+    ),
+    det as (
+      select
+        date_trunc('month', detected_at) as m,
+        detection_type,
+        (converted_to_incident_id is not null or converted_to_violation_id is not null or status = 'converted') as is_converted
+      from ai_detections
+      where "organizationId" = ${scope.organizationId}
+        and ${userFilter}
+        and status <> 'false_positive'
+    )
+    select
+      to_char(months.m, 'YYYY-MM') as month_key,
+      coalesce(
+        (select jsonb_object_agg(detection_type, c)
+           from (select detection_type, count(*)::int as c from det where det.m = months.m and not is_converted group by detection_type) x),
+        '{}'::jsonb
+      ) as by_type,
+      (select count(*) from det where det.m = months.m and is_converted)::int as converted
+    from months
+    order by months.m
+  `)
+  const rows = result.rows as Array<{ month_key: string; by_type: Record<string, number> | string; converted: number }>
+  return rows.map((r) => ({
+    monthKey: r.month_key,
+    byType: typeof r.by_type === "string" ? (JSON.parse(r.by_type) as Record<string, number>) : (r.by_type ?? {}),
+    converted: Number(r.converted) || 0,
+  }))
+}
+
+// صفّ تجميعي: شهر × نوع × خطورة، مع العدّ الكلي وعدد الحالات المفتوحة. يُغطّي آخر 24 شهراً
+// (بحسب شهر الوقوع COALESCE(incidentDate, createdAt)) حتى تستطيع الواجهة حساب أي فترة
+// (3/6/12 شهراً أو السنة الحالية) والفترة السابقة المقابلة لها للمقارنة، دون استعلام إضافي.
+export type IncidentTypeBreakdownRow = {
+  monthKey: string
+  type: string
+  severity: "low" | "medium" | "high" | "critical"
+  total: number
+  open: number
+}
+
+export async function getIncidentTypeBreakdown(): Promise<IncidentTypeBreakdownRow[]> {
+  const scope = await requireScope()
+  const userFilter = scope.isManager ? sql`true` : sql`"userId" = ${scope.userId}`
+  const result = await db.execute(sql`
+    select
+      to_char(date_trunc('month', coalesce("incidentDate"::timestamp, "createdAt")), 'YYYY-MM') as month_key,
+      coalesce(nullif(type, ''), 'near_miss') as type,
+      case when severity in ('low', 'medium', 'high', 'critical') then severity else 'low' end as severity,
+      count(*)::int as total,
+      count(*) filter (where status in ('open', 'in_progress', 'investigating'))::int as open
+    from incident
+    where "organizationId" = ${scope.organizationId}
+      and ${userFilter}
+      and coalesce(status, '') <> 'cancelled'
+      and coalesce(lifecycle_status, '') <> 'cancelled'
+      and coalesce("incidentDate"::timestamp, "createdAt") >= date_trunc('month', now()) - interval '23 months'
+    group by 1, 2, 3
+    order by 1, 2, 3
+  `)
+  const rows = result.rows as Array<{ month_key: string; type: string; severity: string; total: number; open: number }>
+  return rows.map((r) => ({
+    monthKey: r.month_key,
+    type: r.type,
+    severity: r.severity as IncidentTypeBreakdownRow["severity"],
+    total: Number(r.total) || 0,
+    open: Number(r.open) || 0,
   }))
 }
 
@@ -1503,7 +1569,7 @@ export async function getDashboardData() {
   const scope = await requireScope()
   // العزل بين المؤسسات صارم (organizationId دائماً)؛ وداخل المؤسسة يرى المديرُ كل
   // السجلات والموظفُ سجلاته فقط عبر scopeWhere.
-  const [inc, ins, per, rsk, act, obs, vio, trend] = await Promise.all([
+  const [inc, ins, per, rsk, act, obs, vio, trend, detectionTrend] = await Promise.all([
     db.select().from(incident).where(scopeWhere({ organizationId: incident.organizationId, userId: incident.userId }, scope)),
     db.select().from(inspection).where(scopeWhere({ organizationId: inspection.organizationId, userId: inspection.userId }, scope)),
     db.select().from(permit).where(scopeWhere({ organizationId: permit.organizationId, userId: permit.userId }, scope)),
@@ -1519,8 +1585,22 @@ export async function getDashboardData() {
       console.error("[dashboard] incident trend query failed:", err instanceof Error ? err.message : err)
       return [] as TrendPoint[]
     }),
+    getDetectionTrend(scope).catch((err) => {
+      console.error("[dashboard] detection trend query failed:", err instanceof Error ? err.message : err)
+      return [] as DetectionTrendPoint[]
+    }),
   ])
-  return { incidents: inc, inspections: ins, permits: per, risks: rsk, actions: act, observations: obs, violations: vio, trend }
+  return {
+    incidents: inc,
+    inspections: ins,
+    permits: per,
+    risks: rsk,
+    actions: act,
+    observations: obs,
+    violations: vio,
+    trend,
+    detectionTrend,
+  }
 }
 
 /* ---------------- Reports ---------------- */

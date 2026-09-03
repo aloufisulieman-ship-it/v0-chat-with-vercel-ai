@@ -1,10 +1,13 @@
+import { Suspense } from "react"
 import { BarChart3, TrendingUp, ShieldCheck, Activity, ClipboardCheck } from "lucide-react"
 import { AppShell } from "@/components/app-shell"
 import { Card } from "@/components/ui/card"
 import { KpiCard } from "@/components/kpi-card"
-import { IncidentTrendChart, IncidentTypeChart, SeverityChart } from "@/components/dashboard-charts"
+import { IncidentTrendChart, IncidentTypeChart, IncidentTypeChartSkeleton, SeverityChart } from "@/components/dashboard-charts"
+import { ChartPeriodProvider } from "@/components/dashboard-period"
 import { requireModule } from "@/lib/session"
-import { getDashboardData } from "@/app/actions/hse"
+import { getDashboardData, getIncidentTypeBreakdown, type IncidentTypeBreakdownRow } from "@/app/actions/hse"
+import { SEVERITIES, SEVERITY_FILL } from "@/lib/severity-colors"
 import { getServerT } from "@/lib/i18n/server"
 import { incidentTypeLabel, severityLabel } from "@/lib/i18n/labels"
 import { ReportsClient } from "./reports-client"
@@ -26,25 +29,19 @@ export default async function ReportsPage() {
 
   // اتجاه الحوادث (12 شهراً) يأتي محسوباً من الخادم ضمن getDashboardData.
 
-  // الحوادث حسب النوع
-  const typeCounts = new Map<string, number>()
-  incidents.forEach((i) => typeCounts.set(i.type ?? "near_miss", (typeCounts.get(i.type ?? "near_miss") ?? 0) + 1))
-  const typeData = Array.from(typeCounts.entries()).map(([type, count]) => ({
-    type: incidentTypeLabel(t, type),
-    count,
-  }))
-
-  // توزيع الخطورة
-  const sevFill: Record<string, string> = {
-    low: "var(--color-chart-1)",
-    medium: "var(--color-chart-2)",
-    high: "var(--color-chart-3)",
-    critical: "var(--color-destructive)",
+  // الحوادث حسب النوع (شهر × نوع × خطورة) — نفس مصدر لوحة التحكم، مع تسميات الأنواع من الخادم.
+  const typeBreakdownPromise = getIncidentTypeBreakdown().catch(() => [])
+  const typeLabels: Record<string, string> = {}
+  for (const i of incidents) {
+    const ty = i.type || "near_miss"
+    if (!typeLabels[ty]) typeLabels[ty] = incidentTypeLabel(t, ty)
   }
-  const severityData = ["low", "medium", "high", "critical"].map((s) => ({
+
+  // توزيع الخطورة — اللوحة الموحَّدة.
+  const severityData = SEVERITIES.map((s) => ({
     name: severityLabel(t, s),
     value: incidents.filter((i) => i.severity === s).length,
-    fill: sevFill[s],
+    fill: SEVERITY_FILL[s],
   }))
 
   return (
@@ -67,16 +64,20 @@ export default async function ReportsPage() {
         <MiniStat label={t("reports.riskRegister")} value={risks.length} />
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <IncidentTrendChart data={trend} />
+      <ChartPeriodProvider>
+        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <IncidentTrendChart data={trend} />
+          </div>
+          <SeverityChart data={severityData} />
         </div>
-        <SeverityChart data={severityData} />
-      </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4">
-        <IncidentTypeChart data={typeData} />
-      </div>
+        <div className="mt-4 grid grid-cols-1 gap-4">
+          <Suspense fallback={<IncidentTypeChartSkeleton />}>
+            <TypeChartLoader promise={typeBreakdownPromise} labels={typeLabels} />
+          </Suspense>
+        </div>
+      </ChartPeriodProvider>
 
       <Card className="mt-6 flex items-center gap-3 p-5">
         <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -105,4 +106,15 @@ function MiniStat({ label, value }: { label: string; value: number }) {
       <span className="text-xs text-muted-foreground">{label}</span>
     </Card>
   )
+}
+
+async function TypeChartLoader({
+  promise,
+  labels,
+}: {
+  promise: Promise<IncidentTypeBreakdownRow[]>
+  labels: Record<string, string>
+}) {
+  const data = await promise
+  return <IncidentTypeChart data={data} labels={labels} />
 }
