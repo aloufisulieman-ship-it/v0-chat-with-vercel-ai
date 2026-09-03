@@ -1,17 +1,30 @@
+import { Suspense } from "react"
 import { BarChart3, TrendingUp, ShieldCheck, Activity, ClipboardCheck } from "lucide-react"
 import { AppShell } from "@/components/app-shell"
 import { Card } from "@/components/ui/card"
 import { KpiCard } from "@/components/kpi-card"
-import { IncidentTrendChart, IncidentTypeChart, SeverityChart } from "@/components/dashboard-charts"
+import {
+  IncidentTrendChart,
+  IncidentTypeChart,
+  IncidentTypeChartSkeleton,
+  SeverityChart,
+  SeverityChartSkeleton,
+} from "@/components/dashboard-charts"
+import { ChartPeriodProvider } from "@/components/dashboard-period"
 import { requireModule } from "@/lib/session"
-import { getDashboardData } from "@/app/actions/hse"
+import {
+  getCriticalWithoutAction,
+  getDashboardData,
+  getIncidentTypeBreakdown,
+  type IncidentTypeBreakdownRow,
+} from "@/app/actions/hse"
 import { getServerT } from "@/lib/i18n/server"
-import { incidentTypeLabel, severityLabel } from "@/lib/i18n/labels"
+import { incidentTypeLabel } from "@/lib/i18n/labels"
 import { ReportsClient } from "./reports-client"
 
 export default async function ReportsPage() {
   const user = await requireModule("reports")
-  const { incidents, inspections, permits, risks, actions } = await getDashboardData()
+  const { incidents, inspections, permits, risks, actions, trend } = await getDashboardData()
   const { locale, t } = await getServerT()
 
   const openIncidents = incidents.filter((i) => i.status !== "closed").length
@@ -24,39 +37,17 @@ export default async function ReportsPage() {
       ? Math.round(inspections.reduce((s, i) => s + (i.compliance ?? 0), 0) / inspections.length)
       : 0
 
-  // اتجاه الحوادث حسب الشهر (آخر 6 أشهر) — أسماء الأشهر عبر Intl حسب اللغة.
-  const now = new Date()
-  const monthFmt = new Intl.DateTimeFormat(locale === "en" ? "en-US" : "ar", { month: "long" })
-  const trend: { month: string; incidents: number }[] = []
-  for (let k = 5; k >= 0; k--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - k, 1)
-    const count = incidents.filter((i) => {
-      const ref = i.incidentDate ? new Date(i.incidentDate) : new Date(i.createdAt)
-      return ref.getFullYear() === d.getFullYear() && ref.getMonth() === d.getMonth()
-    }).length
-    trend.push({ month: monthFmt.format(d), incidents: count })
+  // اتجاه الحوادث (12 شهراً) يأتي محسوباً من الخادم ضمن getDashboardData.
+
+  // الحوادث حسب النوع (شهر × نوع × خطورة) — نفس مصدر لوحة التحكم، مع تسميات الأنواع من الخادم.
+  const typeBreakdownPromise = getIncidentTypeBreakdown().catch(() => [])
+  const typeLabels: Record<string, string> = {}
+  for (const i of incidents) {
+    const ty = i.type || "near_miss"
+    if (!typeLabels[ty]) typeLabels[ty] = incidentTypeLabel(t, ty)
   }
 
-  // الحوادث حسب النوع
-  const typeCounts = new Map<string, number>()
-  incidents.forEach((i) => typeCounts.set(i.type ?? "near_miss", (typeCounts.get(i.type ?? "near_miss") ?? 0) + 1))
-  const typeData = Array.from(typeCounts.entries()).map(([type, count]) => ({
-    type: incidentTypeLabel(t, type),
-    count,
-  }))
-
-  // توزيع الخطورة
-  const sevFill: Record<string, string> = {
-    low: "var(--color-chart-1)",
-    medium: "var(--color-chart-2)",
-    high: "var(--color-chart-3)",
-    critical: "var(--color-destructive)",
-  }
-  const severityData = ["low", "medium", "high", "critical"].map((s) => ({
-    name: severityLabel(t, s),
-    value: incidents.filter((i) => i.severity === s).length,
-    fill: sevFill[s],
-  }))
+  const criticalNoActionPromise = getCriticalWithoutAction().catch(() => 0)
 
   return (
     <AppShell
@@ -78,16 +69,22 @@ export default async function ReportsPage() {
         <MiniStat label={t("reports.riskRegister")} value={risks.length} />
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <IncidentTrendChart data={trend} />
+      <ChartPeriodProvider>
+        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <IncidentTrendChart data={trend} />
+          </div>
+          <Suspense fallback={<SeverityChartSkeleton />}>
+            <SeverityLoader promise={typeBreakdownPromise} alertPromise={criticalNoActionPromise} />
+          </Suspense>
         </div>
-        <SeverityChart data={severityData} />
-      </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4">
-        <IncidentTypeChart data={typeData} />
-      </div>
+        <div className="mt-4 grid grid-cols-1 gap-4">
+          <Suspense fallback={<IncidentTypeChartSkeleton />}>
+            <TypeChartLoader promise={typeBreakdownPromise} labels={typeLabels} />
+          </Suspense>
+        </div>
+      </ChartPeriodProvider>
 
       <Card className="mt-6 flex items-center gap-3 p-5">
         <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -116,4 +113,20 @@ function MiniStat({ label, value }: { label: string; value: number }) {
       <span className="text-xs text-muted-foreground">{label}</span>
     </Card>
   )
+}
+
+async function TypeChartLoader({
+  promise,
+  labels,
+}: {
+  promise: Promise<IncidentTypeBreakdownRow[]>
+  labels: Record<string, string>
+}) {
+  const data = await promise
+  return <IncidentTypeChart data={data} labels={labels} />
+}
+
+async function SeverityLoader({ promise, alertPromise }: { promise: Promise<IncidentTypeBreakdownRow[]>; alertPromise: Promise<number> }) {
+  const [data, criticalWithoutAction] = await Promise.all([promise, alertPromise])
+  return <SeverityChart data={data} criticalWithoutAction={criticalWithoutAction} />
 }
