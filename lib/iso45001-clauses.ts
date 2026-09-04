@@ -187,17 +187,17 @@ export const moduleClauseLinks: Record<string, string[]> = {
   policy: ["5.2"],
   "legal-register": ["6.1.3", "9.1.2"],
   objectives: ["6.2", "6.2.1", "6.2.2"],
-}
-
-// وحدات مخطّط إنشاؤها لاحقاً والبنود التي ستغطّيها — تُعرَض كدليل «مخطّط» في لوحة
-// المطابقة قبل أن تُبنى فعلياً.
-export const plannedModuleClauseLinks: Record<string, string[]> = {
+  // وحدات المرحلة الثالثة التشغيلية (مبنيّة فعلياً الآن).
   consultation: ["5.4"],
   emergency: ["8.2"],
   contractors: ["8.1.4", "8.1.4.2"],
   "management-review": ["9.3"],
-  "internal-audit": ["9.2"],
+  "internal-audit": ["9.2", "9.2.1", "9.2.2"],
 }
+
+// وحدات مخطّط إنشاؤها لاحقاً والبنود التي ستغطّيها — تُعرَض كدليل «مخطّط» في لوحة
+// المطابقة قبل أن تُبنى فعلياً. (اكتملت جميع الوحدات المخطّطة.)
+export const plannedModuleClauseLinks: Record<string, string[]> = {}
 
 // أسماء الوحدات (الموجودة والمخطّطة) بالعربية والإنجليزية — لعرض روابط الأدلة.
 export const moduleNames: Record<string, { ar: string; en: string }> = {

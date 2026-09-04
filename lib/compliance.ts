@@ -21,6 +21,12 @@ export type ComplianceInput = {
   policies: Row[]
   objectives: Row[]
   legalRequirements: Row[]
+  // وحدات المرحلة الثالثة التشغيلية (ISO 45001).
+  consultations: Row[]
+  emergencyPlans: Row[]
+  contractors: Row[]
+  managementReviews: Row[]
+  internalAudits: Row[]
 }
 
 export type ClauseAssessment = {
@@ -277,6 +283,93 @@ export function computeCompliance(input: ComplianceInput): ComplianceResult {
     }
     byClause["6.1.3"] = assessment
     byClause["9.1.2"] = assessment
+  }
+
+  // 5.4 — تشاور العمال ومشاركتهم ← وحدة التشاور
+  {
+    const total = input.consultations.length
+    const participation = input.consultations.filter((c) => String(c.activityType) === "participation").length
+    let status: ClauseStatus = "non_compliant"
+    // مطابق: يوجد تشاور ومشاركة موثّقان معاً؛ جزئي: أحدهما فقط.
+    if (total > 0) status = participation > 0 && total - participation > 0 ? "compliant" : "partial"
+    byClause["5.4"] = {
+      status,
+      auto: true,
+      metricAr: total === 0 ? "لا أنشطة تشاور موثّقة" : `${total} نشاط، ${participation} مشاركة`,
+      metricEn: total === 0 ? "No consultation activities" : `${total} activities, ${participation} participation`,
+      updatedAt: latest(input.consultations),
+    }
+  }
+
+  // 8.2 — التأهب للطوارئ والاستجابة ← وحدة الطوارئ
+  {
+    const total = input.emergencyPlans.length
+    const ready = input.emergencyPlans.filter((p) => String(p.status) === "ready").length
+    const withDrill = input.emergencyPlans.filter((p) => p.lastDrillDate).length
+    let status: ClauseStatus = "non_compliant"
+    if (total > 0) status = ready === total && withDrill === total ? "compliant" : "partial"
+    byClause["8.2"] = {
+      status,
+      auto: true,
+      metricAr: total === 0 ? "لا خطط طوارئ موثّقة" : `${total} خطة، ${ready} جاهزة، ${withDrill} أُجري لها تمرين`,
+      metricEn: total === 0 ? "No emergency plans" : `${total} plans, ${ready} ready, ${withDrill} drilled`,
+      updatedAt: latest(input.emergencyPlans),
+    }
+  }
+
+  // 8.1.4 — المقاولون والمشتريات ← وحدة المقاولين
+  {
+    const total = input.contractors.length
+    const approved = input.contractors.filter((c) => String(c.status) === "approved").length
+    const rejected = input.contractors.filter((c) => String(c.status) === "rejected").length
+    let status: ClauseStatus = "non_compliant"
+    if (total > 0) status = rejected === 0 && approved === total ? "compliant" : "partial"
+    const assessment: ClauseAssessment = {
+      status,
+      auto: true,
+      metricAr: total === 0 ? "لا مقاولين مُقيَّمين" : `${total} مقاول، ${approved} معتمد، ${rejected} مرفوض`,
+      metricEn: total === 0 ? "No contractors evaluated" : `${total} contractors, ${approved} approved, ${rejected} rejected`,
+      updatedAt: latest(input.contractors),
+    }
+    byClause["8.1.4"] = assessment
+    byClause["8.1.4.2"] = assessment
+  }
+
+  // 9.3 — مراجعة الإدارة ← وحدة مراجعة الإدارة (خلال آخر 12 شهراً)
+  {
+    const total = input.managementReviews.length
+    const oneYearAgo = Date.now() - 365 * 24 * 60 * 60 * 1000
+    const recent = input.managementReviews.filter((r) => {
+      const d = r.reviewDate ? new Date(String(r.reviewDate)).getTime() : 0
+      return Number.isFinite(d) && d >= oneYearAgo
+    }).length
+    let status: ClauseStatus = "non_compliant"
+    if (total > 0) status = recent > 0 ? "compliant" : "partial"
+    byClause["9.3"] = {
+      status,
+      auto: true,
+      metricAr: total === 0 ? "لا مراجعات إدارة موثّقة" : `${total} مراجعة، ${recent} خلال 12 شهراً`,
+      metricEn: total === 0 ? "No management reviews" : `${total} reviews, ${recent} in last 12 months`,
+      updatedAt: latest(input.managementReviews),
+    }
+  }
+
+  // 9.2 — التدقيق الداخلي ← وحدة التدقيق الداخلي
+  {
+    const total = input.internalAudits.length
+    const completed = input.internalAudits.filter((a) => String(a.status) === "completed").length
+    let status: ClauseStatus = "non_compliant"
+    if (total > 0) status = completed > 0 ? "compliant" : "partial"
+    const assessment: ClauseAssessment = {
+      status,
+      auto: true,
+      metricAr: total === 0 ? "لا عمليات تدقيق داخلي" : `${total} تدقيق، ${completed} مكتمل`,
+      metricEn: total === 0 ? "No internal audits" : `${total} audits, ${completed} completed`,
+      updatedAt: latest(input.internalAudits),
+    }
+    byClause["9.2"] = assessment
+    byClause["9.2.1"] = assessment
+    byClause["9.2.2"] = assessment
   }
 
   // التجميع على كل البنود.

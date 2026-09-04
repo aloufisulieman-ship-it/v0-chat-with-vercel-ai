@@ -18,6 +18,11 @@ import {
   getPolicies,
   getObjectives,
   getLegalRequirements,
+  getConsultations,
+  getEmergencyPlans,
+  getContractors,
+  getManagementReviews,
+  getInternalAudits,
 } from "@/app/actions/hse"
 import {
   iso45001Clauses,
@@ -145,18 +150,37 @@ function buildGapHtml(
 
 export default async function CompliancePage() {
   const user = await requireModule("compliance")
-  const [dashboard, employees, trainings, documents, company, contextIssues, policies, objectives, legalRequirements] =
-    await Promise.all([
-      getDashboardData(),
-      getEmployees(),
-      getTrainings(),
-      getDocuments(),
-      getCompany(),
-      getContextIssues(),
-      getPolicies(),
-      getObjectives(),
-      getLegalRequirements(),
-    ])
+  const [
+    dashboard,
+    employees,
+    trainings,
+    documents,
+    company,
+    contextIssues,
+    policies,
+    objectives,
+    legalRequirements,
+    consultations,
+    emergencyPlans,
+    contractors,
+    managementReviews,
+    internalAudits,
+  ] = await Promise.all([
+    getDashboardData(),
+    getEmployees(),
+    getTrainings(),
+    getDocuments(),
+    getCompany(),
+    getContextIssues(),
+    getPolicies(),
+    getObjectives(),
+    getLegalRequirements(),
+    getConsultations(),
+    getEmergencyPlans(),
+    getContractors(),
+    getManagementReviews(),
+    getInternalAudits(),
+  ])
   const { t, dir, locale } = await getServerT()
 
   const result = computeCompliance({
@@ -173,6 +197,11 @@ export default async function CompliancePage() {
     policies,
     objectives,
     legalRequirements,
+    consultations,
+    emergencyPlans,
+    contractors,
+    managementReviews,
+    internalAudits,
   })
 
   const orgName = (company as { name?: string } | null)?.name || "المنظمة"
