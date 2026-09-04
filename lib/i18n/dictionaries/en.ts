@@ -375,6 +375,9 @@ export const en: Dictionary = {
     kpiCompleted: "Completed",
     kpiInProgress: "In Progress",
     kpiNonconformities: "Nonconformities",
+    scopeTitle: "Audit Scope — Covered ISO 45001 Clauses",
+    scopeDesc: "Modules active in the system and the clauses for which they provide auditable evidence.",
+    scopeClausesLabel: "Clauses",
   },
 
   objectivesMod: {

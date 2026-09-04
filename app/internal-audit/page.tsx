@@ -1,4 +1,4 @@
-import { ClipboardCheck, CircleCheck, Loader, TriangleAlert } from "lucide-react"
+import { ClipboardCheck, CircleCheck, Loader, TriangleAlert, ListChecks } from "lucide-react"
 import { AppShell } from "@/components/app-shell"
 import { KpiCard } from "@/components/kpi-card"
 import { DataTable, type Column } from "@/components/data-table"
@@ -8,6 +8,7 @@ import { DeleteButton } from "@/components/delete-button"
 import { IsoClauseBadge } from "@/components/iso-clause-badge"
 import { requireModule } from "@/lib/session"
 import { getInternalAudits, createInternalAudit, deleteInternalAudit } from "@/app/actions/hse"
+import { moduleClauseLinks, moduleNames, clauseById } from "@/lib/iso45001-clauses"
 import { getServerT } from "@/lib/i18n/server"
 
 type Audit = Awaited<ReturnType<typeof getInternalAudits>>[number]
@@ -36,6 +37,16 @@ export default async function InternalAuditPage() {
   const completed = rows.filter((r) => r.status === "completed").length
   const inProgress = rows.filter((r) => r.status === "in_progress").length
   const totalNC = rows.reduce((a, r) => a + (r.nonconformities ?? 0), 0)
+
+  // نطاق التدقيق: كل وحدة مُفعّلة والبنود التي توفّر لها دليلاً، مرتّبة حسب رقم البند.
+  const scopeItems = Object.entries(moduleClauseLinks)
+    .map(([module, ids]) => ({
+      module,
+      name: moduleNames[module]?.[locale] ?? module,
+      clauses: ids.map((id) => ({ id, title: clauseById[id]?.[locale] ?? id })),
+      sortKey: ids[0] ?? "",
+    }))
+    .sort((a, b) => a.sortKey.localeCompare(b.sortKey, undefined, { numeric: true }))
 
   const columns: Column<Audit>[] = [
     {
@@ -86,6 +97,37 @@ export default async function InternalAuditPage() {
         <KpiCard label={t("internalAuditMod.kpiInProgress")} value={inProgress} icon={Loader} tone="accent" />
         <KpiCard label={t("internalAuditMod.kpiNonconformities")} value={totalNC} icon={TriangleAlert} tone="destructive" />
       </div>
+
+      <section className="mt-6" aria-label={t("internalAuditMod.scopeTitle")}>
+        <h2 className="text-lg font-semibold text-foreground">{t("internalAuditMod.scopeTitle")}</h2>
+        <p className="mb-3 text-sm text-muted-foreground text-pretty">{t("internalAuditMod.scopeDesc")}</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {scopeItems.map((item) => (
+            <div key={item.module} className="rounded-lg border border-border bg-card p-4">
+              <div className="mb-3 flex items-center gap-2">
+                <ListChecks className="size-4 shrink-0 text-primary" aria-hidden="true" />
+                <h3 className="font-medium text-foreground">{item.name}</h3>
+                <span className="ms-auto rounded-full bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground" dir="ltr">
+                  {item.clauses.length}
+                </span>
+              </div>
+              <ul className="flex flex-col gap-2">
+                {item.clauses.map((c) => (
+                  <li key={c.id} className="flex items-start gap-2 text-sm">
+                    <span
+                      className="mt-0.5 shrink-0 rounded bg-primary/10 px-1.5 py-0.5 font-mono text-xs font-semibold text-primary"
+                      dir="ltr"
+                    >
+                      {c.id}
+                    </span>
+                    <span className="leading-relaxed text-muted-foreground">{c.title}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <div className="mt-6">
         <h2 className="mb-3 text-lg font-semibold text-foreground">{t("internalAuditMod.registryTitle")}</h2>
