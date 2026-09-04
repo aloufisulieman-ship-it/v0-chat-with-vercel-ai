@@ -1939,6 +1939,20 @@ export const en: Dictionary = {
       "Welcome {name}, your account was created successfully and is now awaiting the system administrator's approval. Your access will be activated once approved.",
   },
 
+  lightbox: {
+    image: "Image",
+    previous: "Previous image",
+    next: "Next image",
+    zoomIn: "Zoom in",
+    zoomOut: "Zoom out",
+    rotate: "Rotate 90°",
+    download: "Download image",
+    close: "Close",
+    sourcePhoto: "Attached photo",
+    sourceScan: "Scanned form",
+    sourceHr: "HR attachment",
+    sourceFinance: "Payment receipt",
+  },
   attachments: {
     unsupportedTitle: "Unsupported files",
     unsupportedDesc: "Only images are allowed.",

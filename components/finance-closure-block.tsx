@@ -1,9 +1,10 @@
 "use client"
 
-import { FileText } from "lucide-react"
+import { FileText, ZoomIn } from "lucide-react"
 import { FinanceStatusBadge } from "@/components/finance-status-badge"
 import { normalizeFinanceStatus } from "@/lib/finance-status"
 import { useI18n } from "@/lib/i18n/client"
+import { ImageLightbox, useLightbox, type LightboxImage } from "@/components/image-lightbox"
 
 /**
  * كتلة تفاصيل معالجة المالية داخل نافذة تفاصيل السجل — تظهر لجميع المستخدمين.
@@ -29,6 +30,10 @@ export function FinanceClosureBlock({
   const closedAtStr = closedAt ? formatDateTime(new Date(closedAt)) : ""
   const hasReceipt = !!receiptUrl && receiptUrl.length > 0
   const isImage = hasReceipt && receiptUrl!.startsWith("data:image")
+
+  // معاينة إيصال الدفع (صورة واحدة) عبر نفس مكوّن ImageLightbox.
+  const { openLightbox, lightboxProps } = useLightbox()
+  const galleryImages: LightboxImage[] = isImage ? [{ url: receiptUrl!, label: t("lightbox.sourceFinance") }] : []
 
   return (
     <section className="flex flex-col gap-3 rounded-lg border border-border p-4">
@@ -66,12 +71,27 @@ export function FinanceClosureBlock({
         <div className="flex flex-col gap-2">
           <span className="text-xs font-medium text-muted-foreground">{t("closureBlock.paymentReceipt")}</span>
           {isImage ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={receiptUrl! || "/placeholder.svg"} alt={t("closureBlock.paymentReceipt")} className="size-24 rounded border border-border object-cover" />
+            <button
+              type="button"
+              onClick={() => openLightbox(galleryImages, 0)}
+              className="group relative size-24 cursor-pointer overflow-hidden rounded border border-border transition-colors hover:border-primary"
+              aria-label={t("closureBlock.paymentReceipt")}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={receiptUrl! || "/placeholder.svg"}
+                alt={t("closureBlock.paymentReceipt")}
+                className="size-full object-cover transition-opacity group-hover:opacity-80"
+              />
+              <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                <ZoomIn className="size-5 text-white" />
+              </span>
+            </button>
           ) : (
             <a
               href={receiptUrl!}
-              download="payment-receipt"
+              target="_blank"
+              rel="noopener noreferrer"
               className="flex size-24 flex-col items-center justify-center gap-1 rounded border border-border bg-muted/40 text-[10px] text-muted-foreground hover:bg-muted"
             >
               <FileText className="size-6" />
@@ -80,6 +100,8 @@ export function FinanceClosureBlock({
           )}
         </div>
       )}
+
+      <ImageLightbox {...lightboxProps} />
     </section>
   )
 }

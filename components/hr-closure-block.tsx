@@ -1,9 +1,10 @@
 "use client"
 
-import { FileText } from "lucide-react"
+import { FileText, ZoomIn } from "lucide-react"
 import { HrStatusBadge } from "@/components/hr-status-badge"
 import { normalizeHrStatus, parseHrAttachments } from "@/lib/hr-status"
 import { useI18n } from "@/lib/i18n/client"
+import { ImageLightbox, useLightbox, type LightboxImage } from "@/components/image-lightbox"
 
 /**
  * كتلة تفاصيل معالجة الموارد البشرية داخل نافذة تفاصيل السجل — تظهر لجميع المستخدمين.
@@ -30,6 +31,13 @@ export function HrClosureBlock({
   const attachments = parseHrAttachments(attachmentsRaw)
   // منسّق مركزي بمنطقة زمنية ثابتة لتجنّب عدم تطابق الترطيب بين الخادم والعميل.
   const closedAtStr = closedAt ? formatDateTime(new Date(closedAt)) : ""
+
+  // معاينة صور مرفقات الموارد البشرية عبر نفس مكوّن ImageLightbox.
+  const { openLightbox, lightboxProps } = useLightbox()
+  const galleryImages: LightboxImage[] = attachments
+    .filter((a) => a.startsWith("data:image"))
+    .map((a) => ({ url: a, label: t("lightbox.sourceHr") }))
+  const galleryIndexOf = (url: string) => galleryImages.findIndex((g) => g.url === url)
 
   return (
     <section className="flex flex-col gap-3 rounded-lg border border-border p-4">
@@ -75,13 +83,29 @@ export function HrClosureBlock({
           <div className="flex flex-wrap gap-2">
             {attachments.map((a, i) =>
               a.startsWith("data:image") ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img key={i} src={a || "/placeholder.svg"} alt={`${t("closureBlock.attachmentAlt")} ${i + 1}`} className="size-20 rounded border border-border object-cover" />
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => openLightbox(galleryImages, galleryIndexOf(a))}
+                  className="group relative size-20 cursor-pointer overflow-hidden rounded border border-border transition-colors hover:border-primary"
+                  aria-label={t("closureBlock.attachmentAlt")}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={a || "/placeholder.svg"}
+                    alt={`${t("closureBlock.attachmentAlt")} ${i + 1}`}
+                    className="size-full object-cover transition-opacity group-hover:opacity-80"
+                  />
+                  <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                    <ZoomIn className="size-5 text-white" />
+                  </span>
+                </button>
               ) : (
                 <a
                   key={i}
                   href={a}
-                  download={`hr-attachment-${i + 1}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="flex size-20 flex-col items-center justify-center gap-1 rounded border border-border bg-muted/40 text-[10px] text-muted-foreground hover:bg-muted"
                 >
                   <FileText className="size-6" />
@@ -92,6 +116,8 @@ export function HrClosureBlock({
           </div>
         </div>
       )}
+
+      <ImageLightbox {...lightboxProps} />
     </section>
   )
 }
