@@ -167,9 +167,30 @@ export const ar = {
     send: "إرسال",
   },
 
+  // لوحة مطابقة ISO 45001:2018
+  complianceMod: {
+    title: "مطابقة ISO 45001:2018",
+    subtitle: "حالة كل بند من بنود المعيار محسوبة تلقائياً من بيانات النظام مع الأدلة المرتبطة.",
+    exportReport: "تقرير جاهزية التدقيق",
+    responsibleDefault: "مسؤول نظام السلامة والصحة المهنية",
+    kpiOverall: "نسبة المطابقة الإجمالية",
+    kpiCompliant: "بنود مطابقة",
+    kpiPartial: "مطابقة جزئياً",
+    kpiGaps: "فجوات (غير مطابق)",
+    overallLabel: "الجاهزية الإجمالية للتدقيق",
+    assessedNote: "تم تقييم {assessed} من أصل {total} بند آلياً؛ {pending} بند بانتظار وحدات المرحلة الثانية أو التقييم اليدوي.",
+    colClause: "البند",
+    colTitle: "العنوان",
+    colStatus: "الحالة",
+    colEvidence: "الأدلة المرتبطة",
+    colUpdated: "آخر تحديث",
+    planned: "مخطّط",
+    footerNote: "المعيار الدولي ISO 45001:2018 — البنود 4 إلى 10",
+  },
+
   // سجل الموظفين
   employees: {
-    totalEmployees: "إجمالي الموظفي��",
+    totalEmployees: "إجمالي الموظفي����",
     activeEmployees: "الموظفون النشطون",
     incompleteProfiles: "ملفات غير مكتملة",
   },
@@ -532,7 +553,7 @@ export const ar = {
     requestedBy: "طلب بواسطة",
     validFrom: "صالح من",
     validTo: "صالح حتى",
-    approvedBy: "اعتمده",
+    approvedBy: "اعتم��ه",
     workLocation: "موقع العمل",
     noPermits: "لا توجد تصاريح",
     totalPermits: "إجمالي التصاريح",
@@ -636,7 +657,7 @@ export const ar = {
     currency: "ريال سعودي",
     editTrigger: "تعديل يدوي",
     editTitle: "تعديل يدوي للمخالفة",
-    attachManualExtra: "إرفاق نموذج ورقي ممسوح إضافي (PDF أو صورة أو مستند)",
+    attachManualExtra: "إرفاق نموذج ورقي ممسوح إضافي (PDF ��و صورة أو مستند)",
     employeeNameRequired: "اسم الموظف مطلوب",
     editSavedTitle: "تم حفظ التعديلات",
     editSavedDesc: "تم تحديث المخالفة بنجاح.",
@@ -812,7 +833,7 @@ export const ar = {
     witnessesPlaceholder: "أسماء الشهود وبياناتهم",
     authoritiesNotified: "هل أُبلغت الجهات المختصة؟",
     authorityName: "اسم الجهة",
-    authorityNamePlaceholder: "مثال: الدفاع المدني",
+    authorityNamePlaceholder: "مثال: الدفاع المد��ي",
     recommendations: "توصيات منع التكرار",
     no: "لا",
     yes: "نعم",
@@ -1083,7 +1104,7 @@ export const ar = {
   },
 
   riskMatrix: {
-    title: "مصفوفة تقييم المخاطر 5×5",
+    title: "مصفوفة تقي��م المخاطر 5×5",
     subtitle: "الاحتمالية (أفقي) × الشدة (رأسي)",
     severityAxis: "الشدة ←",
     likelihood1: "نادر",
@@ -1661,7 +1682,7 @@ export const ar = {
     external: "خارجية (شركة مقاولة / زائر)",
   },
 
-  // خيارات الإجراء الداخلي (القيم مخزّنة بالعربية — هذه للعرض فقط)
+  // خيارات الإجراء الداخلي (القيم مخزّ��ة بالعربية — هذه للعرض فقط)
   internalAction: {
     "تحويل إلى الموارد البشرية": "تحويل إلى الموارد البشرية",
     "غرامة مالية": "غرامة مالية",
@@ -1752,7 +1773,7 @@ export const ar = {
     reportsSubtitle: "تقارير الأداء والمؤشرات الإحصائية لاتخاذ القرار",
     settingsTitle: "الإعدادات",
     settingsSubtitle: "إدارة معلومات المنشأة والفريق والصلاحيات",
-    usersTitle: "إدار�� المستخدمين",
+    usersTitle: "إد��ر�� المستخدمين",
     usersSubtitle: "الموافقة على المستخدمين الجدد وتحديد أدوارهم وصلاحياتهم",
     aiMonitoringTitle: "المراقبة الذكية بالذكاء الاصطناعي",
     aiMonitoringSubtitle: "رصد مخالفات السلامة لحظياً في ساحات الرافعات الشوكية عبر تحليل بث الكاميرات",
@@ -1781,6 +1802,7 @@ export const ar = {
     finance: "المالية",
     actions: "الإجراءات التصحيحية",
     audits: "التدقيق",
+    compliance: "مطابقة ISO 45001",
     documents: "الوثائق",
     reports: "التقارير",
     settings: "الإعدادات",
@@ -1797,7 +1819,7 @@ export const ar = {
     languageChanged: "تم تغيير اللغة",
   },
 
-  // المصادقة
+  // المصاد��ة
   auth: {
     login: "تسجيل الدخول",
     email: "البريد الإلكتروني",
@@ -1824,7 +1846,7 @@ export const ar = {
   adminName: "اسم مسؤول المؤسسة",
   newOrgSubmit: "إرسال طلب التسجيل",
   newOrgNote:
-    "لن يتم تفعيل حسابك تلقائياً. يصل طلبك إلى فريق المنصّة لمراجعته والموافقة عليه يدوياً، وعندها تصبح مديراً لمؤسستك ويمكنك إضافة أعضائك واعتمادهم.",
+    "لن يتم ت��عيل حسابك تلقائياً. يصل طلبك إلى فريق المنصّة لمراجعته والموافقة عليه يدوياً، وعندها تصبح مديراً لمؤسستك ويمكنك إضافة أعضائك واعتمادهم.",
   pleaseWait: "يرجى الانتظار...",
   createAccount: "إنشاء الحساب",
   haveAccount: "لديك حساب بالفعل؟ ",

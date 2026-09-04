@@ -160,6 +160,7 @@ export const moduleOptions = [
   { value: "finance", label: "المالية" },
   { value: "actions", label: "الإجراءات التصحيحية" },
   { value: "audits", label: "التدقيق" },
+  { value: "compliance", label: "مطابقة ISO 45001" },
   { value: "documents", label: "الوثائق" },
   { value: "reports", label: "التقارير" },
   { value: "settings", label: "الإعدادات" },

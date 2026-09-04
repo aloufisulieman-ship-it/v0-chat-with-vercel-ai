@@ -169,6 +169,27 @@ export const en: Dictionary = {
     incompleteProfiles: "Incomplete Profiles",
   },
 
+  // ISO 45001:2018 compliance dashboard
+  complianceMod: {
+    title: "ISO 45001:2018 Compliance",
+    subtitle: "Status of each standard clause is computed automatically from system data with linked evidence.",
+    exportReport: "Audit Readiness Report",
+    responsibleDefault: "OH&S Management System Owner",
+    kpiOverall: "Overall Compliance",
+    kpiCompliant: "Compliant Clauses",
+    kpiPartial: "Partially Compliant",
+    kpiGaps: "Gaps (Non-compliant)",
+    overallLabel: "Overall Audit Readiness",
+    assessedNote: "{assessed} of {total} clauses assessed automatically; {pending} awaiting Phase 2 modules or manual assessment.",
+    colClause: "Clause",
+    colTitle: "Title",
+    colStatus: "Status",
+    colEvidence: "Linked Evidence",
+    colUpdated: "Last Updated",
+    planned: "Planned",
+    footerNote: "International Standard ISO 45001:2018 — Clauses 4 to 10",
+  },
+
   trainingMod: {
     newCourse: "New Course",
     pageEmptyMessage: "No courses. Add a new course to get started.",
@@ -1720,6 +1741,7 @@ export const en: Dictionary = {
     finance: "Finance",
     actions: "Corrective Actions",
     audits: "Audits",
+    compliance: "ISO 45001 Compliance",
     documents: "Documents",
     reports: "Reports",
     settings: "Settings",
