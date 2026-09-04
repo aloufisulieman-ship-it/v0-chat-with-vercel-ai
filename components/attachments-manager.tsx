@@ -1,10 +1,11 @@
 "use client"
 
 import { useRef, useState, useTransition } from "react"
-import { ImagePlus, Trash2, Loader2, PenLine, FileImage, FileText, Download } from "lucide-react"
+import { ImagePlus, Trash2, Loader2, PenLine, FileImage, FileText, Download, ZoomIn } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { SignaturePad } from "@/components/signature-pad"
 import { RoleSignatures } from "@/components/role-signatures"
+import { ImageLightbox, useLightbox, type LightboxImage } from "@/components/image-lightbox"
 import {
   uploadAttachment,
   deleteAttachment,
@@ -45,6 +46,17 @@ export function AttachmentsManager({
   const manualDocs = items.filter((i) => i.kind === "manual_form")
   const signatures = items.filter((i) => i.kind === "signature")
   const useRoles = !!signatureRoles && signatureRoles.length > 0
+
+  // معاينة الصور (Lightbox): تُدمج صور "الصور المرفقة" وصور "النماذج الممسوحة" في
+  // مصفوفة واحدة قابلة للتنقّل. ملفات PDF تُفتح في تبويب جديد ولا تدخل المعاينة.
+  const { openLightbox, lightboxProps } = useLightbox()
+  const galleryImages: LightboxImage[] = [
+    ...photos.map((p) => ({ url: fileUrl(p.pathname), label: t("lightbox.sourcePhoto") })),
+    ...manualDocs
+      .filter((d) => d.contentType.startsWith("image/"))
+      .map((d) => ({ url: fileUrl(d.pathname), label: d.filename || t("lightbox.sourceScan") })),
+  ]
+  const galleryIndexOf = (url: string) => galleryImages.findIndex((g) => g.url === url)
 
   async function uploadOne(file: File, kind: "photo" | "signature") {
     const fd = new FormData()
@@ -158,14 +170,24 @@ export function AttachmentsManager({
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {photos.map((p) => (
-              <figure key={p.id} className="group relative overflow-hidden rounded-lg border border-border">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={fileUrl(p.pathname) || "/placeholder.svg"}
-                  alt={p.filename}
-                  className="aspect-square w-full object-cover"
-                  crossOrigin="anonymous"
-                />
+              <figure key={p.id} className="group relative overflow-hidden rounded-lg border border-border transition-colors hover:border-primary">
+                <button
+                  type="button"
+                  onClick={() => openLightbox(galleryImages, galleryIndexOf(fileUrl(p.pathname)))}
+                  className="block w-full cursor-pointer"
+                  aria-label={t("recordDetails.viewDetails")}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={fileUrl(p.pathname) || "/placeholder.svg"}
+                    alt={p.filename}
+                    className="aspect-square w-full object-cover transition-opacity group-hover:opacity-80"
+                    crossOrigin="anonymous"
+                  />
+                  <span className="pointer-events-none absolute bottom-1.5 end-1.5 flex size-6 items-center justify-center rounded-md bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100">
+                    <ZoomIn className="size-3.5" />
+                  </span>
+                </button>
                 {!readOnly && <button
                   type="button"
                   onClick={() => remove(p.id)}
@@ -197,13 +219,23 @@ export function AttachmentsManager({
               return (
                 <li key={d.id} className="flex items-center gap-3 rounded-lg border border-border p-2">
                   {isImage ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={fileUrl(d.pathname) || "/placeholder.svg"}
-                      alt={d.filename}
-                      className="size-12 shrink-0 rounded object-cover"
-                      crossOrigin="anonymous"
-                    />
+                    <button
+                      type="button"
+                      onClick={() => openLightbox(galleryImages, galleryIndexOf(fileUrl(d.pathname)))}
+                      className="group relative size-12 shrink-0 cursor-pointer overflow-hidden rounded border border-transparent transition-colors hover:border-primary"
+                      aria-label={t("recordDetails.viewDetails")}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={fileUrl(d.pathname) || "/placeholder.svg"}
+                        alt={d.filename}
+                        className="size-full object-cover transition-opacity group-hover:opacity-80"
+                        crossOrigin="anonymous"
+                      />
+                      <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                        <ZoomIn className="size-4 text-white" />
+                      </span>
+                    </button>
                   ) : (
                     <span className="flex size-12 shrink-0 items-center justify-center rounded bg-muted">
                       <FileText className="size-5 text-muted-foreground" />
@@ -284,6 +316,8 @@ export function AttachmentsManager({
         <SignaturePad onSave={handleSignature} saving={savingSig} />
       </section>
       )}
+
+      <ImageLightbox {...lightboxProps} />
     </div>
   )
 }

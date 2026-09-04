@@ -661,9 +661,163 @@ export const document = pgTable("document", {
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
+// ========== وحدات مطابقة ISO 45001:2018 (المرحلة الثانية) ==========
+
+// البند 4 — سياق المنظمة: القضايا الداخلية/الخارجية والأطراف المعنية واحتياجاتها.
+// kind: internal (قضية داخلية) | external (قضية خارجية) | interested_party (طرف معني).
+export const orgContextIssue = pgTable("org_context_issue", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
+  kind: text("kind").notNull().default("internal"),
+  title: text("title").notNull(),
+  description: text("description").notNull().default(""),
+  // احتياجات/توقعات الطرف المعني (يُستخدم أساساً مع interested_party).
+  needs: text("needs").notNull().default(""),
+  // التأثير على نظام السلامة: low | medium | high.
+  impact: text("impact").notNull().default("medium"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+// البند 5.2 — سياسة السلامة والصحة المهنية: بيانات السياسة المعتمدة وإصداراتها.
+// status: draft (مسودة) | active (سارية) | archived (مؤرشفة).
+export const ohsPolicy = pgTable("ohs_policy", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
+  title: text("title").notNull().default(""),
+  version: text("version").notNull().default("1.0"),
+  statement: text("statement").notNull().default(""),
+  approvedBy: text("approved_by").notNull().default(""),
+  approvedDate: date("approved_date"),
+  reviewDate: date("review_date"),
+  status: text("status").notNull().default("draft"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+// البند 6.2 — أهداف السلامة والصحة المهنية وخطط تحقيقها.
+// status: not_started (لم يبدأ) | on_track (على المسار) | at_risk (متعثّر) | achieved (متحقّق).
+export const ohsObjective = pgTable("ohs_objective", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
+  title: text("title").notNull(),
+  indicator: text("indicator").notNull().default(""),
+  baseline: text("baseline").notNull().default(""),
+  target: text("target").notNull().default(""),
+  responsible: text("responsible").notNull().default(""),
+  progress: integer("progress").notNull().default(0), // 0-100
+  status: text("status").notNull().default("not_started"),
+  dueDate: date("due_date"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+// البند 6.1.3 — سجل المتطلبات القانونية والمتطلبات الأخرى وتقييم الالتزام بها.
+// complianceStatus: compliant | partial | non_compliant.
+export const legalRequirement = pgTable("legal_requirement", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
+  title: text("title").notNull(),
+  reference: text("reference").notNull().default(""),
+  authority: text("authority").notNull().default(""),
+  category: text("category").notNull().default(""),
+  applicability: text("applicability").notNull().default(""),
+  complianceStatus: text("compliance_status").notNull().default("compliant"),
+  lastReviewDate: date("last_review_date"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+// ========== وحدات مطابقة ISO 45001:2018 التشغيلية (المرحلة الثالثة) ==========
+
+// البند 5.4 — تشاور العمال ومشاركتهم: سجل أنشطة التشاور والمشاركة.
+// activityType: consultation (تشاور) | participation (مشاركة).
+// method: meeting (اجتماع) | survey (استبيان) | committee (لجنة سلامة) | suggestion (صندوق مقترحات).
+export const workerConsultation = pgTable("worker_consultation", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
+  topic: text("topic").notNull(),
+  activityType: text("activity_type").notNull().default("consultation"),
+  method: text("method").notNull().default("meeting"),
+  participants: integer("participants").notNull().default(0),
+  outcome: text("outcome").notNull().default(""),
+  activityDate: date("activity_date"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+// البند 8.2 — التأهب للطوارئ والاستجابة لها: خطط الطوارئ وتماريــنها.
+// planType: fire (حريق) | chemical (كيميائي) | medical (طبي) | evacuation (إخلاء) | natural (طبيعي).
+// status: ready (جاهزة) | needs_review (تحتاج مراجعة) | outdated (منتهية).
+export const emergencyPlan = pgTable("emergency_plan", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
+  scenario: text("scenario").notNull(),
+  planType: text("plan_type").notNull().default("fire"),
+  responsibleTeam: text("responsible_team").notNull().default(""),
+  lastDrillDate: date("last_drill_date"),
+  nextDrillDate: date("next_drill_date"),
+  status: text("status").notNull().default("ready"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+// البند 8.1.4 — المقاولون والمشتريات: تأهيل وتقييم مقاولي السلامة والصحة المهنية.
+// status: approved (معتمد) | conditional (مشروط) | rejected (مرفوض).
+export const contractor = pgTable("contractor", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
+  name: text("name").notNull(),
+  scope: text("scope").notNull().default(""),
+  hseRating: integer("hse_rating").notNull().default(0), // 0-100
+  evaluationDate: date("evaluation_date"),
+  status: text("status").notNull().default("approved"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+// البند 9.3 — مراجعة الإدارة: محاضر اجتماعات مراجعة الإدارة ومخرجاتها.
+export const managementReview = pgTable("management_review", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
+  title: text("title").notNull(),
+  reviewDate: date("review_date"),
+  attendees: text("attendees").notNull().default(""),
+  inputs: text("inputs").notNull().default(""),
+  decisions: text("decisions").notNull().default(""),
+  nextReviewDate: date("next_review_date"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+// البند 9.2 — التدقيق الداخلي: برنامج التدقيق الداخلي ونتائجه.
+// status: planned (مخطّط) | in_progress (جارٍ) | completed (مكتمل).
+export const internalAudit = pgTable("internal_audit", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
+  title: text("title").notNull(),
+  scope: text("scope").notNull().default(""),
+  auditor: text("auditor").notNull().default(""),
+  auditDate: date("audit_date"),
+  nonconformities: integer("nonconformities").notNull().default(0),
+  status: text("status").notNull().default("planned"),
+  result: text("result").notNull().default(""),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
 // ذاكرة ترجمة البيانات المُدخلة (أوصاف/ملاحظات) عبر الذكاء الاصطناعي.
 // نُخزّن الترجمة مرة واحدة لكل (نص مصدر + لغة هدف) لتجنّب تكرار الاستدعاءات
-// وتثبيت النتيجة. sourceHash = بصمة النص المصدر لتسريع البحث وتفادي مفاتيح ضخمة.
+// وتث��يت النتيجة. sourceHash = بصمة النص المصدر لتسريع البحث وتفادي مفاتيح ضخمة.
 export const translationCache = pgTable(
   "translation_cache",
   {
@@ -729,7 +883,7 @@ export const equipment = pgTable(
     ownerCompany: text("owner_company").notNull().default(""),
     // اسم السائق/المستخدم المخوّل بتشغيل المعدة.
     driverName: text("driver_name").notNull().default(""),
-    // رقم داخلي/كود أصل اختياري (غير مستخدم في المطابقة، للعرض فقط).
+    // رقم داخلي/ك��د أصل اختياري (غير مستخدم في المطابقة، للعرض فقط).
     internalCode: text("internal_code").notNull().default(""),
     active: boolean("active").notNull().default(true),
     notes: text("notes").notNull().default(""),

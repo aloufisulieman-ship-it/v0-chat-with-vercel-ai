@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useTransition, type ReactNode } from "react"
-import { CheckCircle2, Save, Paperclip, X, FileText, CalendarClock } from "lucide-react"
+import { CheckCircle2, Save, Paperclip, X, FileText, CalendarClock, ZoomIn } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -14,6 +14,7 @@ import { refStatusLabel } from "@/lib/i18n/labels"
 import { hasRecordRoleSignature } from "@/app/actions/attachments"
 import { InlineRoleSignature } from "@/components/inline-role-signature"
 import { type SignatureRole } from "@/lib/signature-roles"
+import { ImageLightbox, useLightbox, type LightboxImage } from "@/components/image-lightbox"
 
 type FinanceAction = (formData: FormData) => Promise<void>
 
@@ -117,6 +118,10 @@ export function FinanceActionCard({
 
   const isImage = (u: string) => u.startsWith("data:image")
 
+  // معاينة صورة إيصال الدفع عبر نفس مكوّن ImageLightbox.
+  const { openLightbox, lightboxProps } = useLightbox()
+  const galleryImages: LightboxImage[] = receipt && isImage(receipt) ? [{ url: receipt, label: t("lightbox.sourceFinance") }] : []
+
   return (
     <div className="rounded-xl border border-border bg-card p-4">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
@@ -201,12 +206,27 @@ export function FinanceActionCard({
           {receipt && (
             <div className="group relative w-fit">
               {isImage(receipt) ? (
-                <img src={receipt || "/placeholder.svg"} alt={t("financeCard.receiptAlt")} className="size-16 rounded border border-border object-cover" />
+                <button
+                  type="button"
+                  onClick={() => openLightbox(galleryImages, 0)}
+                  className="relative block size-16 cursor-pointer overflow-hidden rounded border border-border transition-colors hover:border-primary"
+                  aria-label={t("financeCard.receiptAlt")}
+                >
+                  <img src={receipt || "/placeholder.svg"} alt={t("financeCard.receiptAlt")} className="size-full object-cover transition-opacity group-hover:opacity-80" />
+                  <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                    <ZoomIn className="size-4 text-white" />
+                  </span>
+                </button>
               ) : (
-                <div className="flex size-16 flex-col items-center justify-center gap-1 rounded border border-border bg-muted/40 text-[10px] text-muted-foreground">
+                <a
+                  href={receipt}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex size-16 flex-col items-center justify-center gap-1 rounded border border-border bg-muted/40 text-[10px] text-muted-foreground hover:bg-muted"
+                >
                   <FileText className="size-5" />
                   {t("financeCard.file")}
-                </div>
+                </a>
               )}
               <button
                 type="button"
@@ -242,6 +262,8 @@ export function FinanceActionCard({
           {status === "closed" ? t("financeCard.closeCase") : t("financeCard.save")}
         </Button>
       </div>
+
+      <ImageLightbox {...lightboxProps} />
     </div>
   )
 }
