@@ -32,9 +32,9 @@ export default async function ContextPage() {
   const fields: FieldDef[] = [
     { name: "kind", label: t("contextMod.fKind"), type: "select", options: kindOptions },
     { name: "impact", label: t("contextMod.fImpact"), type: "select", options: impactOptions },
-    { name: "title", label: t("contextMod.fTitle"), required: true, full: true, placeholder: t("contextMod.fTitlePlaceholder") },
-    { name: "description", label: t("contextMod.fDescription"), type: "textarea", placeholder: t("contextMod.fDescriptionPlaceholder") },
-    { name: "needs", label: t("contextMod.fNeeds"), type: "textarea", placeholder: t("contextMod.fNeedsPlaceholder") },
+    { name: "title", label: t("contextMod.fTitle"), required: true, full: true },
+    { name: "description", label: t("contextMod.fDescription"), type: "textarea" },
+    { name: "needs", label: t("contextMod.fNeeds"), type: "textarea" },
   ]
 
   const internal = issues.filter((i) => i.kind === "internal").length
@@ -44,7 +44,7 @@ export default async function ContextPage() {
   const columns: Column<Issue>[] = [
     {
       key: "title",
-      header: t("contextMod.colIssue"),
+      header: t("contextMod.fTitle"),
       render: (r) => <span className="font-medium text-foreground">{r.title}</span>,
     },
     {
@@ -83,20 +83,19 @@ export default async function ContextPage() {
       title={t("pageHeaders.contextTitle")}
       subtitle={t("pageHeaders.contextSubtitle")}
       user={user}
-      action={<RecordDialog title={t("contextMod.dialogTitle")} description={t("contextMod.dialogDesc")} triggerLabel={t("contextMod.trigger")} fields={fields} action={createContextIssue} />}
+      action={<RecordDialog title={t("contextMod.addIssue")} triggerLabel={t("contextMod.addIssue")} fields={fields} action={createContextIssue} />}
     >
       <IsoClauseBadge ids={["4.1", "4.2"]} locale={locale} className="mb-4" />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label={t("contextMod.kpiTotal")} value={issues.length} icon={Building2} tone="blue" />
+        <KpiCard label={t("common.total")} value={issues.length} icon={Building2} tone="blue" />
         <KpiCard label={t("contextMod.kpiInternal")} value={internal} icon={Factory} tone="primary" />
         <KpiCard label={t("contextMod.kpiExternal")} value={external} icon={Globe2} tone="accent" />
         <KpiCard label={t("contextMod.kpiParties")} value={parties} icon={Users} tone="destructive" />
       </div>
 
       <div className="mt-6">
-        <h2 className="mb-3 text-lg font-semibold text-foreground">{t("contextMod.registryTitle")}</h2>
-        <DataTable columns={columns} rows={issues} emptyMessage={t("contextMod.emptyMessage")} />
+        <DataTable columns={columns} rows={issues} emptyMessage={t("contextMod.empty")} />
       </div>
     </AppShell>
   )
