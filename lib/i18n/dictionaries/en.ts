@@ -64,6 +64,11 @@ export const en: Dictionary = {
     safetyRules: "Safety Rules",
     brandTitle: "HSE System",
     brandSubtitle: "Occupational Safety & Health",
+    auditGroup: "Audit",
+    auditOverview: "Audit Overview",
+    soon: "Soon",
+    expandGroup: "Expand",
+    collapseGroup: "Collapse",
   },
 
   dashboard: {
