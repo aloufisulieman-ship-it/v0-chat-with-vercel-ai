@@ -242,7 +242,7 @@ const moduleHref: Record<string, string> = {
   emergency: "/emergency",
   contractors: "/contractors",
   "management-review": "/management-review",
-  "internal-audit": "/internal-audit",
+  "internal-audit": "/audits",
 }
 
 // كل الأدلة المرتبطة ببند معيّن (تشمل تطابق البند الأب: دليل 6.1.2 يخدم 6.1.2.1 أيضاً).

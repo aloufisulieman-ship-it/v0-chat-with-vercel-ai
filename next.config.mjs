@@ -11,6 +11,12 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  async redirects() {
+    return [
+      // وحّدنا التدقيق على /audits؛ أي رابط قديم لـ /internal-audit يُعاد توجيهه.
+      { source: "/internal-audit", destination: "/audits", permanent: true },
+    ]
+  },
 }
 
 export default nextConfig
