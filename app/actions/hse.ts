@@ -20,6 +20,10 @@ import {
   attachment,
   user,
   aiDetection,
+  orgContextIssue,
+  ohsPolicy,
+  ohsObjective,
+  legalRequirement,
 } from "@/lib/db/schema"
 import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
@@ -885,6 +889,150 @@ export async function deleteDocument(id: number) {
   revalidatePath("/documents")
 }
 
+/* ---------------- ISO 45001 · سياق المنظمة (البند 4) ---------------- */
+export async function getContextIssues() {
+  const scope = await requireScope()
+  return db
+    .select()
+    .from(orgContextIssue)
+    .where(scopeWhere({ organizationId: orgContextIssue.organizationId, userId: orgContextIssue.userId }, scope))
+    .orderBy(desc(orgContextIssue.createdAt))
+}
+export async function createContextIssue(formData: FormData) {
+  await assertWritable()
+  const { userId, organizationId } = await requireModuleScope("context")
+  await db.insert(orgContextIssue).values({
+    userId,
+    organizationId,
+    kind: str(formData.get("kind"), "internal"),
+    title: str(formData.get("title")),
+    description: str(formData.get("description")),
+    needs: str(formData.get("needs")),
+    impact: str(formData.get("impact"), "medium"),
+  })
+  revalidatePath("/context")
+  revalidatePath("/compliance")
+}
+export async function deleteContextIssue(id: number) {
+  await assertWritable()
+  const scope = await requireModuleScope("context")
+  await db
+    .delete(orgContextIssue)
+    .where(scopeWhere({ organizationId: orgContextIssue.organizationId, userId: orgContextIssue.userId }, scope, eq(orgContextIssue.id, id)))
+  revalidatePath("/context")
+  revalidatePath("/compliance")
+}
+
+/* ---------------- ISO 45001 · سياسة السلامة (البند 5.2) ---------------- */
+export async function getPolicies() {
+  const scope = await requireScope()
+  return db
+    .select()
+    .from(ohsPolicy)
+    .where(scopeWhere({ organizationId: ohsPolicy.organizationId, userId: ohsPolicy.userId }, scope))
+    .orderBy(desc(ohsPolicy.createdAt))
+}
+export async function createPolicy(formData: FormData) {
+  await assertWritable()
+  const { userId, organizationId } = await requireModuleScope("policy")
+  await db.insert(ohsPolicy).values({
+    userId,
+    organizationId,
+    title: str(formData.get("title")),
+    version: str(formData.get("version"), "1.0"),
+    statement: str(formData.get("statement")),
+    approvedBy: str(formData.get("approvedBy")),
+    approvedDate: dateOrNull(formData.get("approvedDate")),
+    reviewDate: dateOrNull(formData.get("reviewDate")),
+    status: str(formData.get("status"), "draft"),
+  })
+  revalidatePath("/policy")
+  revalidatePath("/compliance")
+}
+export async function deletePolicy(id: number) {
+  await assertWritable()
+  const scope = await requireModuleScope("policy")
+  await db
+    .delete(ohsPolicy)
+    .where(scopeWhere({ organizationId: ohsPolicy.organizationId, userId: ohsPolicy.userId }, scope, eq(ohsPolicy.id, id)))
+  revalidatePath("/policy")
+  revalidatePath("/compliance")
+}
+
+/* ---------------- ISO 45001 · الأهداف والخطط (البند 6.2) ---------------- */
+export async function getObjectives() {
+  const scope = await requireScope()
+  return db
+    .select()
+    .from(ohsObjective)
+    .where(scopeWhere({ organizationId: ohsObjective.organizationId, userId: ohsObjective.userId }, scope))
+    .orderBy(desc(ohsObjective.createdAt))
+}
+export async function createObjective(formData: FormData) {
+  await assertWritable()
+  const { userId, organizationId } = await requireModuleScope("objectives")
+  const progress = Math.max(0, Math.min(100, num(formData.get("progress"))))
+  await db.insert(ohsObjective).values({
+    userId,
+    organizationId,
+    title: str(formData.get("title")),
+    indicator: str(formData.get("indicator")),
+    baseline: str(formData.get("baseline")),
+    target: str(formData.get("target")),
+    responsible: str(formData.get("responsible")),
+    progress,
+    status: str(formData.get("status"), "not_started"),
+    dueDate: dateOrNull(formData.get("dueDate")),
+  })
+  revalidatePath("/objectives")
+  revalidatePath("/compliance")
+}
+export async function deleteObjective(id: number) {
+  await assertWritable()
+  const scope = await requireModuleScope("objectives")
+  await db
+    .delete(ohsObjective)
+    .where(scopeWhere({ organizationId: ohsObjective.organizationId, userId: ohsObjective.userId }, scope, eq(ohsObjective.id, id)))
+  revalidatePath("/objectives")
+  revalidatePath("/compliance")
+}
+
+/* ---------------- ISO 45001 · السجل القانوني (البند 6.1.3) ---------------- */
+export async function getLegalRequirements() {
+  const scope = await requireScope()
+  return db
+    .select()
+    .from(legalRequirement)
+    .where(scopeWhere({ organizationId: legalRequirement.organizationId, userId: legalRequirement.userId }, scope))
+    .orderBy(desc(legalRequirement.createdAt))
+}
+export async function createLegalRequirement(formData: FormData) {
+  await assertWritable()
+  const { userId, organizationId } = await requireModuleScope("legal-register")
+  await db.insert(legalRequirement).values({
+    userId,
+    organizationId,
+    title: str(formData.get("title")),
+    reference: str(formData.get("reference")),
+    authority: str(formData.get("authority")),
+    category: str(formData.get("category")),
+    applicability: str(formData.get("applicability")),
+    complianceStatus: str(formData.get("complianceStatus"), "compliant"),
+    lastReviewDate: dateOrNull(formData.get("lastReviewDate")),
+  })
+  revalidatePath("/legal-register")
+  revalidatePath("/compliance")
+}
+export async function deleteLegalRequirement(id: number) {
+  await assertWritable()
+  const scope = await requireModuleScope("legal-register")
+  await db
+    .delete(legalRequirement)
+    .where(scopeWhere({ organizationId: legalRequirement.organizationId, userId: legalRequirement.userId }, scope, eq(legalRequirement.id, id)))
+  revalidatePath("/legal-register")
+  revalidatePath("/compliance")
+}
+
 /* ---------------- Violations ---------------- */
 export async function getViolations() {
   const scope = await requireModuleScope("violations")
@@ -1123,7 +1271,7 @@ export async function acceptDetectionAsViolation(
     .limit(1)
   if (!det) throw new Error("الاكتشاف غير موجود")
   if (det.status === "converted" && det.linkedViolationNo) {
-    // مُحوّل مسبقاً — أعد رق���� المخالف�� القائم دون إنشاء تكرار.
+    // مُحوّل مسبقاً — أعد رق������ المخالف�� القائم دون إنشاء تكرار.
     return { documentNo: det.linkedViolationNo }
   }
   // حماية إضافية من التحويل المزدوج: هل توجد مخالفة مرتبطة بهذا الاكتشاف أصلاً؟

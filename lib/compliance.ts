@@ -16,6 +16,11 @@ export type ComplianceInput = {
   documents: Row[]
   trainings: Row[]
   employeeCount: number
+  // وحدات المرحلة الثانية (ISO 45001).
+  contextIssues: Row[]
+  policies: Row[]
+  objectives: Row[]
+  legalRequirements: Row[]
 }
 
 export type ClauseAssessment = {
@@ -189,6 +194,89 @@ export function computeCompliance(input: ComplianceInput): ComplianceResult {
       metricEn: anyData ? "Performance data available" : "No performance data yet",
       updatedAt: null,
     }
+  }
+
+  // 4.1 و4.2 — سياق المنظمة والأطراف المعنية ← وحدة سياق المنظمة
+  {
+    const total = input.contextIssues.length
+    const internal = input.contextIssues.filter((i) => String(i.kind) === "internal").length
+    const external = input.contextIssues.filter((i) => String(i.kind) === "external").length
+    const parties = input.contextIssues.filter((i) => String(i.kind) === "interested_party").length
+    // مطابق: قضايا داخلية وخارجية وأطراف معنية موثّقة جميعاً؛ جزئي: بعضها فقط.
+    let status: ClauseStatus = "non_compliant"
+    if (total > 0) {
+      const kinds = [internal > 0, external > 0, parties > 0].filter(Boolean).length
+      status = kinds >= 3 ? "compliant" : "partial"
+    }
+    const assessment: ClauseAssessment = {
+      status,
+      auto: true,
+      metricAr: `${total} بند سياق (${internal} داخلي، ${external} خارجي، ${parties} طرف معني)`,
+      metricEn: `${total} context items (${internal} internal, ${external} external, ${parties} parties)`,
+      updatedAt: latest(input.contextIssues),
+    }
+    byClause["4.1"] = assessment
+    byClause["4.2"] = assessment
+  }
+
+  // 5.2 — سياسة السلامة والصحة المهنية ← وحدة السياسة (وجود سياسة سارية معتمدة)
+  {
+    const total = input.policies.length
+    const active = input.policies.filter((p) => String(p.status) === "active")
+    const approvedActive = active.filter((p) => String(p.approvedBy ?? "").trim().length > 0).length
+    let status: ClauseStatus = "non_compliant"
+    if (active.length > 0) status = approvedActive > 0 ? "compliant" : "partial"
+    else if (total > 0) status = "partial" // مسودة فقط
+    byClause["5.2"] = {
+      status,
+      auto: true,
+      metricAr: total === 0 ? "لا سياسة موثّقة" : `${active.length} سياسة سارية، ${approvedActive} معتمدة`,
+      metricEn: total === 0 ? "No documented policy" : `${active.length} active, ${approvedActive} approved`,
+      updatedAt: latest(input.policies),
+    }
+  }
+
+  // 6.2 — أهداف السلامة وخطط تحقيقها ← وحدة الأهداف
+  {
+    const total = input.objectives.length
+    const achieved = input.objectives.filter((o) => String(o.status) === "achieved").length
+    const atRisk = input.objectives.filter((o) => String(o.status) === "at_risk").length
+    const withPlan = input.objectives.filter(
+      (o) => String(o.indicator ?? "").trim().length > 0 && String(o.responsible ?? "").trim().length > 0,
+    ).length
+    let status: ClauseStatus = "non_compliant"
+    if (total > 0) status = withPlan === total && atRisk === 0 ? "compliant" : "partial"
+    const assessment: ClauseAssessment = {
+      status,
+      auto: true,
+      metricAr: `${total} هدف، ${achieved} متحقّق، ${atRisk} متعثّر، ${withPlan} بخطة كاملة`,
+      metricEn: `${total} objectives, ${achieved} achieved, ${atRisk} at risk, ${withPlan} fully planned`,
+      updatedAt: latest(input.objectives),
+    }
+    byClause["6.2"] = assessment
+    byClause["6.2.1"] = assessment
+    byClause["6.2.2"] = assessment
+  }
+
+  // 6.1.3 و9.1.2 — المتطلبات القانونية وتقييم الالتزام ← السجل القانوني
+  {
+    const total = input.legalRequirements.length
+    const compliant = input.legalRequirements.filter((r) => String(r.complianceStatus) === "compliant").length
+    const nonCompliant = input.legalRequirements.filter((r) => String(r.complianceStatus) === "non_compliant").length
+    let status: ClauseStatus = "non_compliant"
+    if (total > 0) {
+      const coverage = pct(compliant, total)
+      status = nonCompliant === 0 && coverage >= 80 ? "compliant" : "partial"
+    }
+    const assessment: ClauseAssessment = {
+      status,
+      auto: true,
+      metricAr: total === 0 ? "لا سجل قانوني بعد" : `${total} متطلب، ${compliant} ملتزم، ${nonCompliant} غير ملتزم`,
+      metricEn: total === 0 ? "No legal register yet" : `${total} requirements, ${compliant} compliant, ${nonCompliant} non-compliant`,
+      updatedAt: latest(input.legalRequirements),
+    }
+    byClause["6.1.3"] = assessment
+    byClause["9.1.2"] = assessment
   }
 
   // التجميع على كل البنود.

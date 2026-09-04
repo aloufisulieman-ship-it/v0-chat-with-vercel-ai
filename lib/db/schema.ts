@@ -661,6 +661,77 @@ export const document = pgTable("document", {
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
+// ========== وحدات مطابقة ISO 45001:2018 (المرحلة الثانية) ==========
+
+// البند 4 — سياق المنظمة: القضايا الداخلية/الخارجية والأطراف المعنية واحتياجاتها.
+// kind: internal (قضية داخلية) | external (قضية خارجية) | interested_party (طرف معني).
+export const orgContextIssue = pgTable("org_context_issue", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
+  kind: text("kind").notNull().default("internal"),
+  title: text("title").notNull(),
+  description: text("description").notNull().default(""),
+  // احتياجات/توقعات الطرف المعني (يُستخدم أساساً مع interested_party).
+  needs: text("needs").notNull().default(""),
+  // التأثير على نظام السلامة: low | medium | high.
+  impact: text("impact").notNull().default("medium"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+// البند 5.2 — سياسة السلامة والصحة المهنية: بيانات السياسة المعتمدة وإصداراتها.
+// status: draft (مسودة) | active (سارية) | archived (مؤرشفة).
+export const ohsPolicy = pgTable("ohs_policy", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
+  title: text("title").notNull().default(""),
+  version: text("version").notNull().default("1.0"),
+  statement: text("statement").notNull().default(""),
+  approvedBy: text("approved_by").notNull().default(""),
+  approvedDate: date("approved_date"),
+  reviewDate: date("review_date"),
+  status: text("status").notNull().default("draft"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+// البند 6.2 — أهداف السلامة والصحة المهنية وخطط تحقيقها.
+// status: not_started (لم يبدأ) | on_track (على المسار) | at_risk (متعثّر) | achieved (متحقّق).
+export const ohsObjective = pgTable("ohs_objective", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
+  title: text("title").notNull(),
+  indicator: text("indicator").notNull().default(""),
+  baseline: text("baseline").notNull().default(""),
+  target: text("target").notNull().default(""),
+  responsible: text("responsible").notNull().default(""),
+  progress: integer("progress").notNull().default(0), // 0-100
+  status: text("status").notNull().default("not_started"),
+  dueDate: date("due_date"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+// البند 6.1.3 — سجل المتطلبات القانونية والمتطلبات الأخرى وتقييم الالتزام بها.
+// complianceStatus: compliant | partial | non_compliant.
+export const legalRequirement = pgTable("legal_requirement", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
+  title: text("title").notNull(),
+  reference: text("reference").notNull().default(""),
+  authority: text("authority").notNull().default(""),
+  category: text("category").notNull().default(""),
+  applicability: text("applicability").notNull().default(""),
+  complianceStatus: text("compliance_status").notNull().default("compliant"),
+  lastReviewDate: date("last_review_date"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
 // ذاكرة ترجمة البيانات المُدخلة (أوصاف/ملاحظات) عبر الذكاء الاصطناعي.
 // نُخزّن الترجمة مرة واحدة لكل (نص مصدر + لغة هدف) لتجنّب تكرار الاستدعاءات
 // وتثبيت النتيجة. sourceHash = بصمة النص المصدر لتسريع البحث وتفادي مفاتيح ضخمة.
@@ -729,7 +800,7 @@ export const equipment = pgTable(
     ownerCompany: text("owner_company").notNull().default(""),
     // اسم السائق/المستخدم المخوّل بتشغيل المعدة.
     driverName: text("driver_name").notNull().default(""),
-    // رقم داخلي/كود أصل اختياري (غير مستخدم في المطابقة، للعرض فقط).
+    // رقم داخلي/ك��د أصل اختياري (غير مستخدم في المطابقة، للعرض فقط).
     internalCode: text("internal_code").notNull().default(""),
     active: boolean("active").notNull().default(true),
     notes: text("notes").notNull().default(""),

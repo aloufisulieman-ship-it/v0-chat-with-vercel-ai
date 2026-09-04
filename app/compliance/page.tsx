@@ -8,7 +8,17 @@ import { requireModule } from "@/lib/session"
 import { getServerT } from "@/lib/i18n/server"
 import { formatDate } from "@/lib/i18n/translate"
 import type { Locale } from "@/lib/i18n/config"
-import { getDashboardData, getEmployees, getTrainings, getDocuments, getCompany } from "@/app/actions/hse"
+import {
+  getDashboardData,
+  getEmployees,
+  getTrainings,
+  getDocuments,
+  getCompany,
+  getContextIssues,
+  getPolicies,
+  getObjectives,
+  getLegalRequirements,
+} from "@/app/actions/hse"
 import {
   iso45001Clauses,
   clauseSections,
@@ -135,13 +145,18 @@ function buildGapHtml(
 
 export default async function CompliancePage() {
   const user = await requireModule("compliance")
-  const [dashboard, employees, trainings, documents, company] = await Promise.all([
-    getDashboardData(),
-    getEmployees(),
-    getTrainings(),
-    getDocuments(),
-    getCompany(),
-  ])
+  const [dashboard, employees, trainings, documents, company, contextIssues, policies, objectives, legalRequirements] =
+    await Promise.all([
+      getDashboardData(),
+      getEmployees(),
+      getTrainings(),
+      getDocuments(),
+      getCompany(),
+      getContextIssues(),
+      getPolicies(),
+      getObjectives(),
+      getLegalRequirements(),
+    ])
   const { t, dir, locale } = await getServerT()
 
   const result = computeCompliance({
@@ -154,6 +169,10 @@ export default async function CompliancePage() {
     documents,
     trainings,
     employeeCount: employees.length,
+    contextIssues,
+    policies,
+    objectives,
+    legalRequirements,
   })
 
   const orgName = (company as { name?: string } | null)?.name || "المنظمة"
