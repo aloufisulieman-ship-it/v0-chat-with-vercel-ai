@@ -23,8 +23,10 @@ export default async function RisksPage() {
     { name: "owner", label: t("risksMod.fOwner") },
     { name: "likelihood", label: t("risksMod.fLikelihood"), type: "select", options: scoreOptions },
     { name: "consequence", label: t("risksMod.fConsequence"), type: "select", options: scoreOptions },
+    { name: "reviewDate", label: t("risksMod.fReviewDate"), type: "date" },
     { name: "status", label: t("risksMod.fStatus"), type: "select", options: statusOptions.map((o) => ({ value: o.value, label: statusLabel(t, o.value) })) },
     { name: "controls", label: t("risksMod.fControls"), type: "textarea" },
+    { name: "proposedControls", label: t("risksMod.fProposedControls"), type: "textarea" },
   ]
 
   // نطاقات ISO 45001: منخفض 1–4، متوسط 5–9، عالٍ 10–15، حرج 16–25.

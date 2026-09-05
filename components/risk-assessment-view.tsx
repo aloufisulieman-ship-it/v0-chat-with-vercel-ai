@@ -53,8 +53,12 @@ export function RiskAssessmentView({
   const { t } = useI18n()
   const [selected, setSelected] = useState<MatrixCell | null>(null)
 
+  // تُرتَّب تنازلياً حسب درجة المخاطرة فتظهر الحرجة في الأعلى.
   const scored = useMemo(
-    () => risks.map((r) => ({ ...r, score: (r.likelihood ?? 1) * (r.consequence ?? 1) })),
+    () =>
+      risks
+        .map((r) => ({ ...r, score: (r.likelihood ?? 1) * (r.consequence ?? 1) }))
+        .sort((a, b) => b.score - a.score),
     [risks],
   )
 
@@ -75,6 +79,7 @@ export function RiskAssessmentView({
     { key: "level", header: t("risksMod.fLevel"), render: (r) => <RiskBadge score={r.score} /> },
     { key: "controls", header: t("risksMod.fControls"), render: (r) => <span className="text-muted-foreground">{r.controls || "-"}</span> },
     { key: "owner", header: t("risksMod.fOwner"), render: (r) => <span className="text-muted-foreground">{r.owner || "-"}</span> },
+    { key: "reviewDate", header: t("risksMod.fReviewDate"), render: (r) => <span className="font-mono text-xs text-muted-foreground tabular-nums" dir="ltr">{r.reviewDate || "-"}</span> },
     { key: "status", header: t("risksMod.fStatus"), render: (r) => <StatusBadge status={r.status ?? "open"} /> },
     {
       key: "actions",
@@ -95,7 +100,9 @@ export function RiskAssessmentView({
               { label: t("risksMod.fScoreDetail"), value: String(r.score) },
               { label: t("risksMod.fLevel"), value: t(LEGEND_KEY[riskLevel(r.score).value]) },
               { label: t("risksMod.fControls"), value: r.controls || "-" },
+              { label: t("risksMod.fProposedControls"), value: r.proposedControls || "-" },
               { label: t("risksMod.fOwner"), value: r.owner || "-" },
+              { label: t("risksMod.fReviewDate"), value: r.reviewDate || "-" },
               { label: t("risksMod.fStatus"), value: r.status ?? "-" },
             ]}
             initialAttachments={[]}

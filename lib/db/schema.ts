@@ -273,8 +273,10 @@ export const risk = pgTable("risk", {
   likelihood: integer("likelihood").default(1),
   consequence: integer("consequence").default(1),
   controls: text("controls").default(""),
+  proposedControls: text("proposedControls").default(""),
   owner: text("owner").default(""),
   status: text("status").default("open"),
+  reviewDate: text("reviewDate").default(""),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
