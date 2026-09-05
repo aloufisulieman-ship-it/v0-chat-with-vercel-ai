@@ -2,13 +2,14 @@
 
 import { useMemo, useState } from "react"
 import { DataTable, type Column } from "@/components/data-table"
-import { StatusBadge } from "@/components/status-badge"
 import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { RiskMatrix, type MatrixCell } from "@/components/risk-matrix"
+import { RiskLifecycleActions } from "@/components/risk-lifecycle-actions"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n/client"
 import { getRiskBand, riskLevel, RISK_BANDS, type RiskBandId } from "@/lib/labels"
+import { normalizeRiskStatus, riskStatusLabel, riskStatusBadgeClass } from "@/lib/risk-lifecycle"
 import type { getRisks, deleteRisk as deleteRiskAction } from "@/app/actions/hse"
 
 const LEGEND_KEY: Record<RiskBandId, string> = {
@@ -46,11 +47,16 @@ function RiskBadge({ score }: { score: number }) {
 export function RiskAssessmentView({
   risks,
   deleteRisk,
+  actionCounts = {},
+  isManager = false,
 }: {
   risks: RiskRow[]
   deleteRisk: typeof deleteRiskAction
+  actionCounts?: Record<number, { total: number; completed: number }>
+  isManager?: boolean
 }) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
+  const loc = locale === "en" ? "en" : "ar"
   const [selected, setSelected] = useState<MatrixCell | null>(null)
 
   // تُرتَّب تنازلياً حسب درجة المخاطرة فتظهر الحرجة في الأعلى.
@@ -80,13 +86,25 @@ export function RiskAssessmentView({
     { key: "controls", header: t("risksMod.fControls"), render: (r) => <span className="text-muted-foreground">{r.controls || "-"}</span> },
     { key: "owner", header: t("risksMod.fOwner"), render: (r) => <span className="text-muted-foreground">{r.owner || "-"}</span> },
     { key: "reviewDate", header: t("risksMod.fReviewDate"), render: (r) => <span className="font-mono text-xs text-muted-foreground tabular-nums" dir="ltr">{r.reviewDate || "-"}</span> },
-    { key: "status", header: t("risksMod.fStatus"), render: (r) => <StatusBadge status={r.status ?? "open"} /> },
+    {
+      key: "status",
+      header: t("risksMod.fStatus"),
+      render: (r) => {
+        const s = normalizeRiskStatus(r.status)
+        return (
+          <span className={cn("inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap", riskStatusBadgeClass(s))}>
+            {riskStatusLabel(s, loc)}
+          </span>
+        )
+      },
+    },
     {
       key: "actions",
       header: "",
       className: "text-left",
       render: (r) => (
         <div className="flex items-center justify-end gap-1">
+          <RiskLifecycleActions risk={r} counts={actionCounts[r.id]} isManager={isManager} />
           <RecordDetailsDialog
             module="risks"
             recordId={r.id}
@@ -99,12 +117,11 @@ export function RiskAssessmentView({
               { label: t("risksMod.fConsequenceShort"), value: String(r.consequence ?? 1) },
               { label: t("risksMod.fScoreDetail"), value: String(r.score) },
               { label: t("risksMod.fLevel"), value: t(LEGEND_KEY[riskLevel(r.score).value]) },
-              { label: t("risksMod.fControls"), value: r.controls || "-" },
-              { label: t("risksMod.fProposedControls"), value: r.proposedControls || "-" },
               { label: t("risksMod.fOwner"), value: r.owner || "-" },
               { label: t("risksMod.fReviewDate"), value: r.reviewDate || "-" },
-              { label: t("risksMod.fStatus"), value: r.status ?? "-" },
+              { label: t("risksMod.fStatus"), value: riskStatusLabel(normalizeRiskStatus(r.status), loc) },
             ]}
+            extraSection={<ControlsTab risk={r} />}
             initialAttachments={[]}
           />
           <DeleteButton id={r.id} action={deleteRisk} />
@@ -144,7 +161,7 @@ export function RiskAssessmentView({
         </div>
       </div>
 
-      <div className="mt-6">
+      <div className="mt-6" id="risk-registry">
         <div className="mb-3 flex items-center gap-3">
           <h2 className="text-lg font-semibold text-foreground">{t("risksMod.registryTitle")}</h2>
           {selected && (
@@ -166,5 +183,47 @@ export function RiskAssessmentView({
         <DataTable columns={columns} rows={filtered} emptyMessage={t("risksMod.emptyMessage")} />
       </div>
     </>
+  )
+}
+
+// تبويب الضوابط داخل نافذة التفاصيل: الحالية | المقترحة | المنفّذة.
+function ControlsTab({ risk }: { risk: RiskRow }) {
+  const { t } = useI18n()
+  const cols: { key: string; title: string; value: string | null | undefined }[] = [
+    { key: "existing", title: t("risksMod.controlsExisting"), value: risk.controls },
+    { key: "proposed", title: t("risksMod.controlsProposed"), value: risk.proposedControls },
+    { key: "implemented", title: t("risksMod.controlsImplemented"), value: risk.implementedControls },
+  ]
+  return (
+    <section className="flex flex-col gap-3">
+      <h4 className="text-sm font-semibold text-foreground">{t("risksMod.controlsTab")}</h4>
+      <div className="grid gap-3 sm:grid-cols-3">
+        {cols.map((c) => (
+          <div key={c.key} className="flex flex-col gap-2 rounded-lg border border-border bg-muted/20 p-3">
+            <span className="text-xs font-medium text-muted-foreground">{c.title}</span>
+            {c.value ? (
+              <ul className="flex flex-col gap-1">
+                {c.value
+                  .split("•")
+                  .map((s) => s.trim())
+                  .filter(Boolean)
+                  .map((line, i) => (
+                    <li key={i} className="text-sm leading-relaxed text-foreground">
+                      {line}
+                    </li>
+                  ))}
+              </ul>
+            ) : (
+              <span className="text-sm text-muted-foreground">—</span>
+            )}
+          </div>
+        ))}
+      </div>
+      {risk.closedBy && (
+        <p className="text-xs text-muted-foreground">
+          {t("risksMod.closedBy")}: <span className="font-medium text-foreground">{risk.closedBy}</span>
+        </p>
+      )}
+    </section>
   )
 }

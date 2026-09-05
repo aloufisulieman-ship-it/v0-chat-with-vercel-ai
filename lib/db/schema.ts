@@ -272,11 +272,19 @@ export const risk = pgTable("risk", {
   activity: text("activity").default(""),
   likelihood: integer("likelihood").default(1),
   consequence: integer("consequence").default(1),
-  controls: text("controls").default(""),
-  proposedControls: text("proposedControls").default(""),
+  controls: text("controls").default(""), // الضوابط الحالية (existingControls)
+  proposedControls: text("proposedControls").default(""), // الضوابط المقترحة
+  implementedControls: text("implementedControls").default(""), // الضوابط المنفّذة (تُنسخ من الإجراءات)
   owner: text("owner").default(""),
+  // دورة حياة الخطر: open → in_progress → verification → closed
   status: text("status").default("open"),
   reviewDate: text("reviewDate").default(""),
+  // إعادة التقييم بعد تنفيذ الضوابط (الدرجة المتبقية = residualLikelihood × residualConsequence)
+  residualLikelihood: integer("residualLikelihood"),
+  residualConsequence: integer("residualConsequence"),
+  closureSignatureUrl: text("closureSignatureUrl").default(""),
+  closedBy: text("closedBy").default(""),
+  closedAt: timestamp("closedAt"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
@@ -378,6 +386,10 @@ export const correctiveAction = pgTable("corrective_action", {
   priority: text("priority").default("medium"),
   status: text("status").default("open"),
   dueDate: date("dueDate"),
+  // ربط الإجراء التصحيحي بالخطر الذي أنشأه (أتمتة دورة حياة الخطر).
+  riskId: integer("riskId"),
+  implementedControls: text("implementedControls").default(""),
+  evidenceUrl: text("evidenceUrl").default(""),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
@@ -736,7 +748,7 @@ export const legalRequirement = pgTable("legal_requirement", {
 
 // ========== وحدات مطابقة ISO 45001:2018 التشغيلية (المرحلة الثالثة) ==========
 
-// البند 5.4 — تشاور العمال ومشاركتهم: سجل أنشطة التشاور والمشاركة.
+// البند 5.4 — تشاور العم��ل ومشاركتهم: سجل أنشطة التشاور والمشاركة.
 // activityType: consultation (تشاور) | participation (مشاركة).
 // method: meeting (اجتماع) | survey (استبيان) | committee (لجنة سلامة) | suggestion (صندوق مقترحات).
 export const workerConsultation = pgTable("worker_consultation", {
