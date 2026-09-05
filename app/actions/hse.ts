@@ -461,8 +461,10 @@ export async function createRisk(formData: FormData) {
     likelihood: num(formData.get("likelihood"), 1),
     consequence: num(formData.get("consequence"), 1),
     controls: str(formData.get("controls")),
+    proposedControls: str(formData.get("proposedControls")),
     owner: str(formData.get("owner")),
     status: str(formData.get("status"), "open"),
+    reviewDate: str(formData.get("reviewDate")),
   })
   revalidatePath("/risks")
   revalidatePath("/")
@@ -1920,7 +1922,7 @@ export async function getCriticalWithoutAction(): Promise<number> {
 
 export async function getDashboardData() {
   const scope = await requireScope()
-  // العزل بين المؤسسات صارم (organizationId دائماً)؛ وداخل المؤسسة يرى المديرُ كل
+  // العزل بين المؤسس��ت صارم (organizationId دائماً)؛ وداخل المؤسسة يرى المديرُ كل
   // السجلات والموظفُ سجلاته فقط عبر scopeWhere.
   const [inc, ins, per, rsk, act, obs, vio, trend, detectionTrend] = await Promise.all([
     db.select().from(incident).where(scopeWhere({ organizationId: incident.organizationId, userId: incident.userId }, scope)),

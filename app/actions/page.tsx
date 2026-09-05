@@ -5,6 +5,7 @@ import { DataTable, type Column } from "@/components/data-table"
 import { StatusBadge, SeverityBadge } from "@/components/status-badge"
 import { RecordDialog, type FieldDef } from "@/components/record-dialog"
 import { RecordDetailsDialog } from "@/components/record-details-dialog"
+import { CompleteActionDialog } from "@/components/complete-action-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { requireModule } from "@/lib/session"
 import { getActions, createAction, deleteAction } from "@/app/actions/hse"
@@ -45,6 +46,9 @@ export default async function ActionsPage() {
       className: "text-left",
       render: (r) => (
         <div className="flex items-center justify-end gap-1">
+          {r.riskId != null && r.status !== "completed" && r.status !== "closed" && (
+            <CompleteActionDialog actionId={r.id} />
+          )}
           <RecordDetailsDialog
             module="actions"
             recordId={r.id}
@@ -57,6 +61,7 @@ export default async function ActionsPage() {
               { label: t("actionsMod.fPriority"), value: r.priority ? severityLabel(t, r.priority) : "-" },
               { label: t("actionsMod.fDueDate"), value: r.dueDate ?? "-" },
               { label: t("actionsMod.fStatus"), value: r.status ? statusLabel(t, r.status) : "-" },
+              ...(r.implementedControls ? [{ label: t("risksMod.controlsImplemented"), value: r.implementedControls }] : []),
             ]}
             initialAttachments={[]}
           />

@@ -180,9 +180,38 @@ export const moduleLabels: Record<string, string> = Object.fromEntries(
 )
 export type ModuleKey = (typeof moduleOptions)[number]["value"]
 
-export function riskLevel(score: number): { value: string; label: string } {
-  if (score >= 15) return { value: "critical", label: "حرج" }
-  if (score >= 9) return { value: "high", label: "عالٍ" }
-  if (score >= 4) return { value: "medium", label: "متوسط" }
-  return { value: "low", label: "منخفض" }
+// نطاقات مصفوفة المخاطر 5×5 وفق ISO 45001:2018 — مصدر واحد للحقيقة تستمد منه
+// الخلية والشارة والمفتاح (legend) قيمتها ولونها. لا ألوان ثابتة inline في أي مكان.
+export type RiskBandId = "low" | "medium" | "high" | "critical"
+export type RiskBand = {
+  id: RiskBandId
+  min: number
+  max: number
+  // فئات لون الخلفية/النص مستمدة من رموز التصميم (tokens) المعرّفة في globals.css.
+  cell: string
+  badge: string
+  swatch: string
+}
+
+export const RISK_BANDS: RiskBand[] = [
+  { id: "low", min: 1, max: 4, cell: "bg-risk-low text-risk-low-foreground", badge: "bg-risk-low/15 text-risk-low", swatch: "bg-risk-low" },
+  { id: "medium", min: 5, max: 9, cell: "bg-risk-medium text-risk-medium-foreground", badge: "bg-risk-medium/20 text-risk-medium-foreground", swatch: "bg-risk-medium" },
+  { id: "high", min: 10, max: 15, cell: "bg-risk-high text-risk-high-foreground", badge: "bg-risk-high/15 text-risk-high", swatch: "bg-risk-high" },
+  { id: "critical", min: 16, max: 25, cell: "bg-risk-critical text-risk-critical-foreground", badge: "bg-risk-critical/15 text-risk-critical", swatch: "bg-risk-critical" },
+]
+
+export function getRiskBand(value: number): RiskBand {
+  return RISK_BANDS.find((b) => value >= b.min && value <= b.max) ?? RISK_BANDS[0]
+}
+
+const riskLevelLabels: Record<RiskBandId, string> = {
+  low: "منخفض",
+  medium: "متوسط",
+  high: "عالٍ",
+  critical: "حرج",
+}
+
+export function riskLevel(score: number): { value: RiskBandId; label: string } {
+  const band = getRiskBand(score)
+  return { value: band.id, label: riskLevelLabels[band.id] }
 }
