@@ -134,11 +134,19 @@ export function AppSidebar({
 
   // أبناء مجموعة «التدقيق» المرئيون حسب صلاحية كل بند (الأدمن/المدير يرى الكل).
   const auditItems = auditGroup.children.filter((child) => canSee(child.module))
-  // هل المستخدم داخل أي صفحة فرعية من صفحات التدقيق؟ → افتح المجموعة تلقائياً وميّزها.
+  // هل المستخدم داخل أي صفحة فرعية من صفحات التدقيق؟ (للتمييز البصري للأب فقط، لا للفتح/الإغلاق).
   const auditActive = auditItems.some((child) => pathname.startsWith(child.href))
-  const [auditOpen, setAuditOpen] = useState(auditActive)
-  // اجعل المجموعة مفتوحة دائماً طالما المستخدم داخل إحدى صفحاتها (لا تُطوى تحت المستخدم).
-  const auditExpanded = auditOpen || auditActive
+
+  // القائمة المفتوحة مملوكة للمستخدم بالكامل (accordion: قائمة واحدة مفتوحة في كل مرة).
+  // الحالة الأولية فقط تُشتقّ من المسار — تُحسب مرة واحدة عند التحميل ولا يُعاد تطبيقها بعدها،
+  // كي لا يمنع المسارُ إغلاق القائمة عند الضغط عليها ثانيةً.
+  const [openMenu, setOpenMenu] = useState<string | null>(() =>
+    pathname.startsWith("/audit") ||
+    auditGroup.children.some((child) => pathname.startsWith(child.href))
+      ? "audit"
+      : null,
+  )
+  const auditExpanded = openMenu === "audit"
 
   // لوحة التحكم فقط هي الصفحة الأساسية الدائمة كي لا يُقفل أي مستخدم خارج النظام.
   // كل صفحة أخرى (بما فيها المراقبة الذكية والإعدادات والصفحات التي كانت "عامة")
@@ -230,7 +238,7 @@ export function AppSidebar({
                   <li key="audit-group">
                     <button
                       type="button"
-                      onClick={() => setAuditOpen((v) => !v)}
+                      onClick={() => setOpenMenu((prev) => (prev === "audit" ? null : "audit"))}
                       aria-expanded={auditExpanded}
                       className={cn(
                         "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
