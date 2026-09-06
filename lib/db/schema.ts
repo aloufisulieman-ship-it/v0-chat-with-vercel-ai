@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, serial, integer, date, uniqueIndex, index } from "drizzle-orm/pg-core"
+import { pgTable, text, timestamp, boolean, serial, integer, date, jsonb, uniqueIndex, index } from "drizzle-orm/pg-core"
 
 // ---------- المؤسسة (المستأجر) — الحدّ الأعلى للعزل في نظام SaaS متعدد المؤسسات ----------
 // كل مستخدم وكل سجل تشغيلي ينتمي إلى مؤسسة واحدة عبر organizationId. العزل بين
@@ -217,7 +217,7 @@ export const incident = pgTable("incident", {
   hrStatus: text("hr_status"),
   hrClosedBy: text("hr_closed_by").default(""),
   hrClosedAt: timestamp("hr_closed_at"),
-  // مرفقات قرار الموارد البشرية (JSON array من data URLs، بنفس آلية الصور/التواقيع).
+  // مرفقات قرا�� الموارد البشرية (JSON array من data URLs، بنفس آلية الصور/التواقيع).
   hrAttachmentUrl: text("hr_attachment_url").default(""),
   // مسار الإغلاق المالي للحوادث المحوّلة إلى المالية.
   financeStatus: text("finance_status"),
@@ -252,17 +252,79 @@ export const permit = pgTable("permit", {
   type: text("type").default("construction"),
   location: text("location").default(""),
   requestedBy: text("requestedBy").default(""),
+  // دورة حياة تصريح العمل (PTW): draft → pending → active → suspended → closed | rejected | expired.
   status: text("status").default("pending"),
   validFrom: date("validFrom"),
   validTo: date("validTo"),
-  // حقول ديناميكية خاصة بكل نوع تصريح، مخزّنة كـ JSON.
+  // حقول ديناميكية قديمة (توافق خلفي)، مخزّنة كـ JSON نصّي.
   details: text("details").default(""),
   // بيانات اعتماد/رفض المدير.
   approvedBy: text("approvedBy").default(""),
   approvedAt: timestamp("approvedAt"),
   rejectionReason: text("rejectionReason").default(""),
+  // ====== حقول تصريح العمل الموسّعة ======
+  workDescription: text("workDescription").default(""),
+  contractorName: text("contractorName").default(""),
+  workersCount: integer("workersCount"),
+  supervisorName: text("supervisorName").default(""),
+  // نافذة صلاحية دقيقة (تاريخ/وقت) مع مدة بالساعات لحساب الوقت المتبقي والانتهاء التلقائي.
+  startAt: timestamp("startAt"),
+  endAt: timestamp("endAt"),
+  durationHours: integer("durationHours"),
+  riskLevel: text("riskLevel").default("medium"),
+  // إجابات قائمة الفحص الديناميكية حسب النوع { [itemId]: boolean }.
+  checklistAnswers: jsonb("checklistAnswers").default({}),
+  // قياسات الغاز (للأماكن المحصورة/الحرارة): { o2, lel, h2s, co, ... }.
+  gasTestReadings: jsonb("gasTestReadings").default({}),
+  // عزل الطاقة LOTO (للكهرباء/الميكانيكا): { points: [...], locksApplied, tagsApplied }.
+  isolationLOTO: jsonb("isolationLOTO").default({}),
+  // مرفقات (روابط Blob): [{ url, name, kind }].
+  attachmentsJson: jsonb("attachmentsJson").default([]),
+  // إغلاق التصريح بعد انتهاء العمل.
+  closedAt: timestamp("closedAt"),
+  closedBy: text("closedBy").default(""),
+  siteConditionAfter: text("siteConditionAfter").default(""),
+  areaEvacuated: boolean("areaEvacuated").default(false),
+  // الأرشفة (يدوية من المدير أو تلقائية بعد الإغلاق/الانتهاء).
+  archivedAt: timestamp("archivedAt"),
+  // التمديد وإيقاف العمل المؤقت.
+  extendedTo: timestamp("extendedTo"),
+  suspendReason: text("suspendReason").default(""),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
+
+// توقيعات تصريح العمل: سلسلة اعتماد متعددة الأدوار (طالب/مُصدر/مراقب سلامة/مُعتمِد)
+// وتوقيعات الإغلاق. كل توقيع صورة مخزّنة في Blob مع اسم المُوقّع ووقته.
+export const permitSignature = pgTable(
+  "permit_signature",
+  {
+    id: serial("id").primaryKey(),
+    permitId: integer("permitId").notNull(),
+    organizationId: text("organizationId").notNull(),
+    // requester | issuer | safety | approver | closeIssuer | closeReceiver
+    role: text("role").notNull(),
+    signerName: text("signerName").notNull().default(""),
+    signatureUrl: text("signatureUrl").notNull().default(""),
+    signedAt: timestamp("signedAt").notNull().defaultNow(),
+  },
+  (t) => ({ permitIdx: index("permit_signature_permit_idx").on(t.permitId) }),
+)
+
+// سجل تدقيق تصريح العمل: كل حدث في دورة الحياة (إنشاء/اعتماد/رفض/تمديد/إيقاف/إغلاق/أرشفة).
+export const permitAuditLog = pgTable(
+  "permit_audit_log",
+  {
+    id: serial("id").primaryKey(),
+    permitId: integer("permitId").notNull(),
+    organizationId: text("organizationId").notNull(),
+    action: text("action").notNull(),
+    actorId: text("actorId").notNull().default(""),
+    actorName: text("actorName").notNull().default(""),
+    note: text("note").notNull().default(""),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (t) => ({ permitIdx: index("permit_audit_log_permit_idx").on(t.permitId) }),
+)
 
 export const risk = pgTable("risk", {
   id: serial("id").primaryKey(),
@@ -575,7 +637,7 @@ export const aiDetection = pgTable("ai_detections", {
   notes: text("notes").default(""),
   // رقم المخالفة المرتبطة (VIO-YYYY-###) عند تحويل الاكتشاف إلى مخالفة رسمية.
   linkedViolationNo: text("linked_violation_no").default(""),
-  // روابط التحويل الرقمية (مصدر الحقيقة لمنع العدّ المزدوج في الرسوم):
+  // روابط ��لتحويل الرقمية (مصدر الحقيقة لمنع العدّ المزدوج في الرسوم):
   // الكشف المحوَّل يُحسب مرة واحدة في سجلّه الرسمي ولا يُعدّ بنداً مفتوحاً في رسم الكشوفات.
   convertedToIncidentId: integer("converted_to_incident_id"),
   convertedToViolationId: integer("converted_to_violation_id"),
@@ -870,7 +932,7 @@ export const plateRead = pgTable("plate_reads", {
   capturedAt: timestamp("captured_at").notNull().defaultNow(),
 })
 
-// قراءات الرقم الوظيفي من زيّ العامل (الوضع 3).
+// قرا��ات الرقم الوظيفي من زيّ العامل (الوضع 3).
 export const employeeIdRead = pgTable("employee_id_reads", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
