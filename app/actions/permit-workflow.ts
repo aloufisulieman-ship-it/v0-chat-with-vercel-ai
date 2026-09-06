@@ -79,6 +79,114 @@ export async function getPermitsFull() {
   }))
 }
 
+export type PermitAttachment = { url: string; name?: string; kind?: string }
+export type PermitDetail = {
+  id: number
+  documentNo: string | null
+  title: string
+  type: string | null
+  status: string | null
+  location: string | null
+  requestedBy: string | null
+  contractorName: string | null
+  supervisorName: string | null
+  workersCount: number | null
+  riskLevel: string | null
+  workDescription: string | null
+  startAt: string | null
+  endAt: string | null
+  extendedTo: string | null
+  durationHours: number | null
+  createdAt: string | null
+  closedAt: string | null
+  closedBy: string | null
+  archivedAt: string | null
+  approvedBy: string | null
+  approvedAt: string | null
+  rejectionReason: string | null
+  suspendReason: string | null
+  siteConditionAfter: string | null
+  areaEvacuated: boolean | null
+  checklistAnswers: Record<string, boolean>
+  gasTestReadings: Record<string, string>
+  isolationLOTO: Record<string, unknown>
+  attachments: PermitAttachment[]
+  signatures: { id: number; role: string; signerName: string; signatureUrl: string; signedAt: string }[]
+  auditLog: { id: number; action: string; actorName: string; note: string; createdAt: string }[]
+}
+
+// تفاصيل تصريح واحد كاملة (التصريح + التواقيع + سجل التتبع) في استدعاء واحد،
+// مع تحديد النطاق حسب المؤسسة. يعيد null إن لم يوجد أو خارج نطاق المؤسسة.
+export async function getPermitById(id: number): Promise<PermitDetail | null> {
+  const scope = await requireModuleScope("permits")
+  const [row] = await db
+    .select()
+    .from(permit)
+    .where(orgWhere(permit.organizationId, scope, eq(permit.id, id)))
+  if (!row) return null
+
+  const [sigs, audit] = await Promise.all([
+    db
+      .select()
+      .from(permitSignature)
+      .where(orgWhere(permitSignature.organizationId, scope, eq(permitSignature.permitId, id)))
+      .orderBy(permitSignature.signedAt),
+    db
+      .select()
+      .from(permitAuditLog)
+      .where(orgWhere(permitAuditLog.organizationId, scope, eq(permitAuditLog.permitId, id)))
+      .orderBy(permitAuditLog.createdAt),
+  ])
+
+  const iso = (d: Date | null) => (d ? d.toISOString() : null)
+  return {
+    id: row.id,
+    documentNo: row.documentNo,
+    title: row.title,
+    type: row.type,
+    status: row.status,
+    location: row.location,
+    requestedBy: row.requestedBy,
+    contractorName: row.contractorName,
+    supervisorName: row.supervisorName,
+    workersCount: row.workersCount,
+    riskLevel: row.riskLevel,
+    workDescription: row.workDescription,
+    startAt: iso(row.startAt),
+    endAt: iso(row.endAt),
+    extendedTo: iso(row.extendedTo),
+    durationHours: row.durationHours,
+    createdAt: iso(row.createdAt),
+    closedAt: iso(row.closedAt),
+    closedBy: row.closedBy,
+    archivedAt: iso(row.archivedAt),
+    approvedBy: row.approvedBy,
+    approvedAt: iso(row.approvedAt),
+    rejectionReason: row.rejectionReason,
+    suspendReason: row.suspendReason,
+    siteConditionAfter: row.siteConditionAfter,
+    areaEvacuated: row.areaEvacuated,
+    checklistAnswers: (row.checklistAnswers as Record<string, boolean>) ?? {},
+    gasTestReadings: (row.gasTestReadings as Record<string, string>) ?? {},
+    isolationLOTO: (row.isolationLOTO as Record<string, unknown>) ?? {},
+    attachments: (row.attachmentsJson as PermitAttachment[]) ?? [],
+    signatures: sigs.map((s2) => ({
+      id: s2.id,
+      role: s2.role,
+      signerName: s2.signerName,
+      signatureUrl: s2.signatureUrl,
+      signedAt: s2.signedAt.toISOString(),
+    })),
+    auditLog: audit.map((a) => ({
+      id: a.id,
+      action: a.action,
+      actorName: a.actorName,
+      note: a.note,
+      createdAt: a.createdAt.toISOString(),
+    })),
+  }
+}
+
 export async function getPermitSignatures(permitId: number) {
   const scope = await requireModuleScope("permits")
   return db

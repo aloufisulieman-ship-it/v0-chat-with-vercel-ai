@@ -43,12 +43,14 @@ export function PermitLifecycleActions({
   status,
   isManager,
   onPrint,
+  onDone,
 }: {
   permitId: number
   documentNo: string
   status: string
   isManager: boolean
   onPrint: () => void
+  onDone?: () => void
 }) {
   const { t } = useI18n()
   const [dlg, setDlg] = useState<Dlg>(null)
@@ -74,6 +76,7 @@ export function PermitLifecycleActions({
         toast({ title: t(successKey) })
         setDlg(null)
         resetFields()
+        onDone?.()
       } catch (err) {
         toast({ title: t("permitLifecycle.failed"), description: err instanceof Error ? err.message : "", variant: "destructive" })
       }

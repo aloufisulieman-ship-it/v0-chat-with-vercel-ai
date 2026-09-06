@@ -1,10 +1,13 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { Eye } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n/client"
+import { Button } from "@/components/ui/button"
 import { PermitRemainingBadge } from "@/components/permit-remaining-badge"
 import { PermitLifecycleActions } from "@/components/permit-lifecycle-actions"
+import { PermitViewDialog } from "@/components/permit-view-dialog"
 import {
   normalizePermitStatus,
   permitStatusBadgeClass,
@@ -45,6 +48,7 @@ export function PermitsRegistry({ permits, isManager }: { permits: PermitRow[]; 
   const { t, locale } = useI18n()
   const loc = locale === "en" ? "en" : "ar"
   const [filter, setFilter] = useState<FilterKey>("all")
+  const [viewId, setViewId] = useState<number | null>(null)
 
   const counts = useMemo(() => {
     const c: Record<FilterKey, number> = {
@@ -169,9 +173,14 @@ export function PermitsRegistry({ permits, isManager }: { permits: PermitRow[]; 
                 return (
                   <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/20">
                     <td className="px-4 py-3">
-                      <span className="font-mono text-xs text-muted-foreground" dir="ltr">
-                        {p.documentNo || "-"}
-                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setViewId(p.id)}
+                        className="font-mono text-xs text-primary hover:underline"
+                        dir="ltr"
+                      >
+                        {p.documentNo || `#${p.id}`}
+                      </button>
                     </td>
                     <td className="px-4 py-3 font-medium text-foreground">{p.title}</td>
                     <td className="px-4 py-3 text-muted-foreground">{permitTypeLabel(p.type, loc)}</td>
@@ -190,13 +199,24 @@ export function PermitsRegistry({ permits, isManager }: { permits: PermitRow[]; 
                       </span>
                     </td>
                     <td className="px-4 py-3 text-end">
-                      <PermitLifecycleActions
-                        permitId={p.id}
-                        documentNo={p.documentNo ?? `#${p.id}`}
-                        status={st}
-                        isManager={isManager}
-                        onPrint={() => printPermit(p)}
-                      />
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8"
+                          aria-label={t("permitDetail.view")}
+                          onClick={() => setViewId(p.id)}
+                        >
+                          <Eye className="size-4" />
+                        </Button>
+                        <PermitLifecycleActions
+                          permitId={p.id}
+                          documentNo={p.documentNo ?? `#${p.id}`}
+                          status={st}
+                          isManager={isManager}
+                          onPrint={() => printPermit(p)}
+                        />
+                      </div>
                     </td>
                   </tr>
                 )
@@ -205,6 +225,13 @@ export function PermitsRegistry({ permits, isManager }: { permits: PermitRow[]; 
           </tbody>
         </table>
       </div>
+
+      <PermitViewDialog
+        permitId={viewId}
+        open={viewId != null}
+        onOpenChange={(o) => !o && setViewId(null)}
+        isManager={isManager}
+      />
     </div>
   )
 }

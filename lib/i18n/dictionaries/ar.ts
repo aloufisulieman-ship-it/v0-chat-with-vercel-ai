@@ -1006,6 +1006,43 @@ export const ar = {
     step2Invalid: "أكمل كل بنود الفحص وقياسات الغاز المطلوبة",
   },
 
+  // شاشة عرض تفاصيل تصريح العمل
+  permitDetail: {
+    title: "تفاصيل تصريح العمل",
+    view: "عرض",
+    basics: "البيانات الأساسية",
+    duration: "المدة",
+    hours: "ساعة",
+    createdAt: "تاريخ الإنشاء",
+    compliant: "مطابق",
+    nonCompliant: "غير مطابق",
+    notApplicable: "غير منطبق",
+    safeRange: "المدى الآمن",
+    openFile: "فتح الملف",
+    signatures: "التواقيع الرسمية",
+    awaitingSignature: "بانتظار التوقيع",
+    timeline: "سجل التتبع",
+    noEvents: "لا توجد أحداث مسجّلة",
+    loadError: "تعذّر تحميل بيانات التصريح، حاول مرة أخرى",
+    roClosed: "هذا التصريح مغلق — للعرض فقط",
+    roArchived: "هذا التصريح مؤرشف — للعرض فقط",
+    action: {
+      created: "إنشاء التصريح",
+      approved: "اعتماد التصريح",
+      rejected: "رفض التصريح",
+      extended: "تمديد المدة",
+      suspended: "إيقاف مؤقت",
+      resumed: "استئناف العمل",
+      closed: "إغلاق التصريح",
+      archived: "أرشفة",
+      expired: "انتهاء الصلاحية",
+      signed_requester: "توقيع طالب التصريح",
+      signed_issuer: "توقيع المُصدر",
+      signed_safety: "توقيع مراقب السلامة",
+      signed_approver: "توقيع المعتمِد",
+    },
+  },
+
   // دورة حياة تصريح العمل (اعتماد/رفض/إغلاق/تمديد/إيقاف/أرشفة)
   permitLifecycle: {
     menu: "إجراءات",
