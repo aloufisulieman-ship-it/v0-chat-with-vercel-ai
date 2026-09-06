@@ -4,9 +4,7 @@ import {
   AlertTriangle,
   ShieldCheck,
   ClipboardCheck,
-  CheckSquare,
   ShieldAlert,
-  CalendarDays,
   FileSignature,
   FileWarning,
   ArrowLeft,
@@ -23,7 +21,8 @@ import {
   SeverityChartSkeleton,
 } from "@/components/dashboard-charts"
 import { ChartPeriodProvider } from "@/components/dashboard-period"
-import { StatusBadge, SeverityBadge } from "@/components/status-badge"
+import { StatusBadge } from "@/components/status-badge"
+import { PriorityActionsCard } from "@/components/priority-actions-card"
 import { requireOrgUser } from "@/lib/session"
 import {
   getCriticalWithoutAction,
@@ -74,13 +73,13 @@ export default async function DashboardPage() {
   }
 
   // توزيع الخطورة يستهلك نفس التجميع (شهر × خطورة × مفتوح) فيتبع فلتر الفترة المشترك،
-  // مع عدّاد مستقل للحرجة المفتوحة بلا إجراء تصحيحي لشارة التنبيه.
-  const criticalNoActionPromise = getCriticalWithoutAction().catch(() => 0)
+  // مع عدّاد مستقل للحرجة المفتوحة بلا إجراء تصحيحي لشارة التنبيه. العدّاد نفسه يُستخدم
+  // في بطاقة الإجراءات (تحذير بند 10.2) وفي شارة رسم الخطورة، فنحسبه مرة واحدة.
+  const criticalNoActionCount = await getCriticalWithoutAction().catch(() => 0)
 
-  const priorityActions = [...actions]
-    .filter((a) => a.status !== "closed")
-    .sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? ""))
-    .slice(0, 5)
+  // الترتيب والتقطيع (المتأخر أولاً ثم الخطورة ثم الأقدم) يتمّان داخل البطاقة نفسها؛
+  // نمرّر كل الإجراءات المفتوحة فقط (الحالة مطبَّعة مسبقاً في الخادم).
+  const priorityActions = actions.filter((a) => a.status !== "completed" && a.status !== "cancelled")
 
   return (
     <AppShell title={t("pageHeaders.dashboardTitle")} subtitle={t("pageHeaders.dashboardSubtitle")} user={user}>
@@ -109,7 +108,7 @@ export default async function DashboardPage() {
           <IncidentTrendChart data={trend} />
         </div>
         <Suspense fallback={<SeverityChartSkeleton />}>
-          <SeverityChartLoader promise={typeBreakdownPromise} alertPromise={criticalNoActionPromise} />
+          <SeverityChartLoader promise={typeBreakdownPromise} criticalWithoutAction={criticalNoActionCount} />
         </Suspense>
       </div>
 
@@ -122,38 +121,7 @@ export default async function DashboardPage() {
         <Suspense fallback={<IncidentTypeChartSkeleton />}>
           <IncidentTypeChartLoader promise={typeBreakdownPromise} labels={typeLabels} />
         </Suspense>
-        <Card className="p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-base font-semibold text-foreground">{t("dashboard.priorityActions")}</h3>
-            <CheckSquare className="size-5 text-muted-foreground" />
-          </div>
-          {priorityActions.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">{t("dashboard.noOpenActions")}</p>
-          ) : (
-            <ul className="flex flex-col divide-y divide-border">
-              {priorityActions.map((a) => (
-                <li key={a.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex flex-col gap-1">
-                    <span className="text-sm font-medium text-foreground">{a.title}</span>
-                    <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>{a.assignedTo || t("dashboard.unassigned")}</span>
-                      {a.dueDate && (
-                        <span className="flex items-center gap-1">
-                          <CalendarDays className="size-3" />
-                          <span dir="ltr">{a.dueDate}</span>
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <SeverityBadge severity={a.priority ?? "medium"} />
-                    <StatusBadge status={a.status ?? "open"} />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+        <PriorityActionsCard actions={priorityActions} criticalWithoutAction={criticalNoActionCount} />
       </div>
       </ChartPeriodProvider>
 
@@ -243,8 +211,8 @@ async function IncidentTypeChartLoader({
   return <IncidentTypeChart data={data} labels={labels} />
 }
 
-async function SeverityChartLoader({ promise, alertPromise }: { promise: Promise<IncidentTypeBreakdownRow[]>; alertPromise: Promise<number> }) {
-  const [data, criticalWithoutAction] = await Promise.all([promise, alertPromise])
+async function SeverityChartLoader({ promise, criticalWithoutAction }: { promise: Promise<IncidentTypeBreakdownRow[]>; criticalWithoutAction: number }) {
+  const data = await promise
   return <SeverityChart data={data} criticalWithoutAction={criticalWithoutAction} />
 }
 

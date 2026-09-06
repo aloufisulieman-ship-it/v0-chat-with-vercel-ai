@@ -53,6 +53,14 @@ import {
   severityLabels as detectionSeverityLabels,
 } from "@/lib/ai-monitoring"
 import { effectiveViolationStatus } from "@/lib/violation-status"
+import {
+  normalizeActionStatus,
+  isActionOpen,
+  dueDaysForPriority,
+  RISK_ACTION_THRESHOLD,
+  AUDIT_NONCONFORMITY_SCORE,
+  type ActionSourceType,
+} from "@/lib/corrective-actions"
 import { saveDataUrlAttachment } from "@/lib/attachments-server"
 import { assertNotArchived, logRecordEvent } from "@/app/actions/lifecycle"
 import { deptForClassification } from "@/lib/lifecycle"
@@ -291,9 +299,24 @@ export async function createIncidentFull(formData: FormData) {
     // ignore malformed payloads
   }
 
+  // ISO 45001 §10.2: حادث بخطورة عالية/حرجة يستوجب إجراءً تصحيحياً تلقائياً.
+  const incidentSeverity = str(formData.get("severity"), "low")
+  if (incidentSeverity === "high" || incidentSeverity === "critical") {
+    await ensureCorrectiveAction({
+      organizationId,
+      userId,
+      sourceType: "incident",
+      sourceId: recordId,
+      title: `معالجة حادث: ${title}`,
+      priority: incidentSeverity,
+      sourceLabel: `حادث ${documentNo}`,
+    })
+  }
+
   revalidatePath("/incidents")
   revalidatePath("/hr")
   revalidatePath("/finance")
+  revalidatePath("/actions")
   revalidatePath("/")
   return { documentNo }
 }
@@ -453,20 +476,52 @@ export async function getRisks() {
 export async function createRisk(formData: FormData) {
   await assertWritable()
   const { userId, organizationId } = await requireModuleScope("risks")
-  await db.insert(risk).values({
-    userId,
-    organizationId,
-    hazard: str(formData.get("hazard")),
-    activity: str(formData.get("activity")),
-    likelihood: num(formData.get("likelihood"), 1),
-    consequence: num(formData.get("consequence"), 1),
-    controls: str(formData.get("controls")),
-    proposedControls: str(formData.get("proposedControls")),
-    owner: str(formData.get("owner")),
-    status: str(formData.get("status"), "open"),
-    reviewDate: str(formData.get("reviewDate")),
-  })
+  const likelihood = num(formData.get("likelihood"), 1)
+  const consequence = num(formData.get("consequence"), 1)
+  const hazard = str(formData.get("hazard"))
+  const [inserted] = await db
+    .insert(risk)
+    .values({
+      userId,
+      organizationId,
+      hazard,
+      activity: str(formData.get("activity")),
+      likelihood,
+      consequence,
+      controls: str(formData.get("controls")),
+      proposedControls: str(formData.get("proposedControls")),
+      owner: str(formData.get("owner")),
+      status: str(formData.get("status"), "open"),
+      reviewDate: str(formData.get("reviewDate")),
+    })
+    .returning({ id: risk.id })
+
+  // ISO 45001 §10.2: خطر بدرجة ≥ 15 في مصفوفة 5×5 يستوجب إجراءً تصحيحياً تلقائياً.
+  const score = likelihood * consequence
+  if (score >= RISK_ACTION_THRESHOLD && inserted?.id != null) {
+    await ensureCorrectiveAction({
+      organizationId,
+      userId,
+      sourceType: "risk",
+      sourceId: inserted.id,
+      title: `ضبط خطر: ${hazard}`,
+      priority: score >= 20 ? "critical" : "high",
+      sourceLabel: `الخطر: ${hazard}`,
+    })
+    // نربط الإجراء بحقل riskId أيضاً حتى تعمل أتمتة دورة حياة الخطر القائمة.
+    await db
+      .update(correctiveAction)
+      .set({ riskId: inserted.id })
+      .where(
+        and(
+          eq(correctiveAction.organizationId, organizationId),
+          eq(correctiveAction.sourceType, "risk"),
+          eq(correctiveAction.sourceId, inserted.id),
+        ),
+      )
+  }
   revalidatePath("/risks")
+  revalidatePath("/actions")
   revalidatePath("/")
 }
 export async function deleteRisk(id: number) {
@@ -797,13 +852,97 @@ export async function deleteTraining(id: number) {
 
 
 /* ---------------- Corrective actions ---------------- */
+// نطاق الرؤية للإجراءات التصحيحية: مطابق للمخالفات — المدير/الأدمن يرى كل سجلات
+// المؤسسة، والموظف سجلاته فقط. الحالة تُطبَّع دائماً إلى enum الإنجليزي الموحّد
+// (تحويل القيم العربية القديمة) قبل إعادتها للواجهة.
+function normalizeActionRow<T extends { status: string | null }>(row: T): T {
+  return { ...row, status: normalizeActionStatus(row.status) }
+}
+
 export async function getActions() {
-  const scope = await requireScope()
-  return db
+  const scope = await requireModuleScope("actions")
+  const rows = await db
     .select()
     .from(correctiveAction)
     .where(scopeWhere({ organizationId: correctiveAction.organizationId, userId: correctiveAction.userId }, scope))
     .orderBy(desc(correctiveAction.createdAt))
+  return rows.map(normalizeActionRow)
+}
+
+// ============ الربط التلقائي (ISO 45001 §10.2) ============
+// ينشئ إجراءً تصحيحياً واحداً مربوطاً بسجل مصدر (حادث/مخالفة/خطر/تدقيق)، بترقيم
+// CAPA-YYYY-### تسلسلي لكل مؤسسة، ومسؤول افتراضي = مدير السلامة، وتاريخ استحقاق
+// افتراضي حسب الأولوية. لا يُكرّر الإنشاء إن كان يوجد إجراء مفتوح لنفس (sourceType,sourceId).
+async function generateCapaCode(organizationId: string): Promise<string> {
+  const year = new Date().getFullYear()
+  const existing = await db
+    .select({ code: correctiveAction.code })
+    .from(correctiveAction)
+    .where(eq(correctiveAction.organizationId, organizationId))
+  const maxSeq = (existing ?? [])
+    .map((r) => r.code ?? "")
+    .filter((c) => c.startsWith(`CAPA-${year}-`))
+    .reduce((max, c) => {
+      const seq = parseInt(c.split("-")[2] ?? "0", 10)
+      return seq > max ? seq : max
+    }, 0)
+  return `CAPA-${year}-${String(maxSeq + 1).padStart(3, "0")}`
+}
+
+// مدير السلامة الافتراضي للمؤسسة (أول مستخدم بدور admin/manager أو قسم "مفتش السلامة").
+// يُستخدم كمسؤول افتراضي للإجراءات المولّدة تلقائياً. فارغ إن لم يوجد.
+async function defaultSafetyManager(organizationId: string): Promise<string> {
+  const rows = await db
+    .select({ name: user.name, role: user.role, department: user.department })
+    .from(user)
+    .where(eq(user.organizationId, organizationId))
+  const manager = rows.find(
+    (r) => r.role === "admin" || r.role === "manager" || r.department === "مفتش السلامة" || r.department === "المدير العام",
+  )
+  return manager?.name ?? ""
+}
+
+export async function ensureCorrectiveAction(input: {
+  organizationId: string
+  userId: string
+  sourceType: ActionSourceType
+  sourceId: number
+  title: string
+  priority: "critical" | "high" | "medium" | "low"
+  sourceLabel: string
+}): Promise<void> {
+  // لا تكرار: إن وُجد أي إجراء غير مغلق لنفس المصدر، لا ننشئ ثانياً.
+  const existing = await db
+    .select({ id: correctiveAction.id, status: correctiveAction.status })
+    .from(correctiveAction)
+    .where(
+      and(
+        eq(correctiveAction.organizationId, input.organizationId),
+        eq(correctiveAction.sourceType, input.sourceType),
+        eq(correctiveAction.sourceId, input.sourceId),
+      ),
+    )
+  if (existing.some((a) => isActionOpen(a.status))) return
+
+  const code = await generateCapaCode(input.organizationId)
+  const assignedTo = await defaultSafetyManager(input.organizationId)
+  const due = new Date()
+  due.setDate(due.getDate() + dueDaysForPriority(input.priority))
+  const dueDate = due.toISOString().slice(0, 10)
+
+  await db.insert(correctiveAction).values({
+    userId: input.userId,
+    organizationId: input.organizationId,
+    code,
+    title: input.title,
+    source: input.sourceLabel,
+    sourceType: input.sourceType,
+    sourceId: input.sourceId,
+    assignedTo,
+    priority: input.priority,
+    status: "open",
+    dueDate,
+  })
 }
 export async function createAction(formData: FormData) {
   await assertWritable()
@@ -842,16 +981,36 @@ export async function getAudits() {
 export async function createAudit(formData: FormData) {
   await assertWritable()
   const { userId, organizationId } = await requireModuleScope("audits")
-  await db.insert(audit).values({
-    userId,
-    organizationId,
-    title: str(formData.get("title")),
-    standard: str(formData.get("standard")),
-    auditor: str(formData.get("auditor")),
-    score: num(formData.get("score")),
-    status: str(formData.get("status"), "scheduled"),
-    auditDate: dateOrNull(formData.get("auditDate")),
-  })
+  const title = str(formData.get("title"))
+  const score = num(formData.get("score"))
+  const status = str(formData.get("status"), "scheduled")
+  const [inserted] = await db
+    .insert(audit)
+    .values({
+      userId,
+      organizationId,
+      title,
+      standard: str(formData.get("standard")),
+      auditor: str(formData.get("auditor")),
+      score,
+      status,
+      auditDate: dateOrNull(formData.get("auditDate")),
+    })
+    .returning({ id: audit.id })
+
+  // ISO 45001 §10.2: عدم مطابقة في التدقيق (تدقيق مكتمل بنتيجة < 80%) يستوجب إجراءً تصحيحياً.
+  if (status === "closed" && score < AUDIT_NONCONFORMITY_SCORE && inserted?.id != null) {
+    await ensureCorrectiveAction({
+      organizationId,
+      userId,
+      sourceType: "audit",
+      sourceId: inserted.id,
+      title: `معالجة عدم مطابقة في تدقيق: ${title}`,
+      priority: score < 60 ? "high" : "medium",
+      sourceLabel: `تدقيق: ${title} (${score}%)`,
+    })
+    revalidatePath("/actions")
+  }
   revalidatePath("/audits")
 }
 export async function deleteAudit(id: number) {
@@ -1426,7 +1585,19 @@ export async function createViolationFull(formData: FormData) {
     }
   }
 
+  // ISO 45001 §10.2: المخالفة (عدم مطابقة) تستوجب إجراءً تصحيحياً تلقائياً.
+  await ensureCorrectiveAction({
+    organizationId,
+    userId,
+    sourceType: "violation",
+    sourceId: recordId,
+    title: `معالجة مخالفة: ${str(formData.get("violationType")) || employeeName}`,
+    priority: "high",
+    sourceLabel: `مخالفة ${documentNo}`,
+  })
+
   revalidatePath("/violations")
+  revalidatePath("/actions")
   revalidatePath("/")
   return { documentNo }
 }
@@ -1912,8 +2083,12 @@ export async function getCriticalWithoutAction(): Promise<number> {
       and not exists (
         select 1 from corrective_action a
         where a."organizationId" = i."organizationId"
-          and coalesce(i."documentNo", '') <> ''
-          and a.source ilike '%' || i."documentNo" || '%'
+          and (
+            -- الربط المصدري المنظّم الجديد (الأدق)،
+            (a."sourceType" = 'incident' and a."sourceId" = i.id)
+            -- أو الربط النصّي القديم عبر رقم الوثيقة (توافق خلفي).
+            or (coalesce(i."documentNo", '') <> '' and a.source ilike '%' || i."documentNo" || '%')
+          )
       )
   `)
   const row = result.rows[0] as { n?: number } | undefined
@@ -1950,7 +2125,8 @@ export async function getDashboardData() {
     inspections: ins,
     permits: per,
     risks: rsk,
-    actions: act,
+    // الحالة مطبَّعة إلى enum إنجليزي موحّد قبل بلوغ الواجهة (تحويل القيم العربية القديمة).
+    actions: act.map(normalizeActionRow),
     observations: obs,
     violations: vio,
     trend,
