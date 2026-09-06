@@ -388,6 +388,12 @@ export const correctiveAction = pgTable("corrective_action", {
   dueDate: date("dueDate"),
   // ربط الإجراء التصحيحي بالخطر الذي أنشأه (أتمتة دورة حياة الخطر).
   riskId: integer("riskId"),
+  // الربط المصدري الموحّد (ISO 45001 §10.2): نوع السجل الأصلي (incident|violation|risk|audit|manual)
+  // ومعرّفه، لتتبّع كل إجراء تصحيحي إلى منشئه بلا مطابقة نصوص هشّة.
+  sourceType: text("sourceType").default(""),
+  sourceId: integer("sourceId"),
+  // ترقيم رسمي للإجراء التصحيحي: CAPA-YYYY-### (تسلسل مستقل لكل مؤسسة).
+  code: text("code").default(""),
   implementedControls: text("implementedControls").default(""),
   evidenceUrl: text("evidenceUrl").default(""),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
