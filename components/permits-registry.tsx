@@ -4,19 +4,20 @@ import { useMemo, useState } from "react"
 import { Eye } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n/client"
+import { toast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { PermitRemainingBadge } from "@/components/permit-remaining-badge"
 import { PermitLifecycleActions } from "@/components/permit-lifecycle-actions"
 import { PermitViewDialog } from "@/components/permit-view-dialog"
+import { getPermitById } from "@/app/actions/permit-workflow"
+import { openPermitPrint } from "@/lib/permit-print"
 import {
   normalizePermitStatus,
   permitStatusBadgeClass,
   permitStatusLabel,
   permitTypeLabel,
   type PermitStatus,
-  type SignRole,
 } from "@/lib/permit-workflow"
-import { PERMIT_SIGNATORIES, SIGN_ROW_ISSUANCE, SIGN_ROW_CLOSURE } from "@/lib/permit-signatories"
 
 export type PermitRow = {
   id: number
@@ -46,7 +47,15 @@ const FILTERS: { key: FilterKey; labelKey: string }[] = [
   { key: "archived", labelKey: "permitsReg.archived" },
 ]
 
-export function PermitsRegistry({ permits, isManager }: { permits: PermitRow[]; isManager: boolean }) {
+export function PermitsRegistry({
+  permits,
+  isManager,
+  companyName,
+}: {
+  permits: PermitRow[]
+  isManager: boolean
+  companyName?: string | null
+}) {
   const { t, locale } = useI18n()
   const loc = locale === "en" ? "en" : "ar"
   const [filter, setFilter] = useState<FilterKey>("all")
@@ -76,61 +85,18 @@ export function PermitsRegistry({ permits, isManager }: { permits: PermitRow[]; 
     return permits.filter((p) => !p.archivedAt && normalizePermitStatus(p.status) === filter)
   }, [permits, filter])
 
-  function printPermit(p: PermitRow) {
-    const st = normalizePermitStatus(p.status)
-    const win = window.open("", "_blank", "width=800,height=1000")
-    if (!win) return
-    const rows: [string, string][] = [
-      [t("permits.fPermitNo"), p.documentNo ?? "-"],
-      [t("permitWizard.type"), permitTypeLabel(p.type, loc)],
-      [t("permitWizard.workTitle"), p.title],
-      [t("permitWizard.location"), p.location ?? "-"],
-      [t("permitWizard.requestedBy"), p.requestedBy ?? "-"],
-      [t("permitWizard.contractor"), p.contractorName ?? "-"],
-      [t("permitWizard.supervisor"), p.supervisorName ?? "-"],
-      [t("permitWizard.startAt"), p.startAt ? new Date(p.startAt).toLocaleString(loc === "en" ? "en-US" : "ar") : "-"],
-      [t("permitWizard.endAt"), p.endAt ? new Date(p.endAt).toLocaleString(loc === "en" ? "en-US" : "ar") : "-"],
-      [t("permits.colStatus"), permitStatusLabel(st, loc)],
-    ]
-    // بطاقة توقيع للطباعة: المسمى الوظيفي + الاسم الثابت حسب الدور + خط توقيع.
-    const sigBox = (role: SignRole) => {
-      const sc = PERMIT_SIGNATORIES[role]
-      return `<div class="sg"><div class="sg-r">${loc === "ar" ? sc.ar : sc.en}</div><div class="sg-n">${sc.name || "&nbsp;"}</div><div class="sg-l"></div><div class="sg-c">${t("permitPrint.signAndDate")}</div></div>`
+  // الطباعة الكاملة: نجلب تفاصيل التصريح كاملة ثم نفتح القالب المشترك (A4 + تواقيع + QR).
+  async function printPermit(p: PermitRow) {
+    try {
+      const detail = await getPermitById(p.id)
+      if (!detail) {
+        toast({ title: t("permitDetail.loadError"), variant: "destructive" })
+        return
+      }
+      await openPermitPrint(detail, { t, loc, companyName })
+    } catch {
+      toast({ title: t("permitDetail.loadError"), variant: "destructive" })
     }
-    win.document.write(`
-      <html dir="${loc === "ar" ? "rtl" : "ltr"}" lang="${loc}">
-      <head><meta charset="utf-8"><title>${p.documentNo ?? ""}</title>
-      <style>
-        @page{size:A4;margin:12mm}
-        *{box-sizing:border-box}
-        body{font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;padding:0;color:#0f172a;font-size:12px}
-        h1{font-size:18px;margin:0 0 2px}
-        .sub{color:#64748b;margin-bottom:14px;font-size:12px}
-        table{width:100%;border-collapse:collapse}
-        td{border:1px solid #e2e8f0;padding:6px 10px;font-size:12px}
-        td:first-child{background:#f8fafc;font-weight:600;width:34%;color:#475569}
-        .sec{font-size:13px;font-weight:700;margin:16px 0 6px;color:#0f172a}
-        .sg-row{display:flex;gap:8px;margin-bottom:8px}
-        .sg{flex:1;border:1px solid #e2e8f0;border-radius:6px;padding:8px}
-        .sg-r{font-size:10px;color:#64748b}
-        .sg-n{font-size:12px;font-weight:700;margin-top:2px}
-        .sg-l{border-top:1px dashed #cbd5e1;margin-top:24px}
-        .sg-c{font-size:9px;color:#94a3b8;margin-top:3px}
-      </style></head>
-      <body>
-        <h1>${t("permitPrint.header")}</h1>
-        <div class="sub">${p.documentNo ?? ""}</div>
-        <table><tbody>
-          ${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("")}
-        </tbody></table>
-        <div class="sec">${t("permitDetail.rowIssuance")}</div>
-        <div class="sg-row">${SIGN_ROW_ISSUANCE.map(sigBox).join("")}</div>
-        <div class="sec">${t("permitDetail.rowClosure")}</div>
-        <div class="sg-row">${SIGN_ROW_CLOSURE.map(sigBox).join("")}</div>
-      </body></html>`)
-    win.document.close()
-    win.focus()
-    win.print()
   }
 
   return (
@@ -251,6 +217,7 @@ export function PermitsRegistry({ permits, isManager }: { permits: PermitRow[]; 
         open={viewId != null}
         onOpenChange={(o) => !o && setViewId(null)}
         isManager={isManager}
+        companyName={companyName}
       />
     </div>
   )

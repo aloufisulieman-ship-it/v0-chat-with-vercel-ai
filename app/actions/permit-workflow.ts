@@ -15,6 +15,7 @@ import {
   type SignRole,
 } from "@/lib/permit-workflow"
 import { PERMIT_SIGNATORIES } from "@/lib/permit-signatories"
+import { muscatLocalToUtc, isEndAfterStart, formatMuscatDateTime } from "@/lib/datetime"
 
 // ============ أدوات مساعدة ============
 function s(v: FormDataEntryValue | null, fallback = ""): string {
@@ -24,13 +25,6 @@ function n(v: FormDataEntryValue | null): number | null {
   const x = Number(v)
   return Number.isFinite(x) && v !== "" && v != null ? x : null
 }
-function dt(v: FormDataEntryValue | null): Date | null {
-  const str = v ? String(v) : ""
-  if (!str) return null
-  const d = new Date(str)
-  return Number.isNaN(d.getTime()) ? null : d
-}
-
 async function logPermit(
   organizationId: string,
   permitId: number,
@@ -257,8 +251,12 @@ export async function createPermitFull(formData: FormData): Promise<{ documentNo
     }, 0)
   const documentNo = buildPermitNumber(type, maxSeq + 1, year)
 
-  const startAt = dt(formData.get("startAt"))
-  const endAt = dt(formData.get("endAt"))
+  // الأوقات تصل كساعة حائط بتوقيت مسقط وتُخزَّن كلحظات UTC.
+  const startAt = muscatLocalToUtc(s(formData.get("startAt")))
+  const endAt = muscatLocalToUtc(s(formData.get("endAt")))
+  if (startAt && endAt && !isEndAfterStart(startAt, endAt)) {
+    throw new Error("يجب أن يكون وقت الانتهاء بعد وقت البدء")
+  }
   const durationHours =
     startAt && endAt ? Math.max(1, Math.round((endAt.getTime() - startAt.getTime()) / 3_600_000)) : n(formData.get("durationHours"))
 
@@ -422,7 +420,7 @@ export async function extendPermit(formData: FormData): Promise<void> {
   const u = await requireUser()
 
   const permitId = Number(formData.get("permitId"))
-  const extendedTo = dt(formData.get("extendedTo"))
+  const extendedTo = muscatLocalToUtc(s(formData.get("extendedTo")))
   if (!extendedTo) throw new Error("يجب تحديد وقت التمديد")
 
   const [row] = await db
@@ -431,11 +429,19 @@ export async function extendPermit(formData: FormData): Promise<void> {
     .where(orgWhere(permit.organizationId, scope, eq(permit.id, permitId)))
   if (!row) throw new Error("التصريح غير موجود")
 
+  // وقت التمديد يجب أن يكون بعد وقت البدء (والوقت الحالي).
+  if (row.startAt && !isEndAfterStart(row.startAt, extendedTo)) {
+    throw new Error("يجب أن يكون وقت التمديد بعد وقت بدء العمل")
+  }
+  if (extendedTo.getTime() <= Date.now()) {
+    throw new Error("يجب أن يكون وقت التمديد في المستقبل")
+  }
+
   await db
     .update(permit)
     .set({ endAt: extendedTo, extendedTo, status: "active", validTo: extendedTo.toISOString().slice(0, 10) })
     .where(orgWhere(permit.organizationId, scope, eq(permit.id, permitId)))
-  await logPermit(scope.organizationId, permitId, "extended", u.id, u.name, `تمديد حتى ${extendedTo.toLocaleString("ar")}`)
+  await logPermit(scope.organizationId, permitId, "extended", u.id, u.name, `تمديد حتى ${formatMuscatDateTime(extendedTo, "ar")}`)
   revalidatePath("/permits")
   revalidatePath("/")
 }

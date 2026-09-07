@@ -162,6 +162,52 @@ export function checklistForType(id: string | null | undefined): ChecklistItem[]
   return [...COMMON_CHECKLIST, ...(TYPE_CHECKLIST[type.id] ?? [])]
 }
 
+// ================= الاحتياطات المطلوبة (تُطبع كنقاط في التصريح) =================
+export interface PrecautionItem {
+  ar: string
+  en: string
+}
+
+const COMMON_PRECAUTIONS: PrecautionItem[] = [
+  { ar: "التقيّد التام بتعليمات السلامة والإشراف المباشر طوال فترة العمل", en: "Follow all safety instructions under direct supervision throughout the work" },
+  { ar: "إيقاف العمل فوراً عند أي ظرف خطير والإبلاغ عن الحوادث الوشيكة", en: "Stop work immediately on any hazardous condition and report near-misses" },
+]
+
+const TYPE_PRECAUTIONS: Record<PermitTypeId, PrecautionItem[]> = {
+  hot_work: [
+    { ar: "إبقاء طفاية حريق ومراقب حريق قرب موقع العمل الساخن", en: "Keep a fire extinguisher and fire watch near the hot-work area" },
+    { ar: "عزل وإبعاد كل المواد القابلة للاشتعال قبل البدء", en: "Isolate and remove all flammable materials before starting" },
+  ],
+  confined_space: [
+    { ar: "عدم الدخول قبل اجتياز فحص الغازات ووجود مراقب خارجي", en: "Do not enter before passing the gas test and with an attendant present" },
+    { ar: "توفير تهوية مستمرة ومعدات إنقاذ جاهزة", en: "Provide continuous ventilation and standby rescue equipment" },
+  ],
+  work_at_height: [
+    { ar: "استخدام أحزمة أمان مربوطة بنقاط تثبيت معتمدة", en: "Use fall harnesses tied to certified anchor points" },
+    { ar: "تأمين منطقة أسفل العمل لمنع سقوط الأدوات", en: "Secure the area below to prevent falling tools" },
+  ],
+  electrical: [
+    { ar: "تطبيق العزل والإقفال والتوسيم (LOTO) والتأكد من انعدام الطاقة", en: "Apply LOTO and verify zero energy before work" },
+    { ar: "استخدام أدوات معزولة ومعدات حماية من القوس الكهربائي", en: "Use insulated tools and arc-flash protection" },
+  ],
+  excavation: [
+    { ar: "تحديد الخدمات المدفونة ودعم جوانب الحفرة", en: "Locate buried utilities and shore trench walls" },
+    { ar: "إبعاد ناتج الحفر عن الحافة وتوفير مخارج آمنة", en: "Keep spoil away from the edge and provide safe egress" },
+  ],
+  cold_work: [
+    { ar: "فحص العدد والأدوات والحفاظ على ترتيب موقع العمل", en: "Inspect tools and maintain good housekeeping" },
+  ],
+  lifting: [
+    { ar: "التقيّد بجدول الأحمال وشهادة فحص الرافعة السارية", en: "Adhere to the load chart and a valid crane certificate" },
+    { ar: "تحديد منطقة حظر أسفل الحمل ومنع المرور تحته", en: "Establish an exclusion zone under the load" },
+  ],
+}
+
+export function precautionsForType(id: string | null | undefined): PrecautionItem[] {
+  const type = getPermitType(id)
+  return [...COMMON_PRECAUTIONS, ...(TYPE_PRECAUTIONS[type.id] ?? [])]
+}
+
 // قياسات الغاز المطلوبة للأنواع التي تتطلب فحص غاز.
 export const GAS_FIELDS: { id: string; ar: string; en: string; unit: string; safe: string }[] = [
   { id: "o2", ar: "الأكسجين O₂", en: "Oxygen O₂", unit: "%", safe: "19.5–23.5" },

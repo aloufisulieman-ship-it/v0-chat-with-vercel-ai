@@ -39,6 +39,8 @@ import {
   type SignRole,
 } from "@/lib/permit-workflow"
 import { PERMIT_SIGNATORIES, SIGN_ROW_ISSUANCE, SIGN_ROW_CLOSURE } from "@/lib/permit-signatories"
+import { openPermitPrint } from "@/lib/permit-print"
+import { formatMuscatDateTime } from "@/lib/datetime"
 
 const IMAGE_RE = /\.(png|jpe?g|gif|webp|avif|svg|bmp)$/i
 function isImage(a: { url: string; kind?: string }) {
@@ -56,10 +58,12 @@ const RISK_BADGE: Record<string, string> = {
 export function PermitDetailView({
   permit: p,
   isManager,
+  companyName,
   onClose,
 }: {
   permit: PermitDetail
   isManager: boolean
+  companyName?: string | null
   onClose?: () => void
 }) {
   const { t, locale, formatNumber } = useI18n()
@@ -70,8 +74,7 @@ export function PermitDetailView({
   const typeCfg = getPermitType(p.type)
   const readOnly = st === "closed" || st === "rejected" || Boolean(p.archivedAt)
 
-  const fmtDate = (iso: string | null) =>
-    iso ? new Date(iso).toLocaleString(loc === "en" ? "en-US" : "ar-EG", { dateStyle: "medium", timeStyle: "short" }) : "—"
+  const fmtDate = (iso: string | null) => formatMuscatDateTime(iso, loc)
 
   const checklist = useMemo(() => checklistForType(p.type), [p.type])
   const compliance = useMemo(() => {
@@ -375,7 +378,9 @@ export function PermitDetailView({
             documentNo={p.documentNo ?? `#${p.id}`}
             status={st}
             isManager={isManager}
-            onPrint={() => window.print()}
+            onPrint={() => {
+              void openPermitPrint(p, { t, loc, companyName })
+            }}
             onDone={onClose}
           />
         </div>

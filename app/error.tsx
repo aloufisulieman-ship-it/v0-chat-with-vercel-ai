@@ -40,6 +40,17 @@ export default function AppError({
             {`ref: ${error.digest}`}
           </code>
         ) : null}
+        {error.message ? (
+          <details className="w-full text-start">
+            <summary className="cursor-pointer text-xs text-muted-foreground">تفاصيل الخطأ الفعلي</summary>
+            <pre
+              className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-muted p-3 text-xs text-muted-foreground"
+              dir="ltr"
+            >
+              {error.message}
+            </pre>
+          </details>
+        ) : null}
         <Button onClick={reset} className="gap-2">
           <RotateCcw className="size-4" aria-hidden="true" />
           إعادة المحاولة
