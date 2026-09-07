@@ -205,12 +205,12 @@ export function remainingTime(startAt: Date | string | null, endAt: Date | strin
 
 // أدوار سلسلة الاعتماد وتوقيعات الإغلاق.
 export const SIGN_ROLES = {
-  requester: { ar: "طالب التصريح", en: "Requester" },
-  issuer: { ar: "مُصدر التصريح", en: "Issuer" },
-  safety: { ar: "مراقب السلامة", en: "Safety officer" },
-  approver: { ar: "المعتمِد (مدير)", en: "Approver (manager)" },
-  closeIssuer: { ar: "توقيع إغلاق — المُصدر", en: "Closure — issuer" },
-  closeReceiver: { ar: "توقيع إغلاق — مستلم الموقع", en: "Closure — site receiver" },
+  requester: { ar: "مسؤول الورشة", en: "Workshop manager" },
+  issuer: { ar: "مشرف الورشة", en: "Workshop supervisor" },
+  safety: { ar: "مشرف السلامة", en: "Safety supervisor" },
+  approver: { ar: "مسؤول السلامة", en: "Safety officer" },
+  closeIssuer: { ar: "منفذ العمل", en: "Work executor" },
+  closeReceiver: { ar: "مسؤول السلامة", en: "Safety officer" },
 } as const
 
 export type SignRole = keyof typeof SIGN_ROLES

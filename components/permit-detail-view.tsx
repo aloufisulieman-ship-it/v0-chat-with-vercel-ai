@@ -36,9 +36,9 @@ import {
   permitStatusBadgeClass,
   permitStatusLabel,
   permitTypeLabel,
-  SIGN_ROLES,
   type SignRole,
 } from "@/lib/permit-workflow"
+import { PERMIT_SIGNATORIES, SIGN_ROW_ISSUANCE, SIGN_ROW_CLOSURE } from "@/lib/permit-signatories"
 
 const IMAGE_RE = /\.(png|jpe?g|gif|webp|avif|svg|bmp)$/i
 function isImage(a: { url: string; kind?: string }) {
@@ -46,9 +46,6 @@ function isImage(a: { url: string; kind?: string }) {
   if (a.url.startsWith("data:image")) return true
   return IMAGE_RE.test(a.url.split("?")[0])
 }
-
-// أدوار التواقيع المعروضة بالترتيب الرسمي، دون تكرار.
-const SIGN_ORDER: SignRole[] = ["requester", "issuer", "safety", "approver", "closeIssuer", "closeReceiver"]
 
 const RISK_BADGE: Record<string, string> = {
   low: "bg-success/10 text-success border-success/30",
@@ -97,6 +94,36 @@ export function PermitDetailView({
     for (const s of p.signatures) if (!map[s.role as SignRole]) map[s.role as SignRole] = s
     return map
   }, [p.signatures])
+
+  // بطاقة توقيع واحدة: المسمى الوظيفي + الاسم (تلقائي حسب الدور) + صورة التوقيع + التاريخ.
+  const renderSig = (role: SignRole) => {
+    const sig = signatureByRole[role]
+    const cfg = PERMIT_SIGNATORIES[role]
+    const displayName = sig?.signerName || cfg.name || "—"
+    return (
+      <div key={role} className="flex flex-col gap-2 rounded-lg border border-border bg-muted/20 p-3">
+        <span className="text-xs font-medium text-muted-foreground">{loc === "ar" ? cfg.ar : cfg.en}</span>
+        {sig && sig.signatureUrl ? (
+          <>
+            <div className="flex h-16 items-center justify-center overflow-hidden rounded-md border border-border bg-background">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={sig.signatureUrl || "/placeholder.svg"} alt={displayName} crossOrigin="anonymous" className="max-h-full object-contain" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-medium">{displayName}</span>
+              <span className="text-[11px] text-muted-foreground" dir="ltr">
+                {fmtDate(sig.signedAt)}
+              </span>
+            </div>
+          </>
+        ) : (
+          <div className="flex h-16 items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground">
+            {t("permitDetail.awaitingSignature")}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div dir={loc === "ar" ? "rtl" : "ltr"} className="flex flex-col gap-5 text-foreground">
@@ -300,33 +327,21 @@ export function PermitDetailView({
 
       {/* 7) التواقيع الرسمية */}
       <Section icon={<PenLine className="size-4" />} title={t("permitDetail.signatures")}>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {SIGN_ORDER.map((role) => {
-            const sig = signatureByRole[role]
-            return (
-              <div key={role} className="flex flex-col gap-2 rounded-lg border border-border bg-muted/20 p-3">
-                <span className="text-xs font-medium text-muted-foreground">{SIGN_ROLES[role][loc]}</span>
-                {sig && sig.signatureUrl ? (
-                  <>
-                    <div className="flex h-16 items-center justify-center overflow-hidden rounded-md border border-border bg-background">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={sig.signatureUrl || "/placeholder.svg"} alt={sig.signerName} crossOrigin="anonymous" className="max-h-full object-contain" />
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="text-sm font-medium">{sig.signerName || "—"}</span>
-                      <span className="text-[11px] text-muted-foreground" dir="ltr">
-                        {fmtDate(sig.signedAt)}
-                      </span>
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex h-16 items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground">
-                    {t("permitDetail.awaitingSignature")}
-                  </div>
-                )}
-              </div>
-            )
-          })}
+        <div className="flex flex-col gap-5">
+          {/* الصف الأول — تواقيع الإصدار والاعتماد */}
+          <div className="flex flex-col gap-2.5">
+            <span className="text-xs font-semibold text-muted-foreground">{t("permitDetail.rowIssuance")}</span>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {SIGN_ROW_ISSUANCE.map((role) => renderSig(role))}
+            </div>
+          </div>
+          {/* الصف الثاني — تواقيع الإغلاق */}
+          <div className="flex flex-col gap-2.5">
+            <span className="text-xs font-semibold text-muted-foreground">{t("permitDetail.rowClosure")}</span>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {SIGN_ROW_CLOSURE.map((role) => renderSig(role))}
+            </div>
+          </div>
         </div>
       </Section>
 

@@ -14,7 +14,9 @@ import {
   permitStatusLabel,
   permitTypeLabel,
   type PermitStatus,
+  type SignRole,
 } from "@/lib/permit-workflow"
+import { PERMIT_SIGNATORIES, SIGN_ROW_ISSUANCE, SIGN_ROW_CLOSURE } from "@/lib/permit-signatories"
 
 export type PermitRow = {
   id: number
@@ -90,16 +92,30 @@ export function PermitsRegistry({ permits, isManager }: { permits: PermitRow[]; 
       [t("permitWizard.endAt"), p.endAt ? new Date(p.endAt).toLocaleString(loc === "en" ? "en-US" : "ar") : "-"],
       [t("permits.colStatus"), permitStatusLabel(st, loc)],
     ]
+    // بطاقة توقيع للطباعة: المسمى الوظيفي + الاسم الثابت حسب الدور + خط توقيع.
+    const sigBox = (role: SignRole) => {
+      const sc = PERMIT_SIGNATORIES[role]
+      return `<div class="sg"><div class="sg-r">${loc === "ar" ? sc.ar : sc.en}</div><div class="sg-n">${sc.name || "&nbsp;"}</div><div class="sg-l"></div><div class="sg-c">${t("permitPrint.signAndDate")}</div></div>`
+    }
     win.document.write(`
       <html dir="${loc === "ar" ? "rtl" : "ltr"}" lang="${loc}">
       <head><meta charset="utf-8"><title>${p.documentNo ?? ""}</title>
       <style>
-        body{font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;padding:40px;color:#0f172a}
-        h1{font-size:20px;margin-bottom:4px}
-        .sub{color:#64748b;margin-bottom:24px;font-size:13px}
+        @page{size:A4;margin:12mm}
+        *{box-sizing:border-box}
+        body{font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;padding:0;color:#0f172a;font-size:12px}
+        h1{font-size:18px;margin:0 0 2px}
+        .sub{color:#64748b;margin-bottom:14px;font-size:12px}
         table{width:100%;border-collapse:collapse}
-        td{border:1px solid #e2e8f0;padding:10px 12px;font-size:14px}
-        td:first-child{background:#f8fafc;font-weight:600;width:38%;color:#475569}
+        td{border:1px solid #e2e8f0;padding:6px 10px;font-size:12px}
+        td:first-child{background:#f8fafc;font-weight:600;width:34%;color:#475569}
+        .sec{font-size:13px;font-weight:700;margin:16px 0 6px;color:#0f172a}
+        .sg-row{display:flex;gap:8px;margin-bottom:8px}
+        .sg{flex:1;border:1px solid #e2e8f0;border-radius:6px;padding:8px}
+        .sg-r{font-size:10px;color:#64748b}
+        .sg-n{font-size:12px;font-weight:700;margin-top:2px}
+        .sg-l{border-top:1px dashed #cbd5e1;margin-top:24px}
+        .sg-c{font-size:9px;color:#94a3b8;margin-top:3px}
       </style></head>
       <body>
         <h1>${t("permitPrint.header")}</h1>
@@ -107,6 +123,10 @@ export function PermitsRegistry({ permits, isManager }: { permits: PermitRow[]; 
         <table><tbody>
           ${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("")}
         </tbody></table>
+        <div class="sec">${t("permitDetail.rowIssuance")}</div>
+        <div class="sg-row">${SIGN_ROW_ISSUANCE.map(sigBox).join("")}</div>
+        <div class="sec">${t("permitDetail.rowClosure")}</div>
+        <div class="sg-row">${SIGN_ROW_CLOSURE.map(sigBox).join("")}</div>
       </body></html>`)
     win.document.close()
     win.focus()

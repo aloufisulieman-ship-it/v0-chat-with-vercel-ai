@@ -24,6 +24,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/hooks/use-toast"
 import { InlineSignatureField } from "@/components/inline-signature-field"
 import { normalizePermitStatus } from "@/lib/permit-workflow"
+import { PERMIT_SIGNATORIES } from "@/lib/permit-signatories"
 import { useI18n } from "@/lib/i18n/client"
 import {
   approvePermit,
@@ -58,12 +59,10 @@ export function PermitLifecycleActions({
 
   // حقول الحوارات.
   const [approveSig, setApproveSig] = useState("")
-  const [signerName, setSignerName] = useState("")
   const [reason, setReason] = useState("")
   const [issuerSig, setIssuerSig] = useState("")
   const [issuerName, setIssuerName] = useState("")
   const [receiverSig, setReceiverSig] = useState("")
-  const [receiverName, setReceiverName] = useState("")
   const [siteCondition, setSiteCondition] = useState("")
   const [extendedTo, setExtendedTo] = useState("")
 
@@ -84,12 +83,10 @@ export function PermitLifecycleActions({
   }
   function resetFields() {
     setApproveSig("")
-    setSignerName("")
     setReason("")
     setIssuerSig("")
     setIssuerName("")
     setReceiverSig("")
-    setReceiverName("")
     setSiteCondition("")
     setExtendedTo("")
   }
@@ -184,9 +181,9 @@ export function PermitLifecycleActions({
             <DialogDescription>{documentNo}</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="ap-name">{t("permitLifecycle.signerName")}</Label>
-              <Input id="ap-name" value={signerName} onChange={(e) => setSignerName(e.target.value)} />
+            <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2.5">
+              <span className="text-sm text-muted-foreground">{PERMIT_SIGNATORIES.approver.ar}</span>
+              <span className="text-sm font-semibold">{PERMIT_SIGNATORIES.approver.name}</span>
             </div>
             <InlineSignatureField label={t("permitLifecycle.approverSignature")} required onChange={setApproveSig} />
           </div>
@@ -197,7 +194,7 @@ export function PermitLifecycleActions({
                 const fd = new FormData()
                 fd.set("permitId", String(permitId))
                 fd.set("role", "approver")
-                fd.set("signerName", signerName)
+                fd.set("signerName", PERMIT_SIGNATORIES.approver.name)
                 fd.set("signature", approveSig)
                 run(approvePermit, fd, "permitLifecycle.approved")
               }}
@@ -258,8 +255,10 @@ export function PermitLifecycleActions({
                 <InlineSignatureField label={t("permitLifecycle.issuerSignature")} required onChange={setIssuerSig} />
               </div>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="cl-rname">{t("permitLifecycle.receiverName")}</Label>
-                <Input id="cl-rname" value={receiverName} onChange={(e) => setReceiverName(e.target.value)} />
+                <Label>{t("permitLifecycle.receiverName")}</Label>
+                <div className="flex h-9 items-center rounded-md border border-border bg-muted/30 px-3 text-sm font-semibold">
+                  {PERMIT_SIGNATORIES.closeReceiver.name}
+                </div>
                 <InlineSignatureField label={t("permitLifecycle.receiverSignature")} required onChange={setReceiverSig} />
               </div>
             </div>
@@ -272,7 +271,7 @@ export function PermitLifecycleActions({
                 fd.set("permitId", String(permitId))
                 fd.set("issuerName", issuerName)
                 fd.set("issuerSignature", issuerSig)
-                fd.set("receiverName", receiverName)
+                fd.set("receiverName", PERMIT_SIGNATORIES.closeReceiver.name)
                 fd.set("receiverSignature", receiverSig)
                 fd.set("siteConditionAfter", siteCondition)
                 run(closePermit, fd, "permitLifecycle.closed")
