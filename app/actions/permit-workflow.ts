@@ -14,6 +14,7 @@ import {
   type PermitStatus,
   type SignRole,
 } from "@/lib/permit-workflow"
+import { PERMIT_SIGNATORIES } from "@/lib/permit-signatories"
 
 // ============ أدوات مساعدة ============
 function s(v: FormDataEntryValue | null, fallback = ""): string {
@@ -322,7 +323,8 @@ export async function approvePermit(formData: FormData): Promise<void> {
 
   const permitId = Number(formData.get("permitId"))
   const role = s(formData.get("role"), "approver") as SignRole
-  const signerName = s(formData.get("signerName"), u.name)
+  // الاسم ثابت حسب الدور (لا يُكتب يدوياً)، ويُستخدم اسم المستخدم كخيار أخير فقط.
+  const signerName = PERMIT_SIGNATORIES[role]?.name || s(formData.get("signerName"), u.name)
   const signature = s(formData.get("signature"))
   if (!signature.startsWith("data:image")) throw new Error("التوقيع مطلوب لاعتماد التصريح")
 
@@ -392,8 +394,9 @@ export async function closePermit(formData: FormData): Promise<void> {
     throw new Error("لا يمكن إغلاق تصريح بهذه الحالة")
   }
 
+  // منفذ العمل يُدخل يدوياً (يتغيّر حسب المهمة)؛ مسؤول السلامة اسم ثابت من الإعدادات.
   await persistSignature(scope, permitId, "closeIssuer", s(formData.get("issuerName"), u.name), issuerSig)
-  await persistSignature(scope, permitId, "closeReceiver", s(formData.get("receiverName")), receiverSig)
+  await persistSignature(scope, permitId, "closeReceiver", PERMIT_SIGNATORIES.closeReceiver.name, receiverSig)
 
   await db
     .update(permit)
