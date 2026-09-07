@@ -13,11 +13,13 @@ export function PermitViewDialog({
   open,
   onOpenChange,
   isManager,
+  companyName,
 }: {
   permitId: number | null
   open: boolean
   onOpenChange: (open: boolean) => void
   isManager: boolean
+  companyName?: string | null
 }) {
   const { t, dir } = useI18n()
   const [data, setData] = useState<PermitDetail | null>(null)
@@ -53,7 +55,7 @@ export function PermitViewDialog({
             <p className="text-sm text-muted-foreground">{t("permitDetail.loadError")}</p>
           </div>
         ) : data ? (
-          <PermitDetailView permit={data} isManager={isManager} onClose={() => onOpenChange(false)} />
+          <PermitDetailView permit={data} isManager={isManager} companyName={companyName} onClose={() => onOpenChange(false)} />
         ) : null}
       </DialogContent>
     </Dialog>

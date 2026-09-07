@@ -7,6 +7,7 @@ import { requireModule } from "@/lib/session"
 import { isOrgManager } from "@/lib/session"
 import { getPermitsFull, createPermitFull } from "@/app/actions/permit-workflow"
 import { expireOverduePermits } from "@/app/actions/permit-workflow"
+import { getCompany } from "@/app/actions/hse"
 import { getServerT } from "@/lib/i18n/server"
 import { normalizePermitStatus } from "@/lib/permit-workflow"
 
@@ -14,7 +15,7 @@ export default async function PermitsPage() {
   const user = await requireModule("permits")
   // تحديث كسول: عند فتح الصفحة نُنهي أي تصريح تجاوز وقته تلقائياً قبل العرض.
   await expireOverduePermits(user.organizationId)
-  const permits = await getPermitsFull()
+  const [permits, company] = await Promise.all([getPermitsFull(), getCompany().catch(() => null)])
   const { t } = await getServerT()
 
   const isManager = user.isPlatformAdmin ? true : isOrgManager(user)
@@ -40,7 +41,7 @@ export default async function PermitsPage() {
 
       <div className="mt-6">
         <h2 className="mb-3 text-lg font-semibold text-foreground">{t("permits.registryTitle")}</h2>
-        <PermitsRegistry permits={permits} isManager={isManager} />
+        <PermitsRegistry permits={permits} isManager={isManager} companyName={company?.name ?? null} />
       </div>
     </AppShell>
   )

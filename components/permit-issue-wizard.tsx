@@ -96,8 +96,9 @@ export function PermitIssueWizard({
     e.target.value = ""
   }
 
-  // تحقق كل خطوة قبل الانتقال.
-  const step1Valid = title.trim() !== "" && location.trim() !== "" && startAt !== "" && endAt !== ""
+  // تحقق كل خطوة قبل الانتقال. (نصوص datetime-local بنفس الصيغة تُقارن زمنياً بالمقارنة النصية)
+  const windowValid = startAt !== "" && endAt !== "" && endAt > startAt
+  const step1Valid = title.trim() !== "" && location.trim() !== "" && windowValid
   const requiredChecklistOk = items.every((i) => checklist[i.id])
   const gasOk = !typeCfg.requiresGasTest || GAS_FIELDS.every((g) => (gas[g.id] ?? "").trim() !== "")
   const step2Valid = requiredChecklistOk && gasOk
@@ -402,7 +403,11 @@ export function PermitIssueWizard({
               className="gap-1.5"
               onClick={() => {
                 if (step === 1 && !step1Valid) {
-                  toast({ title: t("permitWizard.step1Invalid"), variant: "destructive" })
+                  const msg =
+                    startAt !== "" && endAt !== "" && endAt <= startAt
+                      ? t("permitWizard.endBeforeStart")
+                      : t("permitWizard.step1Invalid")
+                  toast({ title: msg, variant: "destructive" })
                   return
                 }
                 if (step === 2 && !step2Valid) {

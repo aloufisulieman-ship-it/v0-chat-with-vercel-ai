@@ -5,6 +5,7 @@ import { AppShell } from "@/components/app-shell"
 import { PermitDetailView } from "@/components/permit-detail-view"
 import { requireModule, isOrgManager } from "@/lib/session"
 import { getPermitById, expireOverduePermits } from "@/app/actions/permit-workflow"
+import { getCompany } from "@/app/actions/hse"
 import { getServerT } from "@/lib/i18n/server"
 
 // صفحة مستقلة لتفاصيل التصريح — قابلة للمشاركة والفتح على الجوال.
@@ -15,7 +16,7 @@ export default async function PermitDetailPage({ params }: { params: Promise<{ i
 
   const user = await requireModule("permits")
   await expireOverduePermits(user.organizationId)
-  const permit = await getPermitById(permitId)
+  const [permit, company] = await Promise.all([getPermitById(permitId), getCompany().catch(() => null)])
   if (!permit) notFound()
 
   const { t } = await getServerT()
@@ -32,7 +33,7 @@ export default async function PermitDetailPage({ params }: { params: Promise<{ i
           {permit.documentNo ?? `#${permit.id}`}
         </span>
       </nav>
-      <PermitDetailView permit={permit} isManager={isManager} />
+      <PermitDetailView permit={permit} isManager={isManager} companyName={company?.name ?? null} />
     </AppShell>
   )
 }

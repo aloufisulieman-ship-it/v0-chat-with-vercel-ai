@@ -963,6 +963,7 @@ export const en: Dictionary = {
   riskLow: "Low",
   riskMedium: "Medium",
   riskHigh: "High",
+  riskCritical: "Critical",
   startAt: "Work start",
   endAt: "Work end",
   window: "Work window",
@@ -985,6 +986,7 @@ export const en: Dictionary = {
   createFailed: "Could not issue permit",
   signRequired: "Requester signature is required",
   step1Invalid: "Complete required fields (title, location, start and end times)",
+  endBeforeStart: "End time must be after start time",
   step2Invalid: "Complete all checklist items and required gas readings",
   },
 
@@ -1092,6 +1094,13 @@ export const en: Dictionary = {
     header: "Permit to Work",
     signatures: "Official signatures",
     signAndDate: "Signature & date",
+    companyDept: "Health, Safety & Environment Department",
+    version: "Version",
+    scanToView: "Scan to view",
+    workAndHazards: "Work description & anticipated hazards",
+    precautions: "Required precautions",
+    footer: "This permit was issued electronically by Raqeeb",
+    printedAt: "Printed at",
   },
 
   permitApproval: {

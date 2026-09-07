@@ -312,7 +312,7 @@ export const ar = {
     typeChemical: "كيميائي",
     typeMedical: "طبي",
     typeEvacuation: "إخلاء",
-    typeNatural: "كوارث طب��عية",
+    typeNatural: "كوارث طبيعية",
     statusReady: "جاهزة",
     statusNeedsReview: "تحتاج مراجعة",
     statusOutdated: "منتهية",
@@ -938,7 +938,7 @@ export const ar = {
     detectedByShort: "اسم المفتش/الموظف",
   },
 
-  // نموذج إص��ار تصريح
+  // نموذج إصدار تصريح
   permitDialog: {
     issue: "إصدار تصريح",
     issueTitle: "إصدار تصريح عمل",
@@ -981,6 +981,7 @@ export const ar = {
     riskLow: "منخفض",
     riskMedium: "متوسط",
     riskHigh: "عالٍ",
+    riskCritical: "حرج",
     startAt: "بداية العمل",
     endAt: "نهاية العمل",
     window: "نافذة العمل",
@@ -1003,6 +1004,7 @@ export const ar = {
     createFailed: "تعذّر إصدار التصريح",
     signRequired: "توقيع طالب التصريح مطلوب",
     step1Invalid: "أكمل الحقول الإلزامية (العنوان، الموقع، وقتا البداية والنهاية)",
+    endBeforeStart: "يجب أن يكون وقت الانتهاء بعد وقت البدء",
     step2Invalid: "أكمل كل بنود الفحص وقياسات الغاز المطلوبة",
   },
 
@@ -1115,6 +1117,13 @@ export const ar = {
     header: "تصريح عمل — Permit to Work",
     signatures: "التواقيع الرسمية",
     signAndDate: "التوقيع والتاريخ",
+    companyDept: "دائرة الصحة والسلامة والبيئة",
+    version: "الإصدار",
+    scanToView: "امسح للاطلاع",
+    workAndHazards: "وصف العمل والمخاطر المتوقعة",
+    precautions: "الاحتياطات المطلوبة",
+    footer: "هذا التصريح صادر إلكترونياً من نظام رقيب",
+    printedAt: "تاريخ الطباعة",
   },
 
   // اعتماد/رفض التصاريح
@@ -1554,7 +1563,7 @@ export const ar = {
     referred: "تم التحويل وإنشاء الإجراء التصحيحي",
     controlsCounter: "الضوابط المنفّذة",
     reassess: "إعادة التقييم",
-    reassessTitle: "إعادة تقييم ��لخطر",
+    reassessTitle: "إعادة تقييم الخطر",
     reassessDesc: "أدخل الاحتمالية والشدة الجديدتين بعد تنفيذ الضوابط.",
     residualLikelihood: "الاحتمالية المتبقية",
     residualConsequence: "الشدة المتبقية",
@@ -1894,7 +1903,7 @@ export const ar = {
       recWaitVideo: "انتظر تحميل الفيديو ثم حاول",
       recSnapTaken: "تم التقاط اللقطة",
       recSnapFailed: "تعذّر التقاط اللقطة",
-      recSnapDeleteFailed: "تعذّر ��ذف اللقطة",
+      recSnapDeleteFailed: "تعذّر حذف اللقطة",
       recSnapAtAlt: "لقطة عند {time}",
       recSnapDeleteAria: "حذف اللقطة",
       recClear: "مسح",
@@ -2208,7 +2217,7 @@ export const ar = {
     "عدم ارتداء كمامة أو جهاز تنفس": "عدم ارتداء كمامة أو جهاز تنفس",
     "عدم ارتداء حزام الأمان للعمل على الارتفاع": "عدم ارتداء حزام الأمان للعمل على الارتفاع",
     "العمل بدون تصريح عمل": "العمل بدون تصريح عمل",
-    "تجاوز منطقة العمل المحددة": "تجاوز ��نطقة العمل المحددة",
+    "تجاوز منطقة العمل المحددة": "تجاوز منطقة العمل المحددة",
     "مخالفة إجراءات العزل والقفل (LOTO)": "مخالفة إجراءات العزل والقفل (LOTO)",
     "استخدام معدات تالفة أو غير مطابقة": "استخدام معدات تالفة أو غير مطابقة",
     "تشغيل معدات بدون تدريب أو ترخيص": "تشغيل معدات بدون تدريب أو ترخيص",
@@ -2757,7 +2766,7 @@ export const ar = {
     statViolation: "مخالفة",
     statObservation: "ملاحظة",
     statPositive: "إيجابية",
-    emptyTitle: "لا ��وجد تسجيلات بعد",
+    emptyTitle: "لا توجد تسجيلات بعد",
     emptySub: "المخالفات تُحفظ تلقائياً في النظام",
     generalNotes: "ملاحظات الجولة العامة",
     notesPlaceholder: "أي ملاحظات عامة...",

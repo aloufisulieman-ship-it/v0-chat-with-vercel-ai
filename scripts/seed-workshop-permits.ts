@@ -37,6 +37,16 @@ function sig(name: string): string {
   return "data:image/svg+xml;utf8," + encodeURIComponent(svg)
 }
 
+// يحوّل نص ساعة الحائط بتوقيت مسقط (UTC+4) إلى لحظة UTC مخزّنة (ناقص 4 ساعات).
+// السياسة الموحّدة: التخزين UTC والعرض بتوقيت مسقط (Asia/Muscat).
+function utc(local: string): string {
+  const m = local.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/)
+  if (!m) return local
+  const [, y, mo, d, h, mi, sRaw] = m
+  const ms = Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(sRaw ?? "0")) - 4 * 3600_000
+  return new Date(ms).toISOString().slice(0, 19).replace("T", " ")
+}
+
 type Sig = { role: string; signerName: string; signedAt: string }
 type Audit = { action: string; actorName: string; note: string; createdAt: string }
 
@@ -454,22 +464,22 @@ async function main() {
           s.contractorName,
           s.workersCount,
           s.supervisorName,
-          s.startAt,
-          s.endAt,
+          utc(s.startAt),
+          utc(s.endAt),
           s.durationHours,
           s.riskLevel,
           JSON.stringify(s.checklistAnswers),
           JSON.stringify(s.gasTestReadings ?? {}),
           JSON.stringify(s.isolationLOTO ?? {}),
-          s.closedAt ?? null,
+          s.closedAt ? utc(s.closedAt) : null,
           s.closedBy ?? "",
           s.siteConditionAfter ?? "",
           s.areaEvacuated ?? false,
-          s.archivedAt ?? null,
+          s.archivedAt ? utc(s.archivedAt) : null,
           s.approvedBy ?? "",
-          s.approvedAt ?? null,
+          s.approvedAt ? utc(s.approvedAt) : null,
           s.rejectionReason ?? "",
-          s.audit[0]?.createdAt ?? s.startAt,
+          utc(s.audit[0]?.createdAt ?? s.startAt),
         ],
       )
       const permitId = ins.rows[0].id
@@ -478,7 +488,7 @@ async function main() {
         await client.query(
           `INSERT INTO permit_signature ("permitId","organizationId",role,"signerName","signatureUrl","signedAt")
            VALUES ($1,$2,$3,$4,$5,$6)`,
-          [permitId, ORG_ID, sg.role, sg.signerName, sig(sg.signerName), sg.signedAt],
+          [permitId, ORG_ID, sg.role, sg.signerName, sig(sg.signerName), utc(sg.signedAt)],
         )
       }
 
@@ -486,7 +496,7 @@ async function main() {
         await client.query(
           `INSERT INTO permit_audit_log ("permitId","organizationId",action,"actorId","actorName",note,"createdAt")
            VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-          [permitId, ORG_ID, a.action, OWNER_USER_ID, a.actorName, a.note, a.createdAt],
+          [permitId, ORG_ID, a.action, OWNER_USER_ID, a.actorName, a.note, utc(a.createdAt)],
         )
       }
 
