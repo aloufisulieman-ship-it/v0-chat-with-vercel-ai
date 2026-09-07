@@ -1,7 +1,8 @@
 // ================= قالب طباعة تصريح العمل (A4, RTL) =================
 // مُنشئ HTML مشترك لطباعة التصريح كاملاً (زر الطباعة وأي مرفق PDF مستقبلاً يستخدم نفس القالب).
 // التواقيع لها الأولوية القصوى ولا تُحذف أبداً. يُنتظر تحميل الصور والخطوط قبل الطباعة.
-import QRCode from "qrcode"
+// ملاحظة: مكتبة "qrcode" مكتبة Node ثقيلة؛ نستوردها كسولاً داخل openPermitPrint فقط
+// كي لا تدخل مسار عرض/ترطيب صفحات التصاريح وتتسبب بشاشة بيضاء في وضع التطوير.
 import type { PermitDetail } from "@/app/actions/permit-workflow"
 import {
   checklistForType,
@@ -247,8 +248,11 @@ export async function openPermitPrint(permit: PermitDetail, opts: PermitPrintOpt
   const permitUrl = `${origin}/permits/${permit.id}`
   let qrDataUrl = ""
   try {
+    // استيراد كسول: يُحمَّل فقط عند الضغط على الطباعة، لا عند عرض الصفحة.
+    const { default: QRCode } = await import("qrcode")
     qrDataUrl = await QRCode.toDataURL(permitUrl, { margin: 1, width: 160, color: { dark: "#1e3a8a", light: "#ffffff" } })
-  } catch {
+  } catch (err) {
+    console.error("[v0] QR generation failed, printing without QR:", err)
     qrDataUrl = ""
   }
 
