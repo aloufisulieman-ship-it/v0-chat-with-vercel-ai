@@ -11,14 +11,20 @@ import {
   detectionCategoryByType,
   severityByType,
   escalationTargetByType,
+  CONFIDENCE_THRESHOLD,
 } from "@/lib/ai-monitoring"
-
-// عتبة الثقة لاعتماد الكشف تلقائياً (نسبة مئوية). أقل من ذلك يُحفظ «يحتاج مراجعة».
-export const CONFIDENCE_THRESHOLD = 70
 import { normalizePlate, normalizeCode } from "@/lib/ai-recognition"
 import { sessionCameraId } from "@/lib/camera-session"
 
-const VALID_STATUS: DetectionStatus[] = ["new", "acknowledged", "resolved", "false_positive"]
+const VALID_STATUS: DetectionStatus[] = [
+  "new",
+  "needs_review",
+  "acknowledged",
+  "resolved",
+  "converted",
+  "escalated",
+  "false_positive",
+]
 
 export type AiDetection = typeof aiDetection.$inferSelect
 

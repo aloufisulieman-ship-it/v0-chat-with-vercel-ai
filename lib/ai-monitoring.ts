@@ -66,6 +66,10 @@ export const escalationTargetByType: Record<DetectionType, EscalationTarget> = {
   blocked_exit: "corrective_action",
 }
 
+// عتبة الثقة لاعتماد الكشف تلقائياً (نسبة مئوية 0-100). أقل من ذلك يُحفظ الكشف
+// بحالة «يحتاج مراجعة» ولا يُصعَّد آلياً حتى يعتمده المدقق.
+export const CONFIDENCE_THRESHOLD = 70
+
 // الفئات الثلاث لفلتر «فئة الكشف» في اللوحة.
 export const detectionCategoryOptions = [
   { value: "behavioral", label: "سلوكية" },
