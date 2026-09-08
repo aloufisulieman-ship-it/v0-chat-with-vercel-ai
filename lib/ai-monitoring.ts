@@ -1,16 +1,95 @@
 // خرائط وقيم المراقبة الذكية بالذكاء الاصطناعي (ساحات الرافعات الشوكية).
 
-// الأنواع الستة للاكتشافات.
+// أنواع الاكتشافات: 6 سلوكية (تُحال إلى مسار المخالفات) + 8 حوادث/بيئية
+// (تُصعَّد آلياً إلى حوادث/حوادث وشيكة/إجراءات تصحيحية).
 export const detectionTypeOptions = [
+  // --- سلوكية (behavioral) ---
   { value: "no_ppe", label: "عدم ارتداء معدات الوقاية" },
   { value: "traffic_congestion", label: "ازدحام مروري" },
   { value: "unsafe_stacking", label: "تكديس غير آمن" },
   { value: "overspeed", label: "سرعة زائدة" },
   { value: "restricted_area", label: "دخول منطقة محظورة" },
   { value: "pedestrian_near_forklift", label: "اقتراب مشاة من رافعة" },
+  // --- حوادث (incident) ---
+  { value: "collision", label: "اصطدام" },
+  { value: "pedestrian_struck", label: "اصطدام رافعة بشخص" },
+  { value: "load_drop", label: "سقوط حمولة" },
+  { value: "person_fall", label: "سقوط شخص" },
+  { value: "fire_smoke", label: "دخان أو حريق" },
+  { value: "near_miss", label: "حادث وشيك" },
+  // --- بيئية (environmental) ---
+  { value: "spill_leak", label: "انسكاب أو تسرب" },
+  { value: "blocked_exit", label: "مخرج طوارئ مسدود" },
 ] as const
 
 export type DetectionType = (typeof detectionTypeOptions)[number]["value"]
+
+// فئة كل نوع — تحدّد مسار التصعيد والتجميع في اللوحة.
+export type DetectionCategory = "behavioral" | "incident" | "environmental"
+
+export const detectionCategoryByType: Record<DetectionType, DetectionCategory> = {
+  no_ppe: "behavioral",
+  traffic_congestion: "behavioral",
+  unsafe_stacking: "behavioral",
+  overspeed: "behavioral",
+  restricted_area: "behavioral",
+  pedestrian_near_forklift: "behavioral",
+  collision: "incident",
+  pedestrian_struck: "incident",
+  load_drop: "incident",
+  person_fall: "incident",
+  fire_smoke: "incident",
+  near_miss: "incident",
+  spill_leak: "environmental",
+  blocked_exit: "environmental",
+}
+
+// هدف التصعيد التلقائي لكل نوع (ISO 45001):
+//   violation = مسار المخالفات السلوكية (كما هو) | incident = سجل حادث آلي |
+//   near_miss = سجل الحوادث الوشيكة | corrective_action = إجراء تصحيحي بيئي.
+export type EscalationTarget = "none" | "violation" | "incident" | "near_miss" | "corrective_action"
+
+export const escalationTargetByType: Record<DetectionType, EscalationTarget> = {
+  no_ppe: "violation",
+  traffic_congestion: "violation",
+  unsafe_stacking: "violation",
+  overspeed: "violation",
+  restricted_area: "violation",
+  pedestrian_near_forklift: "violation",
+  collision: "incident",
+  pedestrian_struck: "incident",
+  load_drop: "incident",
+  person_fall: "incident",
+  fire_smoke: "incident",
+  near_miss: "near_miss",
+  spill_leak: "corrective_action",
+  blocked_exit: "corrective_action",
+}
+
+// عتبة الثقة لاعتماد الكشف تلقائياً (نسبة مئوية 0-100). أقل من ذلك يُحفظ الكشف
+// بحالة «يحتاج مراجعة» ولا يُصعَّد آلياً حتى يعتمده المدقق.
+export const CONFIDENCE_THRESHOLD = 70
+
+// الفئات الثلاث لفلتر «فئة الكشف» في اللوحة.
+export const detectionCategoryOptions = [
+  { value: "behavioral", label: "سلوكية" },
+  { value: "incident", label: "حوادث" },
+  { value: "environmental", label: "بيئية" },
+] as const
+
+// مجموعات بطاقات KPI: الصف الأول (سلوكية) والصف الثاني (كشف الحوادث/البيئية).
+export const behavioralTypeOptions = detectionTypeOptions.filter(
+  (o) => detectionCategoryByType[o.value] === "behavioral",
+)
+// بطاقات صف «كشف الحوادث» الستة كما في المواصفة.
+export const incidentKpiTypes: DetectionType[] = [
+  "collision",
+  "spill_leak",
+  "load_drop",
+  "near_miss",
+  "fire_smoke",
+  "blocked_exit",
+]
 
 export const detectionTypeLabels: Record<string, string> = Object.fromEntries(
   detectionTypeOptions.map((d) => [d.value, d.label]),
@@ -24,6 +103,14 @@ export const detectionTypeDescriptions: Record<DetectionType, string> = {
   overspeed: "رافعة شوكية أو مركبة تتحرك بسرعة عالية داخل الساحة",
   restricted_area: "دخول شخص أو معدة إلى منطقة محظورة أو مغلقة",
   pedestrian_near_forklift: "اقتراب أحد المشاة بشكل خطير من رافعة شوكية أثناء تشغيلها",
+  collision: "اصطدام رافعة برافعة أخرى أو بمركبة أو بهيكل/رفّ داخل الساحة",
+  pedestrian_struck: "اصطدام رافعة أو مركبة بشخص (حادث إصابة محتمل)",
+  load_drop: "سقوط حمولة أو طبلية من الرافعة أو من ارتفاع",
+  person_fall: "سقوط شخص على الأرض أو من ارتفاع",
+  fire_smoke: "ظهور دخان أو ألسنة لهب أو حريق في الساحة",
+  near_miss: "اقتراب خطر شديد بين رافعة وشخص/معدة دون حدوث تماس (حادث وشيك)",
+  spill_leak: "انسكاب سائل أو تسرب زيت أو وقود على أرضية الساحة",
+  blocked_exit: "مخرج طوارئ أو طفاية حريق أو لوحة كهرباء مسدودة أو محجوبة",
 }
 
 // أيقونة كل نوع (أسماء lucide-react).
@@ -34,15 +121,26 @@ export const severityByType: Record<DetectionType, "low" | "medium" | "high" | "
   overspeed: "high",
   restricted_area: "critical",
   pedestrian_near_forklift: "critical",
+  // حوادث/بيئية — الخطورة التلقائية حسب المواصفة.
+  pedestrian_struck: "critical",
+  person_fall: "critical",
+  fire_smoke: "critical",
+  collision: "high",
+  load_drop: "high",
+  spill_leak: "medium",
+  blocked_exit: "medium",
+  near_miss: "medium",
 }
 
 // حالات الاكتشاف.
 // converted: تم قبول الاكتشاف وتحويله إلى مخالفة رسمية (VIO-YYYY-###).
 export const detectionStatusOptions = [
   { value: "new", label: "جديد" },
+  { value: "needs_review", label: "يحتاج مراجعة" },
   { value: "acknowledged", label: "تم الاطّلاع" },
   { value: "resolved", label: "تمت المعالجة" },
   { value: "converted", label: "تم التحويل لمخالفة" },
+  { value: "escalated", label: "مُصعّد آلياً" },
   { value: "false_positive", label: "إنذار خاطئ" },
 ] as const
 
@@ -54,9 +152,11 @@ export const detectionStatusLabels: Record<string, string> = Object.fromEntries(
 
 export const detectionStatusStyles: Record<string, string> = {
   new: "bg-destructive/10 text-destructive border-destructive/20",
+  needs_review: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/25",
   acknowledged: "bg-accent/15 text-amber-700 dark:text-amber-400 border-accent/30",
   resolved: "bg-primary/10 text-primary border-primary/20",
   converted: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+  escalated: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
   false_positive: "bg-muted text-muted-foreground border-border",
 }
 

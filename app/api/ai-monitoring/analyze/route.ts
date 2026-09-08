@@ -2,9 +2,11 @@ import { NextResponse } from "next/server"
 import { generateObject } from "ai"
 import { z } from "zod"
 import { saveFrameDetection, touchCameraStream } from "@/app/actions/ai-monitoring"
+import { escalateDetection } from "@/app/actions/hse"
 import {
   detectionTypeOptions,
   detectionTypeDescriptions,
+  detectionCategoryByType,
   type DetectionType,
 } from "@/lib/ai-monitoring"
 
@@ -13,23 +15,42 @@ export const maxDuration = 60
 
 const TYPE_VALUES = detectionTypeOptions.map((t) => t.value) as [DetectionType, ...DetectionType[]]
 
-// مخطط الإخراج: قائمة بالمخالفات المكتشفة في الإطار (قد تكون فارغة).
+// مخطط الإخراج: قائمة بالاكتشافات في الإطار (قد تكون فارغة). الثقة كسر 0.0-1.0.
 const schema = z.object({
   detections: z
     .array(
       z.object({
-        type: z.enum(TYPE_VALUES).describe("نوع المخالفة المكتشفة"),
-        severity: z.enum(["low", "medium", "high", "critical"]).describe("درجة خطورة المخالفة"),
-        confidence: z.number().min(0).max(100).describe("نسبة الثقة في الاكتشاف من 0 إلى 100"),
-        description: z.string().describe("وصف موجز جداً للمخالفة بالعربية"),
+        type: z.enum(TYPE_VALUES).describe("نوع الاكتشاف (سلوكي أو حادث أو بيئي)"),
+        confidence: z.number().min(0).max(1).describe("نسبة الثقة في الاكتشاف من 0.0 إلى 1.0"),
+        severity: z.enum(["low", "medium", "high", "critical"]).describe("درجة الخطورة"),
+        description_ar: z.string().describe("وصف موجز جداً للاكتشاف بالعربية"),
+        location_hint: z.string().optional().describe("تلميح لموقع الحدث داخل الإطار (اختياري)"),
+        persons_involved: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe("عدد الأشخاص المتورطين إن وُجدوا (اختياري)"),
       }),
     )
-    .describe("قائمة المخالفات المكتشفة في الصورة، فارغة إذا لم تُرصد أي مخالفة"),
+    .describe("قائمة الاكتشافات في الصورة، فارغة إذا لم يُرصد أي شيء"),
 })
 
-const typeGuide = detectionTypeOptions
-  .map((t) => `- ${t.value} (${t.label}): ${detectionTypeDescriptions[t.value as DetectionType]}`)
-  .join("\n")
+// دليل الأنواع مجمّعاً حسب الفئة ليعرف النموذج ما يبحث عنه في كل مسار.
+const catLabel: Record<string, string> = {
+  behavioral: "مخالفات سلوكية",
+  incident: "حوادث",
+  environmental: "مخاطر بيئية",
+}
+const typeGuide = (["behavioral", "incident", "environmental"] as const)
+  .map((cat) => {
+    const lines = detectionTypeOptions
+      .filter((t) => detectionCategoryByType[t.value] === cat)
+      .map((t) => `  - ${t.value} (${t.label}): ${detectionTypeDescriptions[t.value as DetectionType]}`)
+      .join("\n")
+    return `${catLabel[cat]}:\n${lines}`
+  })
+  .join("\n\n")
 
 export async function POST(req: Request) {
   try {
@@ -57,11 +78,12 @@ export async function POST(req: Request) {
       // AI SDK v7: لا يُسمح برسالة بدور "system" داخل messages؛ نمرّر التوجيه عبر
       // المعامل العلوي system وإلا يُرمى AI_InvalidPromptError ويفشل كل تحليل.
       system:
-        "أنت نظام رؤية حاسوبية متخصص في مراقبة السلامة داخل ساحات الرافعات الشوكية والمستودعات. " +
-        "حلّل الصورة القادمة من كاميرا مراقبة وارصد فقط المخالفات الواضحة من الأنواع التالية:\n" +
+        "أنت نظام رؤية حاسوبية متخصص في مراقبة السلامة (وفق ISO 45001) داخل ساحات الرافعات الشوكية والمستودعات. " +
+        "حلّل الصورة القادمة من كاميرا مراقبة وارصد فقط الأحداث الواضحة من الأنواع التالية:\n\n" +
         typeGuide +
-        "\n\nأعد قائمة بالمخالفات المرصودة فقط. إذا لم تلاحظ أي مخالفة واضحة أعد قائمة فارغة. " +
-        "لا تخترع مخالفات غير مؤكدة، والتزم بنسبة ثقة واقعية.",
+        "\n\nأعد قائمة بالاكتشافات المرصودة فقط. إذا لم تلاحظ أي حدث واضح أعد قائمة فارغة. " +
+        "أعطِ الأولوية لكشف الحوادث الخطيرة (اصطدام، سقوط شخص أو حمولة، دخان/حريق) والحوادث الوشيكة. " +
+        "لا تخترع أحداثاً غير مؤكدة، والتزم بنسبة ثقة واقعية بين 0.0 و1.0.",
       messages: [
         {
           role: "user",
@@ -81,14 +103,21 @@ export async function POST(req: Request) {
     // الذي يرفعه مسار upload-frame كل 1-2 ثانية.
     await touchCameraStream({ inspectorName, cameraLocation })
 
-    // دمج كل مخالفات الإطار الواحد في سجل واحد بنفس اللقطة (بدل صف لكل مخالفة).
-    // بعض النماذج تُعيد الثقة ككسر (0-1) بدل نسبة مئوية؛ نُوحّدها إلى 0-100.
-    const frameDetections = object.detections.map((d) => ({
-      type: d.type,
-      severity: d.severity,
-      confidence: Math.round(d.confidence <= 1 ? d.confidence * 100 : d.confidence),
-      description: d.description,
-    }))
+    // دمج كل اكتشافات الإطار الواحد في سجل واحد بنفس اللقطة (بدل صف لكل اكتشاف).
+    // الثقة تأتي ككسر 0.0-1.0؛ نُوحّدها إلى 0-100. نُضمّن تلميح الموقع وعدد
+    // الأشخاص المتورطين في الوصف لتغذية سجلّ الحادث المُصعَّد لاحقاً.
+    const frameDetections = object.detections.map((d) => {
+      const parts = [d.description_ar?.trim()].filter(Boolean) as string[]
+      if (d.location_hint?.trim()) parts.push(`الموقع: ${d.location_hint.trim()}`)
+      if (typeof d.persons_involved === "number" && d.persons_involved > 0)
+        parts.push(`أشخاص متورطون: ${d.persons_involved}`)
+      return {
+        type: d.type,
+        severity: d.severity,
+        confidence: Math.round(d.confidence <= 1 ? d.confidence * 100 : d.confidence),
+        description: parts.join(" — "),
+      }
+    })
 
     const row = await saveFrameDetection({
       inspectorName,
@@ -100,6 +129,19 @@ export async function POST(req: Request) {
     if (!row) {
       // لم تُرصد أي مخالفة في هذا الإطار.
       return NextResponse.json({ count: 0, detections: [] })
+    }
+
+    // التصعيد التلقائي: كشوفات الحوادث/البيئية المعتمدة (ثقة ≥ 70% → الحالة "new")
+    // تُصعَّد فوراً إلى حادث/حادث وشيك/إجراء تصحيحي. الأنواع السلوكية تبقى على مسار
+    // المخالفات اليدوي. escalateDetection متعادِلة (idempotent) فلا تُكرّر التصعيد
+    // مع الإطارات المتتالية لنفس الحدث المستمر. فشل التصعيد لا يُفشل حفظ الكشف.
+    const category = detectionCategoryByType[row.detectionType as DetectionType] ?? "behavioral"
+    if (row.status === "new" && (category === "incident" || category === "environmental")) {
+      try {
+        await escalateDetection(row.id)
+      } catch (e) {
+        console.log("[v0] auto-escalate failed:", e instanceof Error ? e.message : String(e))
+      }
     }
 
     // نُعيد عناصر العرض (نوعاً لكل مخالفة مرصودة) للوحة كاميرا الهاتف، مع كون
