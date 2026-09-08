@@ -1,5 +1,5 @@
 import type React from "react"
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { Cairo } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { Toaster } from "@/components/ui/toaster"
@@ -23,6 +23,13 @@ export const metadata: Metadata = {
   generator: "v0.app",
 }
 
+// إعداد العرض للجوال: يمنع الزوم التلقائي والإزاحة الأفقية، ويسمح بتكبير المستخدم حتى 5x.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+}
+
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -39,8 +46,8 @@ export default async function RootLayout({
   const enteredOrgName = impersonating ? await getEnteredOrgName(currentUser!.organizationId).catch(() => "") : ""
 
   return (
-    <html lang={locale} dir={dir} className="bg-background">
-      <body className={`${cairo.variable} font-sans antialiased`}>
+    <html lang={locale} dir={dir} className="overflow-x-hidden bg-background">
+      <body className={`${cairo.variable} font-sans antialiased overflow-x-hidden`}>
         <I18nProvider locale={locale}>
           {impersonating && <PlatformImpersonationBanner organizationName={enteredOrgName} />}
           {children}

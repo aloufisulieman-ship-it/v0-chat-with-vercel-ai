@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import useSWR from "swr"
@@ -42,6 +42,8 @@ import { RaqeebMark } from "@/components/raqeeb-logo"
 import { authClient } from "@/lib/auth-client"
 import { hasModuleAccess, type ModuleKey } from "@/lib/permissions"
 import { useI18n } from "@/lib/i18n/client"
+import { useIsMobile } from "@/hooks/use-mobile"
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
@@ -129,6 +131,13 @@ export function AppSidebar({
   const pathname = usePathname()
   const router = useRouter()
   const { t } = useI18n()
+  const isMobile = useIsMobile()
+
+  // إغلاق القائمة تلقائياً عند تغيّر المسار (بعد الانتقال إلى صفحة جديدة على الجوال).
+  useEffect(() => {
+    onClose()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname])
 
   const canSee = (module: ModuleKey) => hasModuleAccess(user?.role, user?.permissions, module)
 
@@ -194,39 +203,27 @@ export function AppSidebar({
     router.refresh()
   }
 
-  return (
+  // محتوى القائمة مشترك بين وضع الجوال (داخل Sheet) والحاسوب (aside ثابت في التدفق).
+  const inner = (
     <>
-      {open && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
-          onClick={onClose}
-          aria-hidden="true"
-        />
-      )}
-      <aside
-        className={cn(
-          // في الشاشات الكبيرة: عنصر ثابت ضمن التدفق (يظهر تلقائيًا في جهة البداية حسب dir).
-          // في الجوال: درج علوي منزلق مثبّت في جهة النهاية (end) ويُخفى بالانزلاق خارجها.
-          "fixed inset-y-0 end-0 z-50 flex w-72 flex-col bg-sidebar text-sidebar-foreground transition-transform lg:static lg:translate-x-0",
-          open ? "translate-x-0" : "translate-x-full lg:translate-x-0",
-        )}
-      >
-        <div className="flex items-center justify-between gap-2 border-b border-sidebar-border px-5 py-4">
-          <div className="flex items-center gap-3">
-            <RaqeebMark className="size-10 shrink-0 rounded-lg bg-white" />
-            <div className="flex flex-col">
-              <span className="text-lg font-extrabold leading-tight">رقيب</span>
-              <span className="text-xs text-sidebar-foreground/60">{t("nav.brandSubtitle")}</span>
-            </div>
+      <div className="flex items-center justify-between gap-2 border-b border-sidebar-border px-5 py-4">
+        <div className="flex items-center gap-3">
+          <RaqeebMark className="size-10 shrink-0 rounded-lg bg-white" />
+          <div className="flex flex-col">
+            <span className="text-lg font-extrabold leading-tight">رقيب</span>
+            <span className="text-xs text-sidebar-foreground/60">{t("nav.brandSubtitle")}</span>
           </div>
+        </div>
+        {isMobile && (
           <button
             onClick={onClose}
-            className="rounded-md p-1 text-sidebar-foreground/70 hover:bg-sidebar-accent lg:hidden"
+            className="rounded-md p-1 text-sidebar-foreground/70 hover:bg-sidebar-accent"
             aria-label={t("common.close")}
           >
             <X className="size-5" />
           </button>
-        </div>
+        )}
+      </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <ul className="flex flex-col gap-1">
@@ -378,7 +375,29 @@ export function AppSidebar({
             {t("common.logout")}
           </button>
         </div>
-      </aside>
     </>
+  )
+
+  // الجوال (< 768px): درج منزلق من اليمين (RTL) عبر shadcn Sheet — يُبوّب المحتوى إلى body
+  // فيتجنّب أي إزاحة أفقية، مغلق افتراضياً ويُدار عبر open/onClose من الغلاف.
+  if (isMobile) {
+    return (
+      <Sheet open={open} onOpenChange={(next) => { if (!next) onClose() }}>
+        <SheetContent
+          side="right"
+          className="flex w-72 max-w-[85vw] flex-col gap-0 border-none bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
+        >
+          <SheetTitle className="sr-only">{t("nav.brandSubtitle")}</SheetTitle>
+          {inner}
+        </SheetContent>
+      </Sheet>
+    )
+  }
+
+  // الحاسوب (>= 768px): قائمة ثابتة ضمن تدفق الصفحة بكامل ارتفاع الشاشة.
+  return (
+    <aside className="sticky top-0 hidden h-screen w-72 shrink-0 flex-col bg-sidebar text-sidebar-foreground md:flex">
+      {inner}
+    </aside>
   )
 }
