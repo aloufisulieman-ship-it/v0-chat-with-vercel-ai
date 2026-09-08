@@ -56,7 +56,7 @@ export function AppShell({
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen overflow-x-hidden bg-background">
       <AppSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} />
 
       <div className="relative z-10 flex min-w-0 flex-1 flex-col">
@@ -71,7 +71,7 @@ export function AppShell({
             الأقصى المسموح) على الصورة نفسها مع pointer-events:none وخلفية شفافة تمامًا. */}
         <div
           aria-hidden="true"
-          className="pointer-events-none fixed inset-y-0 start-0 end-0 -z-10 overflow-hidden bg-transparent lg:start-72"
+          className="pointer-events-none fixed inset-y-0 start-0 end-0 -z-10 overflow-hidden bg-transparent md:start-72"
         >
           <img
             src="/raqeeb-watermark.png"
@@ -83,7 +83,7 @@ export function AppShell({
         <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-border bg-card/80 px-4 py-3 backdrop-blur md:px-6">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="rounded-md p-2 text-foreground hover:bg-muted lg:hidden"
+            className="rounded-md p-2 text-foreground hover:bg-muted md:hidden"
             aria-label={t("common.actions")}
           >
             <Menu className="size-5" />
@@ -147,7 +147,7 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="flex-1 px-4 py-6 md:px-6 lg:px-8">
+        <main className="flex-1 overflow-x-hidden px-4 py-6 md:px-6 lg:px-8">
           <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-2xl font-bold text-foreground text-balance">{title}</h1>
