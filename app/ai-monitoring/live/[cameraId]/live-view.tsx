@@ -424,6 +424,28 @@ export function LiveView({
             )}
           </span>
         )}
+        {/* البند 3 — مؤشر حالة الصوت البارز أثناء البث الحي: يعمل / مكتوم / لا مسار صوت */}
+        {webrtcLive && (
+          <span
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
+              !hasAudio
+                ? "bg-muted text-muted-foreground"
+                : audioOn
+                  ? "bg-primary/15 text-primary"
+                  : "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+            )}
+          >
+            {!hasAudio || !audioOn ? <VolumeX className="size-3.5" /> : <Volume2 className="size-3.5" />}
+            <span>
+              {!hasAudio
+                ? t("aiMonitoring.cam.audioStatusNone")
+                : audioOn
+                  ? t("aiMonitoring.cam.audioStatusPlaying")
+                  : t("aiMonitoring.cam.audioStatusMuted")}
+            </span>
+          </span>
+        )}
         <span
           className={cn(
             "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold",
@@ -444,7 +466,7 @@ export function LiveView({
         </div>
       </div>
 
-      {/* شريط خطأ البث المباشر: يعرض رسالة 401/403 الكاملة بدل رمز غامض */}
+      {/* شريط خطأ البث ��لمباشر: يعرض رسالة 401/403 الكاملة بدل رمز غامض */}
       {webrtcError && (
         <div
           role="alert"

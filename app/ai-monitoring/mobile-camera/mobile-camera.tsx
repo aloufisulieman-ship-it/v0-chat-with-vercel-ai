@@ -150,6 +150,9 @@ export function MobileCamera() {
   // حالة الميكروفون: مفعّل افتراضياً حتى يُبثّ الصوت مع الفيديو للمدير.
   const [micEnabled, setMicEnabled] = useState(true)
   const micEnabledRef = useRef(true)
+  // خطأ الصوت: يصبح true عند تعذّر الحصول على مسار ميكروفون (رفض الإذن/غير متاح) فيُبثّ
+  // الفيديو بلا صوت — نعرض تنبيهاً عربياً واضحاً مع زر لإعادة الطلب بدل التراجع الصامت.
+  const [micError, setMicError] = useState(false)
 
   // تبديل الكاميرا (أمامية/خلفية): قائمة معرّفات كاميرات الجهاز والكاميرا النشطة حالياً.
   const videoDeviceIdsRef = useRef<string[]>([])
@@ -234,7 +237,7 @@ export function MobileCamera() {
     localStorage.setItem("aiCam.modes", JSON.stringify(modes))
   }, [modes])
 
-  // تبديل وضع تعرّف (لا يُسمح بإفراغ كل الأوضاع — يبقى وضع واحد على الأقل).
+  // تبديل وضع تعرّف (لا يُسمح بإفراغ كل الأوضاع — يبقى ��ضع واحد على الأقل).
   const toggleMode = useCallback((mode: RecognitionMode) => {
     setModes((prev) => {
       if (prev.includes(mode)) {
@@ -297,11 +300,24 @@ export function MobileCamera() {
     let stream: MediaStream
     try {
       stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: true })
-    } catch {
+    } catch (audioErr) {
+      // قد يكون الفشل بسبب الصوت وحده: نُعيد المحاولة بالفيديو فقط. إن فشل الفيديو أيضاً
+      // يُرمى الخطأ ويُعالَج في startStreaming (رفض الكاميرا/عدم توفّرها).
+      console.warn(
+        "[v0] getUserMedia مع الصوت فشل — محاولة الفيديو فقط:",
+        audioErr instanceof Error ? audioErr.name : audioErr,
+      )
       stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: false })
     }
     const audioTrack = stream.getAudioTracks()[0]
-    if (audioTrack) audioTrack.enabled = micEnabledRef.current
+    if (audioTrack) {
+      audioTrack.enabled = micEnabledRef.current
+      setMicError(false)
+    } else {
+      // منع التراجع الصامت: نُعلِم الواجهة بأن الصوت غير متاح لعرض تنبيه وزر إعادة طلب.
+      setMicError(true)
+      console.warn("[v0] لا يوجد مسار صوت في البث — سيُبثّ الفيديو بلا صوت حتى يُعاد منح إذن الميكروفون.")
+    }
     console.log(
       "[v0] broadcaster ensureStream: video tracks =",
       stream.getVideoTracks().length,
@@ -551,10 +567,9 @@ export function MobileCamera() {
     try {
       await ensureStream()
       setStreaming(true)
-      // رفع فوري + تحليل فوري، ثم كل حلقة بوتيرتها.
-      uploadFrame()
+      // تحليل فوري ثم كل حلقة بوتيرتها. رفع اللقطات المصغّرة لم يعد يبدأ هنا — يديره
+      // تأثير منفصل يوقفه فور اتصال WebRTC ويستأنفه عند انقطاعه (البند 2).
       analyzeFrame()
-      uploadIntervalRef.current = setInterval(uploadFrame, UPLOAD_INTERVAL_MS)
       analyzeIntervalRef.current = setInterval(analyzeFrame, ANALYZE_INTERVAL_MS)
     } catch (err) {
       const name = err instanceof Error ? err.name : ""
@@ -562,7 +577,7 @@ export function MobileCamera() {
       else if (name === "NotFoundError") setError(t("aiMonitoring.cam.camNotFound"))
       else setError(err instanceof Error ? err.message : t("aiMonitoring.cam.camStartFailed"))
     }
-  }, [ensureStream, uploadFrame, analyzeFrame, t])
+  }, [ensureStream, analyzeFrame, t])
 
   const stopStreaming = useCallback(() => {
     if (uploadIntervalRef.current) {
@@ -789,7 +804,6 @@ export function MobileCamera() {
     [],
   )
 
-  const connected = streaming && lastUploadOkAt != null && now - lastUploadOkAt < CONNECTED_THRESHOLD_MS
   const cameraOn = streaming || recording
 
   // كتم/تفعيل الصوت المبثوث: يبدّل enabled على مسار الميكروفون دون إعادة تفاوض.
@@ -800,6 +814,40 @@ export function MobileCamera() {
       streamRef.current?.getAudioTracks().forEach((t) => (t.enabled = next))
       return next
     })
+  }, [])
+
+  // إعادة طلب إذن الميكروفون بعد رفض/فشل سابق: نطلب مسار صوت جديداً ونضيفه إلى بث
+  // الكاميرا الحالي (يستفيد منه التسجيل وأي مشاهد WebRTC جديد). المشاهد المتصل حالياً
+  // قد يحتاج إعادة فتح الصفحة لسماع الصوت (إضافة مسار للاتصال القائم تتطلب إعادة تفاوض
+  // خارج نطاق هذا التعديل).
+  const retryMic = useCallback(async () => {
+    try {
+      const micStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const track = micStream.getAudioTracks()[0]
+      if (!track) {
+        micStream.getTracks().forEach((t) => t.stop())
+        setMicError(true)
+        return
+      }
+      track.enabled = micEnabledRef.current
+      const s = streamRef.current
+      if (s) {
+        s.getAudioTracks().forEach((old) => {
+          s.removeTrack(old)
+          old.stop()
+        })
+        s.addTrack(track)
+      } else {
+        micStream.getTracks().forEach((t) => t.stop())
+      }
+      setMicError(false)
+      console.log(
+        "[v0] أُعيد منح إذن الميكروفون وأُضيف مسار الصوت. المشاهدون المتصلون حالياً قد يحتاجون إعادة اتصال لسماع الصوت.",
+      )
+    } catch (e) {
+      setMicError(true)
+      console.warn("[v0] إعادة طلب إذن الميكروفون فشلت:", e instanceof Error ? e.name : e)
+    }
   }, [])
 
   // البث الحي المباشر (WebRTC): يعيد استخدام نفس بث الكاميرا وينقله للمدير لحظياً
@@ -818,6 +866,34 @@ export function MobileCamera() {
   })
   // نخزّن دالة استبدال المسار في مرجع ليستخدمها switchCamera دون تبعيات دورية.
   replaceVideoTrackRef.current = replaceVideoTrack
+
+  // "متصل" = يوجد بثّ WebRTC حي (مشاهد واحد على الأقل) أو نجح رفع لقطة مصغّرة مؤخراً.
+  // نضمّ WebRTC حتى لا يظهر المؤشر "غير متصل" بينما أوقفنا الرفع عمداً أثناء البث الحي.
+  const connected =
+    streaming && (viewerCount > 0 || (lastUploadOkAt != null && now - lastUploadOkAt < CONNECTED_THRESHOLD_MS))
+
+  // البند 2 — إدارة حلقة رفع اللقطات المصغّرة: تعمل فقط كبديل حين لا يوجد بثّ WebRTC
+  // حي. عند اتصال أول مشاهد نوقف الرفع نهائياً (لا صورة مصغّرة) لتحرير رفع الجوّال
+  // والخيط الرئيسي فيقلّ تأخير WebRTC؛ وعند انقطاع كل المشاهدين نستأنفه مع تسجيل السبب.
+  // تحليل الذكاء الاصطناعي منفصل ويقرأ الإطار من الفيديو الحي مباشرةً فلا يتأثّر بذلك.
+  useEffect(() => {
+    if (!streaming) return
+    if (viewerCount > 0) {
+      if (uploadIntervalRef.current) {
+        clearInterval(uploadIntervalRef.current)
+        uploadIntervalRef.current = null
+        console.log(
+          `[v0] WebRTC نشط (${viewerCount} مشاهد) — إيقاف رفع اللقطات المصغّرة نهائياً أثناء البث الحي.`,
+        )
+      }
+      return
+    }
+    if (!uploadIntervalRef.current) {
+      console.log("[v0] لا يوجد مشاهد WebRTC — استئناف رفع اللقطات المصغّرة كبديل.")
+      void uploadFrame()
+      uploadIntervalRef.current = setInterval(uploadFrame, UPLOAD_INTERVAL_MS)
+    }
+  }, [streaming, viewerCount, uploadFrame])
 
   // تشغيل صوت التحدّث (talk-back) القادم من المدير على مكبّر صوت جهاز المفتش.
   // نربط التدفّق الوارد بعنصر <audio> مخفي ونحاول التشغيل تلقائياً (بعد أن بدأ
@@ -1035,6 +1111,28 @@ export function MobileCamera() {
             {micEnabled ? t("aiMonitoring.cam.micOnBroadcast") : t("aiMonitoring.cam.micMuted")}
           </button>
         </div>
+      )}
+
+      {/* البند 3 — تنبيه غياب الصوت: يظهر عند تعذّر الوصول للميكروفون بدل التراجع الصامت */}
+      {cameraOn && micError && (
+        <Card className="flex items-start gap-3 border-amber-500/40 bg-amber-500/10 p-4">
+          <MicOff className="mt-0.5 size-5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="flex flex-1 flex-col gap-2">
+            <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+              {t("aiMonitoring.cam.micNoAudioTitle")}
+            </p>
+            <p className="text-sm text-amber-800/90 dark:text-amber-300/90">
+              {t("aiMonitoring.cam.micNoAudioDesc")}
+            </p>
+            <button
+              onClick={() => void retryMic()}
+              className="inline-flex w-fit items-center gap-2 rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-600/90"
+            >
+              <Mic className="size-4" />
+              {t("aiMonitoring.cam.micRetry")}
+            </button>
+          </div>
+        </Card>
       )}
 
       {error && (

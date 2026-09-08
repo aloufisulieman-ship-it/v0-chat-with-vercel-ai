@@ -37,6 +37,21 @@ export const ICE_SERVERS: RTCIceServer[] = (() => {
   return turn ? [...STUN_SERVERS, turn] : STUN_SERVERS
 })()
 
+// تشخيص مرة واحدة في المتصفح: هل TURN مُهيّأ؟ متغيّرات NEXT_PUBLIC_* تُحقَن وقت البناء،
+// فيجب ضبطها لبيئة Production (وليس Preview فقط) كي تعمل على النطاق الحي. عند غيابها
+// نطبع تحذيراً صريحاً لأن الشبكات الجوّالة/symmetric NAT تفشل غالباً على STUN وحده.
+if (typeof window !== "undefined") {
+  if (HAS_TURN) {
+    console.log("[v0] WebRTC ICE: STUN + TURN مُهيّأ (عبور NAT مدعوم).")
+  } else {
+    console.warn(
+      "[v0] WebRTC ICE: TURN غير مُهيّأ — سيُستخدم STUN فقط. على شبكات الجوّال أو symmetric NAT " +
+        "قد يفشل البث أو يتأخّر بشدّة. أضِف هذه المتغيّرات في إعدادات المشروع لبيئة Production: " +
+        "NEXT_PUBLIC_TURN_URL (عناوين turn/turns مفصولة بفواصل) و NEXT_PUBLIC_TURN_USERNAME و NEXT_PUBLIC_TURN_CREDENTIAL.",
+    )
+  }
+}
+
 // لتشخيص فشل المسار المباشر: ضبط NEXT_PUBLIC_FORCE_TURN=1 يجبر استخدام relay فقط،
 // فإن نجح البث حينها عرفنا أن المشكلة في عبور NAT وأن TURN هو الحل.
 const FORCE_RELAY = process.env.NEXT_PUBLIC_FORCE_TURN === "1"
