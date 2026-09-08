@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/hooks/use-toast"
 import { createIncidentFull } from "@/app/actions/hse"
+import { EquipmentCombobox, type EquipmentOption } from "@/components/equipment-combobox"
 import {
   INCIDENT_TYPES,
   incidentSeverityOptions,
@@ -111,7 +112,7 @@ const emptyParty: IncidentParty = {
   name: "", nationality: "", affiliation: "employee", injuryType: "none", hospitalized: "no",
 }
 
-export function IncidentFormDialog({ defaultReporter = "" }: { defaultReporter?: string }) {
+export function IncidentFormDialog({ defaultReporter = "", equipmentOptions = [] }: { defaultReporter?: string; equipmentOptions?: EquipmentOption[] }) {
   const { t, dir } = useI18n()
   const [open, setOpen] = useState(false)
   const [step, setStep] = useState(1)
@@ -123,7 +124,7 @@ export function IncidentFormDialog({ defaultReporter = "" }: { defaultReporter?:
     description: "", directCauses: "", rootCauses: "",
     propertyDamage: "", damageCost: "", immediateActions: "",
     witnesses: "", authoritiesNotified: "no", authorityName: "",
-    recommendations: "", reportedBy: defaultReporter,
+    recommendations: "", reportedBy: defaultReporter, equipmentId: "",
   }
 
   const [form, setForm] = useState(initialForm)
@@ -289,6 +290,14 @@ export function IncidentFormDialog({ defaultReporter = "" }: { defaultReporter?:
               <Label>{t("incidentForm.reporter")}</Label>
               <Input value={form.reportedBy} onChange={e => setForm(f => ({ ...f, reportedBy: e.target.value }))} placeholder={t("incidentForm.reporterPlaceholder")} />
             </div>
+            {equipmentOptions.length > 0 && (
+              <div className="sm:col-span-2">
+                <EquipmentCombobox
+                  options={equipmentOptions}
+                  onChange={(id) => setForm((f) => ({ ...f, equipmentId: id != null ? String(id) : "" }))}
+                />
+              </div>
+            )}
             <div className="flex flex-col gap-1 sm:col-span-2">
               <Label>{t("incidentForm.description")}</Label>
               <Textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={3} placeholder={t("incidentForm.descriptionPlaceholder")} />

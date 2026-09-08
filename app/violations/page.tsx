@@ -8,6 +8,7 @@ import { requireModule } from "@/lib/session"
 import { getViolations, getEmployees, deleteViolation, getAiViolationSignatureInfo, getCompany } from "@/app/actions/hse"
 import type { EmailSenderInfo } from "@/lib/email-export"
 import { getOperationalSettings } from "@/app/actions/org-settings"
+import { getEquipmentOptions } from "@/app/actions/equipment"
 import { getServerT } from "@/lib/i18n/server"
 import { statusLabel, categoryLabel } from "@/lib/i18n/labels"
 import { effectiveViolationStatus, isViolationClosed } from "@/lib/violation-status"
@@ -45,12 +46,13 @@ export default async function ViolationsPage({
   }>
 }) {
   const user = await requireModule("violations")
-  const [violations, employees, operational, aiSignatureInfo, companyProfile] = await Promise.all([
+  const [violations, employees, operational, aiSignatureInfo, companyProfile, equipmentOptions] = await Promise.all([
     getViolations(),
     getEmployees(),
     getOperationalSettings(),
     getAiViolationSignatureInfo(),
     getCompany().catch(() => null),
+    getEquipmentOptions().catch(() => []),
   ])
   const violationTypeLabels = operational.violationTypes.map((v) => v.label)
   const { t, locale } = await getServerT()
@@ -206,6 +208,7 @@ export default async function ViolationsPage({
       action={
           <ViolationFormDialog
             employees={employees}
+            equipmentOptions={equipmentOptions}
             initialEvidence={initialEvidence}
             initialDetectedBy={initialDetectedBy}
             autoOpen={autoOpen}

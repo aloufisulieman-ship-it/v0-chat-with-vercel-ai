@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/hooks/use-toast"
 import { createViolationFull } from "@/app/actions/hse"
 import type { EmployeeRecord } from "@/app/training/employee-registry"
+import { EquipmentCombobox, type EquipmentOption } from "@/components/equipment-combobox"
 import { violationStatusOptions } from "@/lib/labels"
 import { compressImage } from "@/lib/image-compress"
 import {
@@ -154,12 +155,15 @@ function SignaturePad({ label, value, onChange }: { label: string; value: string
 
 export function ViolationFormDialog({
   employees = [],
+  equipmentOptions = [],
   initialEvidence,
   initialDetectedBy = "",
   autoOpen = false,
   violationTypes,
 }: {
   employees?: EmployeeRecord[]
+  // معدات سجل الأسطول لربط المخالفة بمعدة (اختياري).
+  equipmentOptions?: EquipmentOption[]
   // صورة إثبات مبدئية (data URL) تُحمّل مسبقاً — مثلاً لقطة من تسجيل فيديو.
   initialEvidence?: string
   // اسم المفتش الذي رصد المخالفة (يُعبّأ مسبقاً عند القدوم من رصد الذكاء الاصطناعي).
@@ -182,7 +186,7 @@ export function ViolationFormDialog({
     place: "", violationType: "", category: "", internalAction: "", actionDetail: "",
     description: "", witnesses: "",
     evidences: "", proposedAction: "", status: "open", entryMode: "electronic",
-    detectedBy: initialDetectedBy,
+    detectedBy: initialDetectedBy, equipmentId: "",
   })
 
   // إذا كانت صورة الإثبات المبدئية data URL نضعها مباشرة؛ وإن كانت رابط Blob (http)
@@ -246,7 +250,7 @@ export function ViolationFormDialog({
       place: "", violationType: "", category: "", internalAction: "", actionDetail: "",
       description: "", witnesses: "",
       evidences: "", proposedAction: "", status: "open", entryMode: "electronic",
-      detectedBy: initialDetectedBy,
+      detectedBy: initialDetectedBy, equipmentId: "",
     })
     setImages(isDataUrl(initialEvidence) ? [initialEvidence as string] : [])
     setManualDocs([])
@@ -409,6 +413,14 @@ export function ViolationFormDialog({
                 {employees.filter((item) => item.active).map((employee) => <option key={employee.id} value={employee.id}>{employee.name} — {employee.employeeId}</option>)}
               </select>
             </div>
+            {equipmentOptions.length > 0 && (
+              <div className="sm:col-span-2">
+                <EquipmentCombobox
+                  options={equipmentOptions}
+                  onChange={(id) => setForm((current) => ({ ...current, equipmentId: id != null ? String(id) : "" }))}
+                />
+              </div>
+            )}
             <div className="flex flex-col gap-1.5 sm:col-span-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 p-3">
               <Label htmlFor="violation-uniform-lookup" className="flex items-center gap-1.5">
                 <BadgeCheck className="size-4 text-primary" /> {t("violationForm.uniformLookup")}

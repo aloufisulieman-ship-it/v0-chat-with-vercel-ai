@@ -131,6 +131,17 @@ export const equipmentTypeLabels: Record<string, string> = Object.fromEntries(
   equipmentTypeOptions.map((e) => [e.value, e.label]),
 )
 
+// حالة تشغيل المعدة في سجل الأسطول.
+export const operationalStatusOptions = [
+  { value: "operational", label: "تعمل" },
+  { value: "maintenance", label: "تحت الصيانة" },
+  { value: "out_of_service", label: "خارج الخدمة" },
+  { value: "idle", label: "متوقفة" },
+]
+export const operationalStatusLabels: Record<string, string> = Object.fromEntries(
+  operationalStatusOptions.map((s) => [s.value, s.label]),
+)
+
 export const departmentOptions = [
   { value: "hr", label: "الموارد البشرية" },
   { value: "workshop", label: "الورشة" },

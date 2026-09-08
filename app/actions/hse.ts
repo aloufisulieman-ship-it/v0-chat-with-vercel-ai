@@ -75,7 +75,12 @@ function num(v: FormDataEntryValue | null, fallback = 0) {
 function dateOrNull(v: FormDataEntryValue | null) {
   const s = v ? String(v) : ""
   return s ? s : null
-}
+  }
+// معرّف معدة موجب من سجل الأسطول أو null (حقل ربط اختياري في المخالفات/الحوادث/التفتيش).
+function equipmentIdOrNull(v: FormDataEntryValue | null): number | null {
+  const n = Number(v)
+  return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null
+  }
 
 /* ---------------- Company / profile ---------------- */
 export async function getCompany() {
@@ -218,6 +223,7 @@ export async function createIncidentFull(formData: FormData) {
       organizationId,
       documentNo,
       title,
+      equipmentId: equipmentIdOrNull(formData.get("equipmentId")),
       classification,
       routedTo,
       hrStatus: routedTo === "hr" ? "pending" : null,
@@ -346,13 +352,14 @@ export async function createInspection(formData: FormData) {
   await db.insert(inspection).values({
     userId,
     organizationId,
-    title: str(formData.get("title")),
-    area: str(formData.get("area")),
-    inspector: str(formData.get("inspector")),
-    status: str(formData.get("status"), "scheduled"),
-    compliance: num(formData.get("compliance")),
-    findings: num(formData.get("findings")),
-    inspectionDate: dateOrNull(formData.get("inspectionDate")),
+  title: str(formData.get("title")),
+  equipmentId: equipmentIdOrNull(formData.get("equipmentId")),
+  area: str(formData.get("area")),
+  inspector: str(formData.get("inspector")),
+  status: str(formData.get("status"), "scheduled"),
+  compliance: num(formData.get("compliance")),
+  findings: num(formData.get("findings")),
+  inspectionDate: dateOrNull(formData.get("inspectionDate")),
   })
   revalidatePath("/inspections")
   revalidatePath("/")
@@ -1509,6 +1516,7 @@ export async function createViolationFull(formData: FormData) {
       documentNo,
       companyName: str(formData.get("companyName")),
       employeeRefId,
+      equipmentId: equipmentIdOrNull(formData.get("equipmentId")),
       employeeName,
       employeeNo: str(formData.get("employeeNo")),
       nationality: str(formData.get("nationality")),
