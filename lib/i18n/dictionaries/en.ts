@@ -1923,6 +1923,13 @@ export const en: Dictionary = {
       facingBack: " · Rear",
       micOnBroadcast: "Audio on — broadcasting to manager",
       micMuted: "Audio muted",
+      micNoAudioTitle: "No audio in the broadcast",
+      micNoAudioDesc:
+        "The microphone could not be accessed, so video is streaming without audio. Grant microphone permission and try again (a manager already connected may need to reopen the page to hear audio).",
+      micRetry: "Re-request microphone access",
+      audioStatusPlaying: "Audio on",
+      audioStatusMuted: "Audio muted",
+      audioStatusNone: "No audio from source",
       uploadingRecording: "Uploading the recording to the server… don’t close the page.",
       connState: "Connection status",
       framesUploaded: "Frames uploaded",
