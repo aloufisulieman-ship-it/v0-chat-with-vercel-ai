@@ -16,6 +16,14 @@ import {
   CircleX,
   Trash2,
   Truck,
+  Car,
+  UserRoundX,
+  PackageX,
+  Flame,
+  TriangleAlert,
+  Droplets,
+  DoorClosed,
+  AlertOctagon,
   type LucideIcon,
 } from "lucide-react"
 import { Card } from "@/components/ui/card"
@@ -35,11 +43,16 @@ import {
   detectionStatusOptions,
   detectionStatusStyles,
   severityStyles,
+  detectionCategoryByType,
+  behavioralTypeOptions,
+  incidentKpiTypes,
+  detectionCategoryOptions,
   type DetectionType,
 } from "@/lib/ai-monitoring"
 import { updateDetectionStatus, deleteDetection } from "@/app/actions/ai-monitoring"
 import { ConnectedCameras } from "./connected-cameras"
 import { AcceptDetectionDialog, LinkedViolationLink } from "./accept-detection-dialog"
+import { AutoIncidentReviewDialog, EscalationLink } from "./auto-incident-review-dialog"
 import { toast } from "@/hooks/use-toast"
 import { useI18n } from "@/lib/i18n/client"
 import {
@@ -74,6 +87,13 @@ export type DetectionDto = {
   resolvedBy: string
   notes: string
   linkedViolationNo: string
+  // توسعة كشف الحوادث
+  detectionCategory: string
+  severityAuto: string
+  escalationTarget: string
+  escalatedRecordId: string | null
+  escalatedDocumentNo: string
+  reviewReason: string
 }
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
@@ -91,6 +111,14 @@ const typeIcons: Record<DetectionType, LucideIcon> = {
   overspeed: Gauge,
   restricted_area: ShieldAlert,
   pedestrian_near_forklift: PersonStanding,
+  collision: Car,
+  pedestrian_struck: UserRoundX,
+  load_drop: PackageX,
+  person_fall: UserRoundX,
+  fire_smoke: Flame,
+  near_miss: TriangleAlert,
+  spill_leak: Droplets,
+  blocked_exit: DoorClosed,
 }
 
 const typeTone: Record<DetectionType, string> = {
@@ -100,6 +128,14 @@ const typeTone: Record<DetectionType, string> = {
   overspeed: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
   restricted_area: "bg-destructive/10 text-destructive",
   pedestrian_near_forklift: "bg-destructive/10 text-destructive",
+  collision: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
+  pedestrian_struck: "bg-destructive/10 text-destructive",
+  load_drop: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
+  person_fall: "bg-destructive/10 text-destructive",
+  fire_smoke: "bg-destructive/10 text-destructive",
+  near_miss: "bg-accent/15 text-amber-700 dark:text-amber-400",
+  spill_leak: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  blocked_exit: "bg-accent/15 text-amber-700 dark:text-amber-400",
 }
 
 export function isToday(iso: string) {
@@ -246,6 +282,7 @@ export function MonitoringDashboard({
   const all = data?.detections ?? initial
 
   const [fType, setFType] = useState("all")
+  const [fCategory, setFCategory] = useState("all")
   const [fSeverity, setFSeverity] = useState("all")
   const [fStatus, setFStatus] = useState("all")
   const [fCamera, setFCamera] = useState("all")
@@ -253,17 +290,41 @@ export function MonitoringDashboard({
   const [fDate, setFDate] = useState("")
   const [pending, setPending] = useState<number | null>(null)
 
+  // كشوفات صالحة للإحصاء = كل الكشوفات ما عدا البلاغات الخاطئة (تُستبعد من العدّ).
+  const counted = useMemo(() => all.filter((d) => d.status !== "false_positive"), [all])
+
+  // عدّاد نوع ضمن نافذة زمنية بالساعات (24 ساعة / 7 أيام) — يحتسب كل نوع داخل اللقطة.
+  const windowCounts = useMemo(() => {
+    const nowMs = Date.now()
+    const day = 24 * 60 * 60 * 1000
+    const mk = () => {
+      const o: Record<string, number> = {}
+      for (const opt of detectionTypeOptions) o[opt.value] = 0
+      return o
+    }
+    const last24 = mk()
+    const last7 = mk()
+    for (const d of counted) {
+      const age = nowMs - new Date(d.detectedAt).getTime()
+      for (const ty of typesOf(d)) {
+        if (age <= day) last24[ty] = (last24[ty] ?? 0) + 1
+        if (age <= 7 * day) last7[ty] = (last7[ty] ?? 0) + 1
+      }
+    }
+    return { last24, last7 }
+  }, [counted])
+
   // عدّادات اليوم لكل نوع من الأنواع الستة — نحتسب كل نوع مرصود داخل اللقطة الواحدة
   // (البند قد يضمّ أكثر من ��خالفة) حتى تعكس الأرقام الواقع.
   const todayCounts = useMemo(() => {
     const counts: Record<string, number> = {}
     for (const opt of detectionTypeOptions) counts[opt.value] = 0
-    for (const d of all) {
+    for (const d of counted) {
       if (!isToday(d.detectedAt)) continue
       for (const ty of typesOf(d)) counts[ty] = (counts[ty] ?? 0) + 1
     }
     return counts
-  }, [all])
+  }, [counted])
 
   // مناطق الرصد الحية: تجميع حسب موقع الكاميرا.
   const zones = useMemo(() => {
@@ -303,6 +364,11 @@ export function MonitoringDashboard({
   const filtered = useMemo(() => {
     return all.filter((d) => {
       if (fType !== "all" && !typesOf(d).includes(fType)) return false
+      if (
+        fCategory !== "all" &&
+        (detectionCategoryByType[d.detectionType as DetectionType] ?? "behavioral") !== fCategory
+      )
+        return false
       if (fSeverity !== "all" && d.severity !== fSeverity) return false
       if (fStatus !== "all" && d.status !== fStatus) return false
       if (fCamera !== "all" && (d.inspectorName || d.cameraId) !== fCamera) return false
@@ -310,10 +376,22 @@ export function MonitoringDashboard({
       if (fDate && d.detectedAt.slice(0, 10) !== fDate) return false
       return true
     })
-  }, [all, fType, fSeverity, fStatus, fCamera, fLocation, fDate, t])
+  }, [all, fType, fCategory, fSeverity, fStatus, fCamera, fLocation, fDate, t])
 
   // ترتيب الخطورة الأسوأ في المنطقة — نستخدم ترجمة severity حسب اللغة.
   const worstZoneRank = ["", severityLabel(t, "low"), severityLabel(t, "medium"), severityLabel(t, "high"), severityLabel(t, "critical")]
+
+  // أوامر إيقاف العمل النشطة: كشوفات حرجة من فئة الحوادث لم تُغلق بعد.
+  const workStoppages = useMemo(
+    () =>
+      counted.filter(
+        (d) =>
+          d.severity === "critical" &&
+          (detectionCategoryByType[d.detectionType as DetectionType] ?? "behavioral") === "incident" &&
+          d.status !== "resolved",
+      ),
+    [counted],
+  )
 
   async function changeStatus(id: number, status: string) {
     setPending(id)
@@ -363,9 +441,44 @@ export function MonitoringDashboard({
       </TabsList>
 
       <TabsContent value="live" className="flex flex-col gap-6">
-      {/* بطاقات KPI للأنواع الستة */}
+      {/* أمر إيقاف العمل — يظهر عند وجود كشوفات حرجة نشطة من فئة الحوادث */}
+      {workStoppages.length > 0 && (
+        <Card className="flex items-start gap-3 border-destructive/40 bg-destructive/10 p-4">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-destructive/20">
+            <AlertOctagon className="size-5 text-destructive" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <span className="flex size-2.5 rounded-full bg-destructive animate-pulse" aria-hidden="true" />
+              <h2 className="text-base font-bold text-destructive">{t("aiMonitoring.workStoppageTitle")}</h2>
+            </div>
+            <p className="text-sm text-foreground">
+              {t("aiMonitoring.workStoppageDesc").replace("{count}", String(workStoppages.length))}
+            </p>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {workStoppages.slice(0, 6).map((d) => (
+                <span
+                  key={d.id}
+                  className="inline-flex items-center gap-1 rounded-md border border-destructive/30 bg-background/60 px-2 py-0.5 text-xs font-medium text-destructive"
+                >
+                  {detectionTypeLabel(t, d.detectionType)}
+                  {d.cameraLocation ? ` — ${d.cameraLocation}` : ""}
+                  {d.escalatedDocumentNo ? (
+                    <span className="font-mono" dir="ltr">
+                      {" "}
+                      · {d.escalatedDocumentNo}
+                    </span>
+                  ) : null}
+                </span>
+              ))}
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* بطاقات KPI للمخالفات السلوكية (عدّاد اليوم) */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-        {detectionTypeOptions.map((opt) => {
+        {behavioralTypeOptions.map((opt) => {
           const Icon = typeIcons[opt.value as DetectionType]
           return (
             <Card key={opt.value} className="flex flex-col gap-3 p-5">
@@ -391,6 +504,46 @@ export function MonitoringDashboard({
             </Card>
           )
         })}
+      </div>
+
+      {/* بطاقات KPI لكشف الحوادث (آخر 24 ساعة / 7 أيام) */}
+      <div>
+        <div className="mb-3 flex items-center gap-2">
+          <AlertOctagon className="size-4 text-destructive" />
+          <h2 className="text-lg font-semibold text-foreground">{t("aiMonitoring.incidentDetectionTitle")}</h2>
+        </div>
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+          {incidentKpiTypes.map((ty) => {
+            const Icon = typeIcons[ty]
+            return (
+              <Card key={ty} className="flex flex-col gap-3 p-5">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-muted-foreground text-balance">
+                    {detectionTypeLabel(t, ty)}
+                  </span>
+                  <div
+                    className={cn(
+                      "flex size-10 shrink-0 items-center justify-center rounded-lg",
+                      typeTone[ty],
+                    )}
+                  >
+                    <Icon className="size-5" />
+                  </div>
+                </div>
+                <div className="flex items-end justify-between gap-2">
+                  <div className="flex items-end gap-1.5">
+                    <span className="text-3xl font-bold text-foreground">{windowCounts.last24[ty] ?? 0}</span>
+                    <span className="mb-1 text-xs text-muted-foreground">{t("aiMonitoring.last24h")}</span>
+                  </div>
+                  <div className="flex items-end gap-1 text-muted-foreground">
+                    <span className="text-lg font-semibold text-foreground/80">{windowCounts.last7[ty] ?? 0}</span>
+                    <span className="mb-0.5 text-xs">{t("aiMonitoring.last7d")}</span>
+                  </div>
+                </div>
+              </Card>
+            )
+          })}
+        </div>
       </div>
 
       {/* مناطق الرصد الحية */}
@@ -445,6 +598,12 @@ export function MonitoringDashboard({
       {/* الفلاتر */}
       <Card className="flex flex-wrap items-center gap-3 p-4">
         <span className="text-sm font-medium text-muted-foreground">{t("aiMonitoring.filterLabel")}:</span>
+        <select className={selectCls} value={fCategory} onChange={(e) => setFCategory(e.target.value)}>
+          <option value="all">{t("aiMonitoring.allCategories")}</option>
+          {detectionCategoryOptions.map((c) => (
+            <option key={c.value} value={c.value}>{t(`aiMonitoring.category.${c.value}`)}</option>
+          ))}
+        </select>
         <select className={selectCls} value={fSeverity} onChange={(e) => setFSeverity(e.target.value)}>
           <option value="all">{t("aiMonitoring.allSeverities")}</option>
           {["low", "medium", "high", "critical"].map((v) => (
@@ -483,6 +642,7 @@ export function MonitoringDashboard({
           dir="ltr"
         />
         {(fType !== "all" ||
+          fCategory !== "all" ||
           fSeverity !== "all" ||
           fStatus !== "all" ||
           fCamera !== "all" ||
@@ -491,6 +651,7 @@ export function MonitoringDashboard({
           <button
             onClick={() => {
               setFType("all")
+              setFCategory("all")
               setFSeverity("all")
               setFStatus("all")
               setFCamera("all")
@@ -529,6 +690,7 @@ export function MonitoringDashboard({
                     t("aiMonitoring.colConfidence"),
                     t("aiMonitoring.colEvidence"),
                     t("aiMonitoring.colStatus"),
+                    t("aiMonitoring.colEscalation"),
                     "",
                   ].map((h, i) => (
                     <th
@@ -543,7 +705,7 @@ export function MonitoringDashboard({
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">
+                    <td colSpan={10} className="px-4 py-12 text-center text-muted-foreground">
                       {t("aiMonitoring.noMatching")}
                     </td>
                   </tr>
@@ -635,37 +797,55 @@ export function MonitoringDashboard({
                           className={detectionStatusStyles[d.status] ?? ""}
                         />
                       </td>
+                      {/* التصعيد: رابط للسجل الناتج (حادث/إجراء تصحيحي/مخالفة) */}
                       <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-1">
-                          {d.status === "converted" && d.linkedViolationNo ? (
-                            <LinkedViolationLink documentNo={d.linkedViolationNo} />
-                          ) : null}
-                          {(d.status === "new" || d.status === "acknowledged") && (
-                            <>
-                              {d.status === "new" && (
-                                <button
-                                  onClick={() => changeStatus(d.id, "acknowledged")}
-                                  disabled={pending === d.id}
-                                  className="rounded-md p-1.5 text-amber-600 hover:bg-muted disabled:opacity-50"
-                                  title={t("aiMonitoring.markAcknowledged")}
-                                >
-                                  <Check className="size-4" />
-                                </button>
+                        {d.escalatedDocumentNo ? (
+                          <EscalationLink documentNo={d.escalatedDocumentNo} />
+                        ) : d.linkedViolationNo ? (
+                          <LinkedViolationLink documentNo={d.linkedViolationNo} />
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {(() => {
+                          const cat = detectionCategoryByType[d.detectionType as DetectionType] ?? "behavioral"
+                          const actionable =
+                            d.status === "new" || d.status === "acknowledged" || d.status === "needs_review"
+                          return (
+                            <div className="flex items-center justify-end gap-1">
+                              {actionable && (
+                                <>
+                                  {d.status === "new" && (
+                                    <button
+                                      onClick={() => changeStatus(d.id, "acknowledged")}
+                                      disabled={pending === d.id}
+                                      className="rounded-md p-1.5 text-amber-600 hover:bg-muted disabled:opacity-50"
+                                      title={t("aiMonitoring.markAcknowledged")}
+                                    >
+                                      <Check className="size-4" />
+                                    </button>
+                                  )}
+                                  {cat === "behavioral" ? (
+                                    <>
+                                      {/* سلوكية: نافذة القبول أو التحويل إلى مخالفة */}
+                                      <AcceptDetectionDialog detection={d} />
+                                      <button
+                                        onClick={() => changeStatus(d.id, "false_positive")}
+                                        disabled={pending === d.id}
+                                        className="rounded-md p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-50"
+                                        title={t("aiMonitoring.markFalsePositive")}
+                                      >
+                                        <CircleX className="size-4" />
+                                      </button>
+                                    </>
+                                  ) : (
+                                    // حوادث/بيئية: نافذة مراجعة الحادث الآلي (تشمل البلاغ الخاطئ)
+                                    <AutoIncidentReviewDialog detection={d} />
+                                  )}
+                                </>
                               )}
-                              {/* قبول: يفتح نافذة القبول أو التحويل إلى مخالفة */}
-                              <AcceptDetectionDialog detection={d} />
-                              {/* رفض: إنذار خاطئ — بدون نافذة */}
-                              <button
-                                onClick={() => changeStatus(d.id, "false_positive")}
-                                disabled={pending === d.id}
-                                className="rounded-md p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-50"
-                                title={t("aiMonitoring.markFalsePositive")}
-                              >
-                                <CircleX className="size-4" />
-                              </button>
-                            </>
-                          )}
-                          {isAdmin && (
+                              {isAdmin && (
                             <button
                               onClick={() => remove(d.id)}
                               disabled={pending === d.id}
@@ -675,7 +855,9 @@ export function MonitoringDashboard({
                               <Trash2 className="size-4" />
                             </button>
                           )}
-                        </div>
+                            </div>
+                          )
+                        })()}
                       </td>
                     </tr>
                   ))

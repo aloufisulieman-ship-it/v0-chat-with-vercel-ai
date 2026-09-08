@@ -20,6 +20,7 @@ import {
   attachment,
   user,
   aiDetection,
+  aiMonitoringNotification,
   orgContextIssue,
   ohsPolicy,
   ohsObjective,
@@ -51,6 +52,9 @@ import { severityLabels, statusLabels, permitTypePrefix, permitTypeExtraFields }
 import {
   detectionTypeLabels,
   severityLabels as detectionSeverityLabels,
+  escalationTargetByType,
+  detectionCategoryByType,
+  type DetectionType,
 } from "@/lib/ai-monitoring"
 import { effectiveViolationStatus } from "@/lib/violation-status"
 import {
@@ -1759,6 +1763,246 @@ export async function acceptDetectionAsViolation(
   return { documentNo }
 }
 
+// ============ التصعيد التلقائي لكشوفات الحوادث/البيئية (ISO 45001) ============
+// يحوّل كشفاً من المراقبة الذكية إلى السجل الرسمي المناسب حسب نوعه:
+//   incident      → سجل حادث آلي (INC-YYYY-###) بحالة "جديدة" ومصدر "رصد ذكي".
+//   near_miss     → سجل حادث وشيك (incident.type = near_miss).
+//   corrective_action → إجراء تصحيحي بيئي (CAPA) بمهلة 24 ساعة.
+//   violation/none → لا شيء (الأنواع السلوكية تبقى على مسار المخالفات اليدوي).
+// متعادِلة (idempotent): إن سبق تصعيد الكشف تُعاد نتيجته دون تكرار. السجل الناتج
+// يبقى مربوطاً بالكشف الأصلي (escalatedRecordId) ويظل بحاجة اعتماد المدقق قبل الإغلاق.
+export type EscalationResult = {
+  target: "none" | "incident" | "near_miss" | "corrective_action"
+  documentNo: string
+  recordId: number
+}
+
+export async function escalateDetection(
+  detectionId: number,
+  options?: { override?: "incident" | "near_miss" | "corrective_action"; reviewerNotes?: string },
+): Promise<EscalationResult> {
+  await assertWritable()
+  const { userId, organizationId } = await requireModuleScope("ai_monitoring")
+
+  const [det] = await db
+    .select()
+    .from(aiDetection)
+    .where(and(eq(aiDetection.id, detectionId), eq(aiDetection.organizationId, organizationId)))
+    .limit(1)
+  if (!det) throw new Error("الاكتشاف غير موجود")
+
+  // سبق تصعيده — أعد النتيجة القائمة دون إنشاء تكرار.
+  if (det.escalatedRecordId && det.escalationTarget && det.escalationTarget !== "none" && det.escalationTarget !== "violation") {
+    return {
+      target: det.escalationTarget as EscalationResult["target"],
+      documentNo: det.escalatedDocumentNo || "",
+      recordId: Number(det.escalatedRecordId) || 0,
+    }
+  }
+
+  // الهدف: تجاوز المدقق اليدوي إن مُرِّر، وإلا الاشتقاق التلقائي من نوع الكشف.
+  const target = options?.override ?? (escalationTargetByType[det.detectionType as DetectionType] ?? "none")
+  // الأنواع السلوكية (violation) والأنواع غير المعروفة لا تُصعَّد هنا.
+  if (target === "violation" || target === "none") {
+    return { target: "none", documentNo: "", recordId: 0 }
+  }
+
+  const actorRows = await db.select({ name: user.name }).from(user).where(eq(user.id, userId)).limit(1)
+  const actor = actorRows[0]?.name || "مستخدم"
+  const typeLabel = detectionTypeLabels[det.detectionType] ?? det.detectionType
+  const sevLabel = detectionSeverityLabels[det.severity] ?? det.severity
+  const now = new Date()
+  const detectedAt = det.detectedAt ?? now
+  const isCritical = det.severity === "critical"
+  const reviewerSuffix = options?.reviewerNotes?.trim() ? ` — ملاحظة المدقق: ${options.reviewerNotes.trim()}` : ""
+  const baseDesc =
+    (det.notes && det.notes.trim().length > 0 ? det.notes.trim() : typeLabel) +
+    ` — رصد آلي بالمراقبة الذكية (الخطورة: ${sevLabel}، نسبة الثقة ${det.confidenceScore}%).` +
+    reviewerSuffix
+
+  // إرفاق لقطة الإثبات إلى السجل الناتج (أفضل جهد لا يُفشل العملية).
+  async function attachSnapshot(module: string, recordId: number) {
+    try {
+      const snap = det.snapshotUrl?.trim() || ""
+      if (snap.startsWith("data:image")) {
+        await saveDataUrlAttachment(userId, organizationId, module, recordId, "photo", snap, "ai-detection-evidence")
+      } else if (snap.startsWith("http")) {
+        const res = await fetch(snap)
+        if (res.ok) {
+          const buf = Buffer.from(await res.arrayBuffer())
+          const contentType = res.headers.get("content-type") || "image/jpeg"
+          const dataUrl = `data:${contentType};base64,${buf.toString("base64")}`
+          await saveDataUrlAttachment(userId, organizationId, module, recordId, "photo", dataUrl, "ai-detection-evidence")
+        }
+      }
+    } catch {
+      /* تجاهل فشل إرفاق اللقطة */
+    }
+  }
+
+  // إشعار «إيقاف العمل» للمدراء عند الخطورة الحرجة.
+  async function raiseWorkStoppage(recordId: number, documentNo: string) {
+    if (!isCritical) return
+    try {
+      const recipients = await db
+        .select({ id: user.id })
+        .from(user)
+        .where(
+          and(
+            eq(user.organizationId, organizationId),
+            eq(user.status, "approved"),
+            inArray(user.role, ["admin", "manager"]),
+          ),
+        )
+      if (!recipients.length) return
+      await db
+        .insert(aiMonitoringNotification)
+        .values(
+          recipients.map((r) => ({
+            userId: r.id,
+            organizationId,
+            detectionId: det.id,
+            title: "أمر إيقاف العمل — خطر حرج",
+            message: `${typeLabel} (${det.cameraLocation || det.inspectorName}) — ${documentNo}. أوقفوا العمل في الموقع فوراً.`,
+          })),
+        )
+        .onConflictDoNothing()
+    } catch {
+      /* الإشعار أفضل جهد */
+    }
+  }
+
+  if (target === "incident" || target === "near_miss") {
+    const isNearMiss = target === "near_miss"
+    const year = now.getFullYear()
+    const existing = await db
+      .select({ documentNo: incident.documentNo })
+      .from(incident)
+      .where(eq(incident.organizationId, organizationId))
+    const maxSeq = (existing ?? [])
+      .map((i) => i.documentNo ?? "")
+      .filter((n) => n.startsWith(`INC-${year}-`))
+      .reduce((max, n) => {
+        const seq = parseInt(n.split("-")[2] ?? "0", 10)
+        return seq > max ? seq : max
+      }, 0)
+    const documentNo = `INC-${year}-${String(maxSeq + 1).padStart(3, "0")}`
+
+    const [inserted] = await db
+      .insert(incident)
+      .values({
+        userId,
+        organizationId,
+        documentNo,
+        title: isNearMiss ? `حادث وشيك: ${typeLabel}` : typeLabel,
+        type: isNearMiss ? "near_miss" : det.detectionType,
+        severity: det.severity,
+        status: "open",
+        classification: "internal",
+        location: det.cameraLocation || "",
+        incidentDate: detectedAt.toISOString().slice(0, 10),
+        incidentTime: detectedAt.toTimeString().slice(0, 5),
+        description: baseDesc,
+        reportedBy: `رصد ذكي — ${det.inspectorName || actor}`,
+        immediateActions: isCritical ? "تم إصدار أمر إيقاف العمل تلقائياً بانتظار تدخّل مدير السلامة." : "",
+        // دورة الحياة: سجل جديد بمصدر رصد آلي — يبقى بانتظار اعتماد المدقق (غير محال).
+        source: "ai_detection",
+        lifecycleStatus: "new",
+      })
+      .returning({ id: incident.id })
+    const recordId = inserted.id
+
+    await attachSnapshot("incidents", recordId)
+    await logRecordEvent({
+      organizationId,
+      module: "incidents",
+      recordId,
+      event: "converted_from_ai",
+      fromStatus: "",
+      toStatus: "new",
+      userId,
+      userName: actor,
+      meta: { detectionId: det.id, target, confidence: det.confidenceScore, severity: det.severity, cameraId: det.cameraId },
+    })
+
+    await db
+      .update(aiDetection)
+      .set({
+        status: "escalated",
+        escalationTarget: target,
+        escalatedRecordId: String(recordId),
+        escalatedDocumentNo: documentNo,
+        convertedToIncidentId: recordId,
+        // زمن الاستجابة يُقاس فقط عند مراجعة بشرية (تجاوز المدقق)، لا عند التصعيد الآلي الفوري.
+        respondedAt: options?.override ? new Date() : undefined,
+      })
+      .where(and(eq(aiDetection.id, det.id), eq(aiDetection.organizationId, organizationId)))
+
+    await raiseWorkStoppage(recordId, documentNo)
+
+    revalidatePath("/ai-monitoring")
+    revalidatePath("/incidents")
+    revalidatePath("/")
+    return { target, documentNo, recordId }
+  }
+
+  // corrective_action (انسكاب/مخرج مسدود) — إجراء تصحيحي بيئي بمهلة 24 ساعة.
+  const code = await generateCapaCode(organizationId)
+  const assignedTo = await defaultSafetyManager(organizationId)
+  const due = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+  const [insertedCapa] = await db
+    .insert(correctiveAction)
+    .values({
+      userId,
+      organizationId,
+      code,
+      title: `${typeLabel}${det.cameraLocation ? ` — ${det.cameraLocation}` : ""}`,
+      source: "رصد ذكي (المراقبة الذكية)",
+      sourceType: "manual",
+      sourceId: det.id,
+      assignedTo,
+      priority: "medium",
+      status: "open",
+      dueDate: due.toISOString().slice(0, 10),
+      implementedControls: baseDesc,
+    })
+    .returning({ id: correctiveAction.id })
+  const capaId = insertedCapa.id
+
+  await db
+    .update(aiDetection)
+    .set({
+      status: "escalated",
+      escalationTarget: "corrective_action",
+      escalatedRecordId: String(capaId),
+      escalatedDocumentNo: code,
+      respondedAt: options?.override ? new Date() : undefined,
+    })
+    .where(and(eq(aiDetection.id, det.id), eq(aiDetection.organizationId, organizationId)))
+
+  revalidatePath("/ai-monitoring")
+  revalidatePath("/actions")
+  revalidatePath("/")
+  return { target: "corrective_action", documentNo: code, recordId: capaId }
+}
+
+// بلاغ خاطئ من المدقق: يستبعد الكشف من الإحصائيات ويحفظ السبب للتحسين.
+export async function markDetectionFalsePositive(detectionId: number, reason: string) {
+  await assertWritable()
+  const { userId, organizationId, isManager } = await requireModuleScope("ai_monitoring")
+  const rows = await db.select({ name: user.name }).from(user).where(eq(user.id, userId)).limit(1)
+  const actor = rows[0]?.name || "مستخدم"
+  const where = isManager
+    ? and(eq(aiDetection.organizationId, organizationId), eq(aiDetection.id, detectionId))
+    : and(eq(aiDetection.organizationId, organizationId), eq(aiDetection.id, detectionId), eq(aiDetection.userId, userId))
+  await db
+    .update(aiDetection)
+    .set({ status: "false_positive", reviewReason: (reason || "").slice(0, 500), resolvedBy: actor, respondedAt: new Date() })
+    .where(where)
+  revalidatePath("/ai-monitoring")
+  revalidatePath("/reports")
+}
+
 // تعديل يدوي كامل للمخالفة — مقتصر على مدير النظام (admin) فقط.
 // يسمح بتصحيح أي حقل ورفع نماذج ورقية ممسوحة إضافية للمخالفات اليدوية.
 export async function updateViolation(formData: FormData) {
@@ -1867,7 +2111,7 @@ export async function getObservations() {
 }
 
 // يحفظ ملاحظة (observation) أو ملاحظة إيجابية (positive) من الجولة، ويولّد رقم
-// وثيقة رسمي: OBS-YYYY-XXX للملاحظات�� POS-YYYY-XXX للإيجابيات.
+// وثيقة رسمي: OBS-YYYY-XXX ل��ملاحظات�� POS-YYYY-XXX للإيجابيات.
 export async function createObservationFull(formData: FormData) {
   await assertWritable()
   const { userId, organizationId } = await requireModuleScope("violations")
@@ -2143,7 +2387,7 @@ export async function getDashboardData() {
 }
 
 /* ---------------- Reports ---------------- */
-export type ReportType = "incidents" | "violations" | "inspections" | "observations" | "positives" | "all"
+export type ReportType = "incidents" | "violations" | "inspections" | "observations" | "positives" | "smart_monitoring" | "all"
 
 export type ReportRow = Record<string, string | number | null>
 
@@ -2332,6 +2576,110 @@ export async function getReportData(
         observationDate: r.observationDate ?? "-",
         observedBy: r.observedBy || "-",
       })),
+    })
+  }
+
+  if (type === "smart_monitoring" || type === "all") {
+    const rows = await db
+      .select()
+      .from(aiDetection)
+      .where(scopeWhere({ organizationId: aiDetection.organizationId, userId: aiDetection.userId }, scope))
+      .orderBy(desc(aiDetection.detectedAt))
+    const iso = (d: unknown) => (d as unknown as Date)?.toISOString?.() ?? String(d ?? "")
+    const filtered = rows.filter((r) => inRange(iso(r.detectedAt), from, to))
+    const total = filtered.length
+    // الإحصاء يستبعد البلاغات الخاطئة؛ نحسب نسبتها على حدة.
+    const falsePositives = filtered.filter((r) => r.status === "false_positive").length
+    const counted = filtered.filter((r) => r.status !== "false_positive")
+    const catLabelAr: Record<string, string> = { behavioral: "سلوكية", incident: "حوادث", environmental: "بيئية" }
+    const pct = (n: number) => (total > 0 ? `${Math.round((n / total) * 100)}%` : "0%")
+
+    // التوزيع حسب النوع.
+    const byType = new Map<string, number>()
+    for (const r of counted) byType.set(r.detectionType, (byType.get(r.detectionType) ?? 0) + 1)
+    sections.push({
+      key: "smart_monitoring",
+      title: "الرصد الذكي: حسب النوع (MHS-IMS-RPT-HSE-011)",
+      columns: [
+        { key: "type", label: "نوع الكشف" },
+        { key: "category", label: "الفئة" },
+        { key: "count", label: "العدد" },
+        { key: "share", label: "النسبة" },
+      ],
+      rows: [...byType.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([ty, n]) => ({
+          type: detectionTypeLabels[ty] ?? ty,
+          category: catLabelAr[detectionCategoryByType[ty as DetectionType] ?? "behavioral"] ?? "-",
+          count: n,
+          share: pct(n),
+        })),
+    })
+
+    // التوزيع حسب الخطورة.
+    const bySev = new Map<string, number>()
+    for (const r of counted) bySev.set(r.severity, (bySev.get(r.severity) ?? 0) + 1)
+    const sevOrder = ["critical", "high", "medium", "low"]
+    sections.push({
+      key: "smart_monitoring",
+      title: "الرصد الذكي: حسب الخطورة",
+      columns: [
+        { key: "severity", label: "درجة الخطورة" },
+        { key: "count", label: "العدد" },
+        { key: "share", label: "النسبة" },
+      ],
+      rows: sevOrder
+        .filter((s) => bySev.has(s))
+        .map((s) => ({ severity: detectionSeverityLabels[s] ?? s, count: bySev.get(s) ?? 0, share: pct(bySev.get(s) ?? 0) })),
+    })
+
+    // التوزيع حسب الموقع.
+    const byLoc = new Map<string, number>()
+    for (const r of counted) {
+      const loc = (r.cameraLocation || "").trim() || "موقع غير محدد"
+      byLoc.set(loc, (byLoc.get(loc) ?? 0) + 1)
+    }
+    sections.push({
+      key: "smart_monitoring",
+      title: "الرصد الذكي: حسب الموقع",
+      columns: [
+        { key: "location", label: "الموقع" },
+        { key: "count", label: "العدد" },
+        { key: "share", label: "النسبة" },
+      ],
+      rows: [...byLoc.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([loc, n]) => ({ location: loc, count: n, share: pct(n) })),
+    })
+
+    // مؤشرات الأداء: الإجمالي، نسبة البلاغات الخاطئة، المُصعَّد، ومتوسط زمن الاستجابة.
+    const escalatedCount = counted.filter((r) => r.escalationTarget && r.escalationTarget !== "none" && r.escalatedRecordId).length
+    const responded = counted.filter((r) => r.respondedAt)
+    let avgLabel = "—"
+    if (responded.length > 0) {
+      const totalMin = responded.reduce((sum, r) => {
+        const start = new Date(iso(r.detectedAt)).getTime()
+        const end = new Date(iso(r.respondedAt)).getTime()
+        return sum + Math.max(0, (end - start) / 60000)
+      }, 0)
+      const avgMin = Math.round(totalMin / responded.length)
+      avgLabel = avgMin >= 60 ? `${Math.round(avgMin / 6) / 10} ساعة` : `${avgMin} دقيقة`
+    }
+    sections.push({
+      key: "smart_monitoring",
+      title: "الرصد الذكي: مؤشرات الأداء",
+      columns: [
+        { key: "metric", label: "المؤشر" },
+        { key: "value", label: "القيمة" },
+      ],
+      rows: [
+        { metric: "إجمالي الكشوفات (شامل البلاغات الخاطئة)", value: total },
+        { metric: "الكشوفات المعتمدة (بعد استبعاد الخاطئة)", value: counted.length },
+        { metric: "عدد البلاغات الخاطئة", value: falsePositives },
+        { metric: "نسبة البلاغات الخاطئة", value: pct(falsePositives) },
+        { metric: "الكشوفات المُصعَّدة تلقائياً", value: escalatedCount },
+        { metric: "متوسط زمن الاستجابة (من الكشف إلى الاعتماد)", value: avgLabel },
+      ],
     })
   }
 

@@ -5,8 +5,16 @@ import { aiDetection, activeCameraStream, aiMonitoringNotification, user, equipm
 import { and, desc, eq, gte, isNull, inArray, or } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { requireUser, requireModuleScope, assertWritable } from "@/lib/session"
-import type { DetectionStatus, FrameViolation } from "@/lib/ai-monitoring"
-import { mergeFrameViolations } from "@/lib/ai-monitoring"
+import type { DetectionStatus, FrameViolation, DetectionType } from "@/lib/ai-monitoring"
+import {
+  mergeFrameViolations,
+  detectionCategoryByType,
+  severityByType,
+  escalationTargetByType,
+} from "@/lib/ai-monitoring"
+
+// عتبة الثقة لاعتماد الكشف تلقائياً (نسبة مئوية). أقل من ذلك يُحفظ «يحتاج مراجعة».
+export const CONFIDENCE_THRESHOLD = 70
 import { normalizePlate, normalizeCode } from "@/lib/ai-recognition"
 import { sessionCameraId } from "@/lib/camera-session"
 
@@ -305,6 +313,7 @@ export async function saveFrameDetection(input: {
       { type: existing.detectionType, severity: existing.severity },
       { type: merged.primaryType, severity: merged.primarySeverity },
     )
+    const primaryTypeUpd = primary.type as DetectionType
     const [updated] = await db
       .update(aiDetection)
       .set({
@@ -313,10 +322,16 @@ export async function saveFrameDetection(input: {
         detectionType: primary.type,
         detectionTypes: JSON.stringify(mergedTypes),
         severity: primary.severity,
+        severityAuto: severityByType[primaryTypeUpd] ?? existing.severityAuto,
+        detectionCategory: detectionCategoryByType[primaryTypeUpd] ?? existing.detectionCategory,
+        escalationTarget:
+          existing.escalationTarget && existing.escalationTarget !== "none"
+            ? existing.escalationTarget
+            : (escalationTargetByType[primaryTypeUpd] ?? "none"),
         confidenceScore: Math.max(existing.confidenceScore, merged.primaryConfidence),
         // نجمع كل المخ��لفات في نص ملاحظات واحد يذكرها جميعاً مرة واحدة.
         notes: mergeNotes(existing.notes || "", merged.notes),
-        // نحدّث اللقطة لأحدث دليل بصري إن توفّرت لقطة جديدة.
+        // نحدّث اللقطة لأحدث د��يل بصري إن توفّرت لقطة جديدة.
         snapshotUrl: input.snapshotUrl || existing.snapshotUrl,
       })
       .where(eq(aiDetection.id, existing.id))
@@ -326,6 +341,13 @@ export async function saveFrameDetection(input: {
   }
 
   const detectionId = await nextDetectionId(organizationId)
+  // تصنيف الكشف والخطورة التلقائية وهدف التصعيد مشتقّة من النوع الأساسي.
+  const primaryType = merged.primaryType as DetectionType
+  const detectionCategory = detectionCategoryByType[primaryType] ?? "behavioral"
+  const severityAuto = severityByType[primaryType] ?? merged.primarySeverity
+  const escalationTarget = escalationTargetByType[primaryType] ?? "none"
+  // عتبة الثقة: أقل من 70% يُحفظ «يحتاج مراجعة» ولا يُصعَّد آلياً حتى يعتمده المدقق.
+  const needsReview = merged.primaryConfidence < CONFIDENCE_THRESHOLD
   const [row] = await db
     .insert(aiDetection)
     .values({
@@ -338,10 +360,15 @@ export async function saveFrameDetection(input: {
       detectionType: merged.primaryType,
       detectionTypes: JSON.stringify(merged.types),
       severity: merged.primarySeverity,
+      severityAuto,
+      detectionCategory,
+      escalationTarget,
+      confidence: String(merged.primaryConfidence / 100),
       confidenceScore: merged.primaryConfidence,
       snapshotUrl: input.snapshotUrl || "",
       notes: merged.notes,
-      status: "new",
+      status: needsReview ? "needs_review" : "new",
+      reviewReason: needsReview ? "ثقة منخفضة (أقل من 70%) — بانتظار مراجعة المدقق" : "",
       detectionCount: 1,
       lastDetectedAt: now,
       subjectKey,
@@ -448,7 +475,7 @@ export async function updateDetectionStatus(id: number, status: string, notes?: 
     ? and(eq(aiDetection.organizationId, organizationId), eq(aiDetection.id, id))
     : and(eq(aiDetection.organizationId, organizationId), eq(aiDetection.id, id), eq(aiDetection.userId, userId))
 
-  const patch: Partial<typeof aiDetection.$inferInsert> = { status }
+  const patch: Partial<typeof aiDetection.$inferInsert> = { status, respondedAt: new Date() }
   if (typeof notes === "string") patch.notes = notes.slice(0, 1000)
   if (status === "acknowledged") patch.acknowledgedBy = actor
   if (status === "resolved") patch.resolvedBy = actor

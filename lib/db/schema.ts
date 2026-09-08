@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, serial, integer, date, jsonb, uniqueIndex, index } from "drizzle-orm/pg-core"
+import { pgTable, text, timestamp, boolean, serial, integer, numeric, date, jsonb, uniqueIndex, index } from "drizzle-orm/pg-core"
 
 // ---------- المؤسسة (المستأجر) — الحدّ الأعلى للعزل في نظام SaaS متعدد المؤسسات ----------
 // كل مستخدم وكل سجل تشغيلي ينتمي إلى مؤسسة واحدة عبر organizationId. العزل بين
@@ -278,7 +278,7 @@ export const permit = pgTable("permit", {
   riskLevel: text("riskLevel").default("medium"),
   // إجابات قائمة الفحص الديناميكية حسب النوع { [itemId]: boolean }.
   checklistAnswers: jsonb("checklistAnswers").default({}),
-  // قياسات الغاز (للأماكن المحصورة/الحرارة): { o2, lel, h2s, co, ... }.
+  // قيا��ات الغاز (للأماكن المحصورة/الحرارة): { o2, lel, h2s, co, ... }.
   gasTestReadings: jsonb("gasTestReadings").default({}),
   // عزل الطاقة LOTO (للكهرباء/الميكانيكا): { points: [...], locksApplied, tagsApplied }.
   isolationLOTO: jsonb("isolationLOTO").default({}),
@@ -608,10 +608,12 @@ export const attachment = pgTable("attachment", {
 })
 
 // ---------- المراقبة الذكية بالذكاء الاصطناعي (كاميرات ساحات الرافعات) ----------
-// detectionType: أحد الأنواع الستة (no_ppe / traffic_congestion / unsafe_stacking /
-//   overspeed / restricted_area / pedestrian_near_forklift).
+// detectionType: أنواع سلوكية (no_ppe / traffic_congestion / unsafe_stacking /
+//   overspeed / restricted_area / pedestrian_near_forklift) + أنواع حوادث/بيئية
+//   (collision / pedestrian_struck / load_drop / spill_leak / person_fall /
+//   near_miss / fire_smoke / blocked_exit).
 // severity: low / medium / high / critical.
-// status: new / acknowledged / resolved / false_positive / converted.
+// status: new / acknowledged / resolved / false_positive / converted / needs_review.
 export const aiDetection = pgTable("ai_detections", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
@@ -647,6 +649,26 @@ export const aiDetection = pgTable("ai_detections", {
   // الكشف المحوَّل يُحسب مرة واحدة في سجلّه الرسمي ولا يُعدّ بنداً مفتوحاً في رسم الكشوفات.
   convertedToIncidentId: integer("converted_to_incident_id"),
   convertedToViolationId: integer("converted_to_violation_id"),
+  // ---- توسعة كشف الحوادث (المرحلة 2) ----
+  // فئة الكشف: behavioral (سلوكية: PPE/سرعة/منطقة محظورة → مسار المخالفات) |
+  //   incident (حوادث: اصطدام/سقوط/دخان → مسار الحوادث) | environmental (بيئية:
+  //   انسكاب/مخرج مسدود → إجراء تصحيحي).
+  detectionCategory: text("detection_category").notNull().default("behavioral"),
+  // الخطورة المحسوبة تلقائياً من نوع الكشف (تُميَّز عن severity القابلة للتعديل يدوياً).
+  severityAuto: text("severity_auto").notNull().default(""),
+  // هدف التصعيد التلقائي: none | incident | near_miss | violation | corrective_action.
+  escalationTarget: text("escalation_target").notNull().default("none"),
+  // معرّف السجل الناتج عن التصعيد (نصّي: id الحادث/الإجراء) ورقمه الرسمي للعرض.
+  escalatedRecordId: text("escalated_record_id"),
+  escalatedDocumentNo: text("escalated_document_no").notNull().default(""),
+  // نسبة الثقة الأصلية من النموذج (0.0-1.0) — مكمّلة لـ confidenceScore (0-100).
+  confidence: numeric("confidence"),
+  // روابط الأدلة (لقطة مخزّنة في snapshotUrl؛ clipUrl لمقطع فيديو مستقبلاً).
+  clipUrl: text("clip_url"),
+  // سبب وضع الكشف قيد المراجعة (ثقة منخفضة) أو سبب البلاغ الخاطئ (للتحسين).
+  reviewReason: text("review_reason").notNull().default(""),
+  // وقت أول استجابة بشرية (اطّلاع/معالجة/تصعيد/بلاغ خاطئ) — لقياس زمن الاستجابة.
+  respondedAt: timestamp("responded_at"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 

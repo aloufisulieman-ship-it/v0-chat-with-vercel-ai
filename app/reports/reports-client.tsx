@@ -39,6 +39,7 @@ const reportTypeKeys: { value: ReportType; labelKey: string }[] = [
   { value: "inspections", labelKey: "reportsClient.typeInspections" },
   { value: "observations", labelKey: "reportsClient.typeObservations" },
   { value: "positives", labelKey: "reportsClient.typePositives" },
+  { value: "smart_monitoring", labelKey: "reportsClient.typeSmartMonitoring" },
   { value: "all", labelKey: "reportsClient.typeAll" },
 ]
 
@@ -275,8 +276,8 @@ export function ReportsClient() {
 
       {sections && !loading && (
         <div ref={previewRef} className="flex flex-col gap-8">
-          {sections.map((s) => (
-            <section key={s.key}>
+          {sections.map((s, i) => (
+            <section key={`${s.key}-${i}`}>
               <h2 className="mb-3 text-lg font-semibold text-foreground">
                 {s.title} <span className="text-sm font-normal text-muted-foreground">({s.rows.length})</span>
               </h2>
