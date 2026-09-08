@@ -181,6 +181,8 @@ export const incident = pgTable("incident", {
   userId: text("userId").notNull(),
   organizationId: text("organizationId").notNull(),
   documentNo: text("documentNo").default(""),
+  // ربط اختياري بمعدة من سجل الأسطول (المرحلة 1).
+  equipmentId: integer("equipment_id"),
   title: text("title").notNull(),
   location: text("location").default(""),
   type: text("type").default("near_miss"),
@@ -234,6 +236,8 @@ export const inspection = pgTable("inspection", {
   userId: text("userId").notNull(),
   organizationId: text("organizationId").notNull(),
   title: text("title").notNull(),
+  // ربط اختياري بمعدة من سجل الأسطول (المرحلة 1).
+  equipmentId: integer("equipment_id"),
   area: text("area").default(""),
   inspector: text("inspector").default(""),
   status: text("status").default("scheduled"),
@@ -481,6 +485,8 @@ export const violation = pgTable("violation", {
   documentNo: text("documentNo").default("MHS-IMS-PR-HSE-647"),
   companyName: text("companyName").default(""),
   employeeRefId: integer("employee_ref_id"),
+  // ربط اختياري بمعدة من سجل الأسطول (المرحلة 1). null للمخالفات غير المرتبطة بمعدة.
+  equipmentId: integer("equipment_id"),
   employeeName: text("employeeName").notNull(),
   employeeNo: text("employeeNo").default(""),
   nationality: text("nationality").default(""),
@@ -967,6 +973,24 @@ export const equipment = pgTable(
     driverName: text("driver_name").notNull().default(""),
     // رقم داخلي/ك��د أصل اختياري (غير مستخدم في المطابقة، للعرض فقط).
     internalCode: text("internal_code").notNull().default(""),
+    // ====== حقول سجل الأسطول الموسّعة (المرحلة 1) ======
+    // رقم الأسطول: المُعرّف التشغيلي الرئيسي للمعدة داخل الأسطول (مثل FL-001).
+    fleetNo: text("fleet_no").notNull().default(""),
+    // المصنّع (Toyota, Komatsu, Hyster...) والموديل والرقم التسلسلي وسنة الصنع.
+    manufacturer: text("manufacturer").notNull().default(""),
+    model: text("model").notNull().default(""),
+    serialNumber: text("serial_number").notNull().default(""),
+    yearMade: integer("year_made"),
+    // السعة/الحمولة القصوى (نص حر لاحتواء الوحدات: 2.5 طن، 3000 كجم...).
+    capacity: text("capacity").notNull().default(""),
+    // حالة التشغيل: operational | maintenance | out_of_service | idle.
+    operationalStatus: text("operational_status").notNull().default("operational"),
+    // الموقع الحالي للمعدة داخل المنشأة.
+    location: text("location").notNull().default(""),
+    // تواريخ الاقتناء والفحص الدوري (السابق والقادم) لحساب الاستحقاق والتنبيهات.
+    purchaseDate: date("purchase_date"),
+    lastInspectionDate: date("last_inspection_date"),
+    nextInspectionDate: date("next_inspection_date"),
     active: boolean("active").notNull().default(true),
     notes: text("notes").notNull().default(""),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
@@ -974,6 +998,7 @@ export const equipment = pgTable(
   },
   (t) => ({
     plateIdx: index("equipment_plate_idx").on(t.organizationId, t.plateNumber),
+    fleetIdx: index("equipment_fleet_idx").on(t.organizationId, t.fleetNo),
   }),
 )
 

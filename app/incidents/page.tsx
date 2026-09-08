@@ -8,6 +8,7 @@ import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { requireModule } from "@/lib/session"
 import { getIncidents, deleteIncident, getCompany, getIncidentSignatureInfo } from "@/app/actions/hse"
+import { getEquipmentOptions } from "@/app/actions/equipment"
 import { AUDITOR_SIGNATURE_ROLE, FINANCE_OFFICER_SIGNATURE_ROLE, HR_OFFICER_SIGNATURE_ROLE } from "@/lib/signature-roles"
 import { getServerT } from "@/lib/i18n/server"
 import { incidentTypeLabel, severityLabel, statusLabel } from "@/lib/i18n/labels"
@@ -38,11 +39,12 @@ export default async function IncidentsPage({
   searchParams: Promise<{ status?: string; dept?: string; source?: string; type?: string; severity?: string }>
 }) {
   const user = await requireModule("incidents")
-  const [incidents, companyProfile, sp, sigInfo] = await Promise.all([
+  const [incidents, companyProfile, sp, sigInfo, equipmentOptions] = await Promise.all([
     getIncidents(),
     getCompany().catch(() => null),
     searchParams,
     getIncidentSignatureInfo().catch(() => ({}) as Awaited<ReturnType<typeof getIncidentSignatureInfo>>),
+    getEquipmentOptions().catch(() => []),
   ])
   const { t, locale } = await getServerT()
   const isAdmin = user.role === "admin"
@@ -202,7 +204,7 @@ export default async function IncidentsPage({
       title={t("pageHeaders.incidentsTitle")}
       subtitle={t("pageHeaders.incidentsSubtitle")}
       user={user}
-      action={<IncidentFormDialog defaultReporter={user.name ?? ""} />}
+      action={<IncidentFormDialog defaultReporter={user.name ?? ""} equipmentOptions={equipmentOptions} />}
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard label={t("incidents.kpiTotal")} value={incidents.length} icon={AlertOctagon} tone="blue" />

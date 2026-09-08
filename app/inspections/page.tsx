@@ -8,7 +8,8 @@ import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { requireModule } from "@/lib/session"
 import { getInspections, createInspection, deleteInspection } from "@/app/actions/hse"
-import { inspectionStatusOptions } from "@/lib/labels"
+import { getEquipmentOptions } from "@/app/actions/equipment"
+import { inspectionStatusOptions, equipmentTypeLabels } from "@/lib/labels"
 import { getServerT } from "@/lib/i18n/server"
 import { statusLabel } from "@/lib/i18n/labels"
 import { cn } from "@/lib/utils"
@@ -29,8 +30,17 @@ function ScoreBar({ score }: { score: number }) {
 
 export default async function InspectionsPage() {
   const user = await requireModule("inspections")
-  const inspections = await getInspections()
+  const [inspections, equipmentOptions] = await Promise.all([getInspections(), getEquipmentOptions().catch(() => [])])
   const { t } = await getServerT()
+
+  // خيارات ربط المعدة (اختياري): القيمة "0" تعني "بدون معدة" (تُخزَّن null).
+  const equipmentFieldOptions = [
+    { value: "0", label: t("inspectionsMod.fEquipmentNone") },
+    ...equipmentOptions.map((o) => ({
+      value: String(o.id),
+      label: `${o.fleetNo || o.plateNumber || `#${o.id}`} — ${equipmentTypeLabels[o.equipmentType] || o.equipmentType}`,
+    })),
+  ]
 
   const fields: FieldDef[] = [
     { name: "title", label: t("inspectionsMod.fType"), required: true, full: true, placeholder: t("inspectionsMod.fTypePlaceholder") },
@@ -40,6 +50,7 @@ export default async function InspectionsPage() {
     { name: "findings", label: t("inspectionsMod.fFindings"), type: "number", min: 0, defaultValue: 0 },
     { name: "status", label: t("inspectionsMod.fStatus"), type: "select", options: inspectionStatusOptions.map((o) => ({ value: o.value, label: statusLabel(t, o.value) })) },
     { name: "inspectionDate", label: t("inspectionsMod.fDate"), type: "date" },
+    { name: "equipmentId", label: t("inspectionsMod.fEquipment"), type: "select", full: true, defaultValue: "0", options: equipmentFieldOptions },
   ]
 
   const avg = inspections.length ? Math.round(inspections.reduce((a, b) => a + (b.compliance ?? 0), 0) / inspections.length) : 0
