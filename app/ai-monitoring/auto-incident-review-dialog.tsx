@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { mutate } from "swr"
 import Link from "next/link"
-import { AlertOctagon, Loader2, MapPin, ShieldAlert, UserRound, ExternalLink, CircleX, TriangleAlert } from "lucide-react"
+import { AlertOctagon, Loader2, MapPin, ShieldAlert, UserRound, ExternalLink, CircleX, TriangleAlert, ListChecks, CheckCircle2, PencilLine, Tag } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -14,9 +14,17 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
-import { severityStyles } from "@/lib/ai-monitoring"
+import {
+  severityStyles,
+  detectionTypeOptions,
+  detectionClassByType,
+  detectionClassLabels,
+  detectionClassStyles,
+  type DetectionType,
+} from "@/lib/ai-monitoring"
 import { detectionTypeLabel, severityLabel } from "@/lib/i18n/labels"
 import { markDetectionFalsePositive, escalateDetection } from "@/app/actions/hse"
+import { reviewDetectionClassification } from "@/app/actions/ai-monitoring"
 import { toast } from "@/hooks/use-toast"
 import { useI18n } from "@/lib/i18n/client"
 
@@ -25,6 +33,7 @@ type DetectionLike = {
   id: number
   detectionId: string
   detectionType: string
+  detectionClass: string
   severity: string
   confidenceScore: number
   cameraLocation: string
@@ -34,6 +43,7 @@ type DetectionLike = {
   notes: string
   escalationTarget: string
   escalatedDocumentNo: string
+  evidenceCriteria: { evidence?: string[]; reasoning?: string } | null
 }
 
 const DETECTIONS_KEY = "/api/ai-monitoring/detections"
@@ -41,8 +51,9 @@ const DETECTIONS_KEY = "/api/ai-monitoring/detections"
 export function AutoIncidentReviewDialog({ detection: d }: { detection: DetectionLike }) {
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
-  const [pending, setPending] = useState<null | "incident" | "near_miss" | "false">(null)
+  const [pending, setPending] = useState<null | "incident" | "near_miss" | "false" | "confirm" | "correct">(null)
   const [notes, setNotes] = useState("")
+  const [selectedType, setSelectedType] = useState(d.detectionType)
   const [snapshot, setSnapshot] = useState<string | null>(null)
   const [snapFailed, setSnapFailed] = useState(false)
 
@@ -63,10 +74,50 @@ export function AutoIncidentReviewDialog({ detection: d }: { detection: Detectio
   const inspector = d.inspectorName || d.cameraId || "-"
   const location = d.cameraLocation || t("aiMonitoring.cam.notSpecified")
   const busy = pending !== null
+  const evidence = d.evidenceCriteria?.evidence ?? []
+  const reasoning = d.evidenceCriteria?.reasoning ?? ""
+  const currentClass = d.detectionClass || detectionClassByType[d.detectionType as DetectionType] || "compliance"
+  const classText = (v: string) =>
+    t(`aiMonitoring.class.${v}`) === `aiMonitoring.class.${v}` ? (detectionClassLabels[v] ?? v) : t(`aiMonitoring.class.${v}`)
 
   function reset() {
     setPending(null)
     setNotes("")
+    setSelectedType(d.detectionType)
+  }
+
+  // تأكيد التصنيف الحالي (يُحتسب في مؤشر دقة التصنيف كـ«مؤكَّد»).
+  async function confirmClassification() {
+    setPending("confirm")
+    try {
+      await reviewDetectionClassification(d.id)
+      await mutate(DETECTIONS_KEY)
+      toast({ title: t("aiMonitoring.review.confirmedTitle"), description: t("aiMonitoring.review.confirmedDesc") })
+      setOpen(false)
+      reset()
+    } catch (e) {
+      toast({ title: t("aiMonitoring.review.failed"), description: (e as Error).message, variant: "destructive" })
+      setPending(null)
+    }
+  }
+
+  // تصحيح التصنيف إلى النوع الصحيح (يُسجَّل في detection_corrections).
+  async function correctClassification() {
+    if (selectedType === d.detectionType) {
+      toast({ title: t("aiMonitoring.review.pickDifferentType"), variant: "destructive" })
+      return
+    }
+    setPending("correct")
+    try {
+      await reviewDetectionClassification(d.id, selectedType)
+      await mutate(DETECTIONS_KEY)
+      toast({ title: t("aiMonitoring.review.correctedTitle"), description: t("aiMonitoring.review.correctedDesc") })
+      setOpen(false)
+      reset()
+    } catch (e) {
+      toast({ title: t("aiMonitoring.review.failed"), description: (e as Error).message, variant: "destructive" })
+      setPending(null)
+    }
   }
 
   async function escalate(kind: "incident" | "near_miss") {
@@ -175,6 +226,78 @@ export function AutoIncidentReviewDialog({ detection: d }: { detection: Detectio
             <ReviewRow icon={UserRound} label={t("aiMonitoring.cam.reviewInspectorLocation")}>
               <span className="text-foreground">{inspector}</span>
             </ReviewRow>
+          </div>
+
+          {/* دلائل النموذج وتعليله — يتحقق منها المراجع قبل اعتماد التصنيف */}
+          {(evidence.length > 0 || reasoning) && (
+            <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/20 p-3">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <ListChecks className="size-3.5" />
+                {t("aiMonitoring.review.evidenceTitle")}
+              </div>
+              {evidence.length > 0 ? (
+                <ul className="list-inside list-disc space-y-0.5 text-sm text-foreground">
+                  {evidence.map((e, i) => (
+                    <li key={i}>{e}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-amber-700 dark:text-amber-400">{t("aiMonitoring.review.noEvidence")}</p>
+              )}
+              {reasoning ? <p className="text-xs text-muted-foreground">{reasoning}</p> : null}
+            </div>
+          )}
+
+          {/* مراجعة التصنيف: تأكيد أو تصحيح إلى النوع الصحيح */}
+          <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <Tag className="size-3.5" />
+                {t("aiMonitoring.review.classificationTitle")}
+              </div>
+              <span
+                className={cn(
+                  "inline-flex rounded-full border px-2 py-0.5 text-xs font-medium",
+                  detectionClassStyles[currentClass] ?? "",
+                )}
+              >
+                {classText(currentClass)}
+              </span>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <select
+                value={selectedType}
+                onChange={(e) => setSelectedType(e.target.value)}
+                disabled={busy}
+                className="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-50"
+              >
+                {detectionTypeOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {detectionTypeLabel(t, opt.value)} — {classText(detectionClassByType[opt.value as DetectionType])}
+                  </option>
+                ))}
+              </select>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={confirmClassification}
+                  disabled={busy}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/20 disabled:opacity-50"
+                >
+                  {pending === "confirm" ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+                  {t("aiMonitoring.review.confirmClass")}
+                </button>
+                <button
+                  type="button"
+                  onClick={correctClassification}
+                  disabled={busy || selectedType === d.detectionType}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-input px-3 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
+                >
+                  {pending === "correct" ? <Loader2 className="size-4 animate-spin" /> : <PencilLine className="size-4" />}
+                  {t("aiMonitoring.review.correctClass")}
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* ملاحظات المدقق */}

@@ -3,21 +3,25 @@
 // أنواع الاكتشافات: 6 سلوكية (تُحال إلى مسار المخالفات) + 8 حوادث/بيئية
 // (تُصعَّد آلياً إلى حوادث/حوادث وشيكة/إجراءات تصحيحية).
 export const detectionTypeOptions = [
-  // --- سلوكية (behavioral) ---
+  // --- التزام / سلوكية (compliance) ---
   { value: "no_ppe", label: "عدم ارتداء معدات الوقاية" },
+  { value: "no_safety_shoes", label: "عدم ارتداء حذاء السلامة" },
+  { value: "no_reflective_vest", label: "عدم ارتداء السترة العاكسة" },
+  // --- مخاطر (hazard) ---
   { value: "traffic_congestion", label: "ازدحام مروري" },
   { value: "unsafe_stacking", label: "تكديس غير آمن" },
   { value: "overspeed", label: "سرعة زائدة" },
   { value: "restricted_area", label: "دخول منطقة محظورة" },
   { value: "pedestrian_near_forklift", label: "اقتراب مشاة من رافعة" },
-  // --- حوادث (incident) ---
+  { value: "fall_risk_height", label: "خطر سقوط من ارتفاع" },
+  // --- أحداث (event) ---
   { value: "collision", label: "اصطدام" },
   { value: "pedestrian_struck", label: "اصطدام رافعة بشخص" },
   { value: "load_drop", label: "سقوط حمولة" },
   { value: "person_fall", label: "سقوط شخص" },
   { value: "fire_smoke", label: "دخان أو حريق" },
   { value: "near_miss", label: "حادث وشيك" },
-  // --- بيئية (environmental) ---
+  // --- بيئية (environmental hazards) ---
   { value: "spill_leak", label: "انسكاب أو تسرب" },
   { value: "blocked_exit", label: "مخرج طوارئ مسدود" },
 ] as const
@@ -29,11 +33,14 @@ export type DetectionCategory = "behavioral" | "incident" | "environmental"
 
 export const detectionCategoryByType: Record<DetectionType, DetectionCategory> = {
   no_ppe: "behavioral",
+  no_safety_shoes: "behavioral",
+  no_reflective_vest: "behavioral",
   traffic_congestion: "behavioral",
   unsafe_stacking: "behavioral",
   overspeed: "behavioral",
   restricted_area: "behavioral",
   pedestrian_near_forklift: "behavioral",
+  fall_risk_height: "behavioral",
   collision: "incident",
   pedestrian_struck: "incident",
   load_drop: "incident",
@@ -44,6 +51,68 @@ export const detectionCategoryByType: Record<DetectionType, DetectionCategory> =
   blocked_exit: "environmental",
 }
 
+// ===== محور «تصنيف الكشف» (detection_class) — المصدر الرسمي للخطورة والتصعيد =====
+// event (حدث): وقوع فعلي (سقوط شخص/اصطدام/دخان...) — حرج، يُصعَّد إلى حادث عند ثقة عالية.
+// hazard (خطر): ظرف خطر محتمل دون وقوع حدث (وقوف على ارتفاع، تكديس مائل، سرعة...) —
+//   متوسط، مساره مخالفة/حادث وشيك أو إجراء تصحيحي — لا يُنشئ حادثاً أبداً.
+// compliance (التزام): مخالفة اشتراطات وقاية شخصية (PPE) — منخفض.
+export type DetectionClass = "event" | "hazard" | "compliance"
+
+export const detectionClassByType: Record<DetectionType, DetectionClass> = {
+  no_ppe: "compliance",
+  no_safety_shoes: "compliance",
+  no_reflective_vest: "compliance",
+  traffic_congestion: "hazard",
+  unsafe_stacking: "hazard",
+  overspeed: "hazard",
+  restricted_area: "hazard",
+  pedestrian_near_forklift: "hazard",
+  fall_risk_height: "hazard",
+  spill_leak: "hazard",
+  blocked_exit: "hazard",
+  near_miss: "hazard",
+  collision: "event",
+  pedestrian_struck: "event",
+  load_drop: "event",
+  person_fall: "event",
+  fire_smoke: "event",
+}
+
+// عتبات الثقة حسب التصنيف (نسبة مئوية 0-100).
+export const EVENT_AUTO_ESCALATE_THRESHOLD = 85 // حدث ≥ 85% → تصعيد تلقائي إلى حادث
+export const EVENT_REVIEW_MIN = 60 // حدث 60-84% → «يحتاج مراجعة» بلا تصعيد
+export const HAZARD_MIN_CONFIDENCE = 70 // خطر ≥ 70% → قابل للإجراء (مخالفة/وشيك)
+export const DISPLAY_MIN_CONFIDENCE = 60 // أي كشف < 60% → سجل خام فقط، لا يظهر في المؤشرات
+
+// الخطورة الأساسية حسب التصنيف: event=حرجة، hazard=متوسطة، compliance=منخفضة.
+export const severityByClass: Record<DetectionClass, "low" | "medium" | "high" | "critical"> = {
+  event: "critical",
+  hazard: "medium",
+  compliance: "low",
+}
+
+// عدد تكرارات نفس نوع الخطر في نفس الموقع خلال 24 ساعة الذي يرفع خطورته من متوسطة إلى عالية.
+export const HAZARD_ESCALATE_REPEAT = 3
+
+// خيارات فلتر «التصنيف» في اللوحة.
+export const detectionClassOptions = [
+  { value: "event", label: "حدث" },
+  { value: "hazard", label: "خطر" },
+  { value: "compliance", label: "التزام" },
+] as const
+
+export const detectionClassLabels: Record<string, string> = {
+  event: "حدث",
+  hazard: "خطر",
+  compliance: "التزام",
+}
+
+export const detectionClassStyles: Record<string, string> = {
+  event: "bg-destructive/10 text-destructive border-destructive/20",
+  hazard: "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20",
+  compliance: "bg-primary/10 text-primary border-primary/20",
+}
+
 // هدف التصعيد التلقائي لكل نوع (ISO 45001):
 //   violation = مسار المخالفات السلوكية (كما هو) | incident = سجل حادث آلي |
 //   near_miss = سجل الحوادث الوشيكة | corrective_action = إجراء تصحيحي بيئي.
@@ -51,11 +120,14 @@ export type EscalationTarget = "none" | "violation" | "incident" | "near_miss" |
 
 export const escalationTargetByType: Record<DetectionType, EscalationTarget> = {
   no_ppe: "violation",
+  no_safety_shoes: "violation",
+  no_reflective_vest: "violation",
   traffic_congestion: "violation",
   unsafe_stacking: "violation",
   overspeed: "violation",
   restricted_area: "violation",
   pedestrian_near_forklift: "violation",
+  fall_risk_height: "near_miss",
   collision: "incident",
   pedestrian_struck: "incident",
   load_drop: "incident",
@@ -97,7 +169,11 @@ export const detectionTypeLabels: Record<string, string> = Object.fromEntries(
 
 // وصف موجز لكل نوع يُمرَّر للنموذج ليعرف ما يبحث عنه.
 export const detectionTypeDescriptions: Record<DetectionType, string> = {
-  no_ppe: "عامل أو أكثر لا يرتدي خوذة أو سترة عاكسة أو حذاء أمان في ساحة العمل",
+  no_ppe: "عامل أو أكثر لا يرتدي معدات الوقاية الأساسية (خوذة على الأقل) في ساحة العمل",
+  no_safety_shoes: "عامل لا يرتدي حذاء السلامة في منطقة تشغيل الرافعات",
+  no_reflective_vest: "عامل لا يرتدي السترة العاكسة في ساحة حركة المعدات",
+  fall_risk_height:
+    "شخص متزن يقف على سطح مرتفع أو حافة مركبة/شاحنة أو سلّم دون حماية سقوط — خطر وليس حادثاً",
   traffic_congestion: "ازدحام غير آمن للرافعات أو المركبات في ممر أو منطقة واحدة",
   unsafe_stacking: "تكديس بضائع أو منصات بشكل مائل أو مرتفع بشكل خطير أو غير مستقر",
   overspeed: "رافعة شوكية أو مركبة تتحرك بسرعة عالية داخل الساحة",
@@ -114,13 +190,18 @@ export const detectionTypeDescriptions: Record<DetectionType, string> = {
 }
 
 // أيقونة كل نوع (أسماء lucide-react).
+// خطورة احتياطية لكل نوع (تُستخدم فقط كبديل داخل mergeFrameViolations؛ الخطورة
+// الرسمية للسجل تُشتق من التصنيف عبر severityByClass عند الحفظ).
 export const severityByType: Record<DetectionType, "low" | "medium" | "high" | "critical"> = {
-  no_ppe: "medium",
+  no_ppe: "low",
+  no_safety_shoes: "low",
+  no_reflective_vest: "low",
   traffic_congestion: "medium",
-  unsafe_stacking: "high",
-  overspeed: "high",
-  restricted_area: "critical",
-  pedestrian_near_forklift: "critical",
+  unsafe_stacking: "medium",
+  overspeed: "medium",
+  restricted_area: "medium",
+  pedestrian_near_forklift: "medium",
+  fall_risk_height: "medium",
   // حوادث/بيئية — الخطورة التلقائية حسب المواصفة.
   pedestrian_struck: "critical",
   person_fall: "critical",
@@ -185,6 +266,9 @@ export type FrameViolation = {
   severity?: string
   confidence: number
   description?: string
+  // الدلائل المرئية المحددة التي اعتمد عليها النموذج (تُخزَّن في evidence_criteria).
+  evidence?: string[]
+  reasoning?: string
 }
 
 // نتيجة دمج كل مخالفات الإطار الواحد في سجل واحد.
@@ -194,6 +278,9 @@ export type MergedFrameDetection = {
   primaryConfidence: number
   types: string[] // كل الأنواع الفريدة المرصودة في نفس اللقطة
   notes: string // ملاحظات مجمّعة «التسمية: الوصف» مفصولة بنقطة
+  // دلائل وتعليل النوع الأساسي (لتغذية evidence_criteria والتحقق البشري).
+  evidence: string[]
+  reasoning: string
 }
 
 // دالة نقية (قابلة للاختبار) تدمج كل المخالفات المرصودة في إطار/لقطة واحدة إلى
@@ -210,7 +297,9 @@ export function mergeFrameViolations(violations: FrameViolation[]): MergedFrameD
         ? d.severity
         : severityByType[type]
     const confidence = Math.max(0, Math.min(100, Math.round(d.confidence || 0)))
-    return { type, severity, confidence, description: (d.description || "").trim() }
+    const evidence = Array.isArray(d.evidence) ? d.evidence.map((e) => String(e).trim()).filter(Boolean) : []
+    const reasoning = (d.reasoning || "").trim()
+    return { type, severity, confidence, description: (d.description || "").trim(), evidence, reasoning }
   })
 
   // إزالة التكرار حسب النوع داخل نفس الإطار (نُبقي الأعلى ثقة لكل نوع).
@@ -243,5 +332,7 @@ export function mergeFrameViolations(violations: FrameViolation[]): MergedFrameD
     primaryConfidence: primary.confidence,
     types: unique.map((d) => d.type),
     notes,
+    evidence: primary.evidence,
+    reasoning: primary.reasoning,
   }
 }

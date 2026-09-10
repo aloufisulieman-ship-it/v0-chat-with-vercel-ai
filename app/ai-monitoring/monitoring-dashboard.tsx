@@ -24,6 +24,9 @@ import {
   Droplets,
   DoorClosed,
   AlertOctagon,
+  Footprints,
+  Shirt,
+  ArrowDownToLine,
   type LucideIcon,
 } from "lucide-react"
 import { Card } from "@/components/ui/card"
@@ -44,9 +47,14 @@ import {
   detectionStatusStyles,
   severityStyles,
   detectionCategoryByType,
+  detectionClassByType,
+  detectionClassOptions,
+  detectionClassLabels,
+  detectionClassStyles,
   behavioralTypeOptions,
   incidentKpiTypes,
   detectionCategoryOptions,
+  DISPLAY_MIN_CONFIDENCE,
   type DetectionType,
 } from "@/lib/ai-monitoring"
 import { updateDetectionStatus, deleteDetection } from "@/app/actions/ai-monitoring"
@@ -89,11 +97,15 @@ export type DetectionDto = {
   linkedViolationNo: string
   // توسعة كشف الحوادث
   detectionCategory: string
+  // تصنيف الكشف: event | hazard | compliance
+  detectionClass: string
   severityAuto: string
   escalationTarget: string
   escalatedRecordId: string | null
   escalatedDocumentNo: string
   reviewReason: string
+  // الدلائل المرئية وتعليل النموذج (يُعرضان في نافذة المراجعة للتحقق).
+  evidenceCriteria: { evidence?: string[]; reasoning?: string } | null
 }
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
@@ -106,6 +118,9 @@ function typesOf(d: DetectionDto): string[] {
 
 const typeIcons: Record<DetectionType, LucideIcon> = {
   no_ppe: HardHat,
+  no_safety_shoes: Footprints,
+  no_reflective_vest: Shirt,
+  fall_risk_height: ArrowDownToLine,
   traffic_congestion: TrafficCone,
   unsafe_stacking: Boxes,
   overspeed: Gauge,
@@ -123,6 +138,9 @@ const typeIcons: Record<DetectionType, LucideIcon> = {
 
 const typeTone: Record<DetectionType, string> = {
   no_ppe: "bg-accent/15 text-amber-700 dark:text-amber-400",
+  no_safety_shoes: "bg-accent/15 text-amber-700 dark:text-amber-400",
+  no_reflective_vest: "bg-accent/15 text-amber-700 dark:text-amber-400",
+  fall_risk_height: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
   traffic_congestion: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
   unsafe_stacking: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
   overspeed: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
@@ -179,9 +197,13 @@ function Badge({ text, className }: { text: string; className: string }) {
 function SnapshotDialog({
   detectionDbId,
   typeLabel,
+  evidence = [],
+  reasoning = "",
 }: {
   detectionDbId: number
   typeLabel: string
+  evidence?: string[]
+  reasoning?: string
 }) {
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
@@ -244,6 +266,20 @@ function SnapshotDialog({
             onError={() => setFailed(true)}
           />
         )}
+        {/* دلائل النموذج وتعليله أسفل الصورة ليتحقق منها المراجع */}
+        {(evidence.length > 0 || reasoning) && (
+          <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/20 p-3">
+            <span className="text-xs font-medium text-muted-foreground">{t("aiMonitoring.review.evidenceTitle")}</span>
+            {evidence.length > 0 && (
+              <ul className="list-inside list-disc space-y-0.5 text-sm text-foreground">
+                {evidence.map((e, i) => (
+                  <li key={i}>{e}</li>
+                ))}
+              </ul>
+            )}
+            {reasoning ? <p className="text-xs text-muted-foreground">{reasoning}</p> : null}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   )
@@ -282,6 +318,7 @@ export function MonitoringDashboard({
   const all = data?.detections ?? initial
 
   const [fType, setFType] = useState("all")
+  const [fClass, setFClass] = useState("all")
   const [fCategory, setFCategory] = useState("all")
   const [fSeverity, setFSeverity] = useState("all")
   const [fStatus, setFStatus] = useState("all")
@@ -292,6 +329,13 @@ export function MonitoringDashboard({
 
   // كشوفات صالحة للإحصاء = كل الكشوفات ما عدا البلاغات الخاطئة (تُستبعد من العدّ).
   const counted = useMemo(() => all.filter((d) => d.status !== "false_positive"), [all])
+
+  // كشوفات المؤشرات = المعتمدة بثقة ≥ 60% فقط؛ ما دونها سجل خام لا يظهر في بطاقات
+  // المؤشرات ولا في بانر إيقاف العمل (يبقى ظاهراً في جدول البث الخام أدناه).
+  const kpiCounted = useMemo(
+    () => counted.filter((d) => d.confidenceScore >= DISPLAY_MIN_CONFIDENCE),
+    [counted],
+  )
 
   // عدّاد نوع ضمن نافذة زمنية بالساعات (24 ساعة / 7 أيام) — يحتسب كل نوع داخل اللقطة.
   const windowCounts = useMemo(() => {
@@ -304,7 +348,7 @@ export function MonitoringDashboard({
     }
     const last24 = mk()
     const last7 = mk()
-    for (const d of counted) {
+    for (const d of kpiCounted) {
       const age = nowMs - new Date(d.detectedAt).getTime()
       for (const ty of typesOf(d)) {
         if (age <= day) last24[ty] = (last24[ty] ?? 0) + 1
@@ -312,19 +356,19 @@ export function MonitoringDashboard({
       }
     }
     return { last24, last7 }
-  }, [counted])
+  }, [kpiCounted])
 
   // عدّادات اليوم لكل نوع من الأنواع الستة — نحتسب كل نوع مرصود داخل اللقطة الواحدة
   // (البند قد يضمّ أكثر من ��خالفة) حتى تعكس الأرقام الواقع.
   const todayCounts = useMemo(() => {
     const counts: Record<string, number> = {}
     for (const opt of detectionTypeOptions) counts[opt.value] = 0
-    for (const d of counted) {
+    for (const d of kpiCounted) {
       if (!isToday(d.detectedAt)) continue
       for (const ty of typesOf(d)) counts[ty] = (counts[ty] ?? 0) + 1
     }
     return counts
-  }, [counted])
+  }, [kpiCounted])
 
   // مناطق الرصد الحية: تجميع حسب موقع الكاميرا.
   const zones = useMemo(() => {
@@ -365,6 +409,11 @@ export function MonitoringDashboard({
     return all.filter((d) => {
       if (fType !== "all" && !typesOf(d).includes(fType)) return false
       if (
+        fClass !== "all" &&
+        (d.detectionClass || detectionClassByType[d.detectionType as DetectionType] || "compliance") !== fClass
+      )
+        return false
+      if (
         fCategory !== "all" &&
         (detectionCategoryByType[d.detectionType as DetectionType] ?? "behavioral") !== fCategory
       )
@@ -376,7 +425,7 @@ export function MonitoringDashboard({
       if (fDate && d.detectedAt.slice(0, 10) !== fDate) return false
       return true
     })
-  }, [all, fType, fCategory, fSeverity, fStatus, fCamera, fLocation, fDate, t])
+  }, [all, fType, fClass, fCategory, fSeverity, fStatus, fCamera, fLocation, fDate, t])
 
   // ترتيب الخطورة الأسوأ في المنطقة — نستخدم ترجمة severity حسب اللغة.
   const worstZoneRank = ["", severityLabel(t, "low"), severityLabel(t, "medium"), severityLabel(t, "high"), severityLabel(t, "critical")]
@@ -384,13 +433,13 @@ export function MonitoringDashboard({
   // أوامر إيقاف العمل النشطة: كشوفات حرجة من فئة الحوادث لم تُغلق بعد.
   const workStoppages = useMemo(
     () =>
-      counted.filter(
+      kpiCounted.filter(
         (d) =>
           d.severity === "critical" &&
-          (detectionCategoryByType[d.detectionType as DetectionType] ?? "behavioral") === "incident" &&
+          (detectionClassByType[d.detectionType as DetectionType] ?? "compliance") === "event" &&
           d.status !== "resolved",
       ),
-    [counted],
+    [kpiCounted],
   )
 
   async function changeStatus(id: number, status: string) {
@@ -598,6 +647,12 @@ export function MonitoringDashboard({
       {/* الفلاتر */}
       <Card className="flex flex-wrap items-center gap-3 p-4">
         <span className="text-sm font-medium text-muted-foreground">{t("aiMonitoring.filterLabel")}:</span>
+        <select className={selectCls} value={fClass} onChange={(e) => setFClass(e.target.value)}>
+          <option value="all">{t("aiMonitoring.allClasses")}</option>
+          {detectionClassOptions.map((c) => (
+            <option key={c.value} value={c.value}>{t(`aiMonitoring.class.${c.value}`)}</option>
+          ))}
+        </select>
         <select className={selectCls} value={fCategory} onChange={(e) => setFCategory(e.target.value)}>
           <option value="all">{t("aiMonitoring.allCategories")}</option>
           {detectionCategoryOptions.map((c) => (
@@ -642,6 +697,7 @@ export function MonitoringDashboard({
           dir="ltr"
         />
         {(fType !== "all" ||
+          fClass !== "all" ||
           fCategory !== "all" ||
           fSeverity !== "all" ||
           fStatus !== "all" ||
@@ -651,6 +707,7 @@ export function MonitoringDashboard({
           <button
             onClick={() => {
               setFType("all")
+              setFClass("all")
               setFCategory("all")
               setFSeverity("all")
               setFStatus("all")
@@ -685,6 +742,7 @@ export function MonitoringDashboard({
                     t("aiMonitoring.colTime"),
                     t("aiMonitoring.colInspectorLocation"),
                     t("aiMonitoring.colViolation"),
+                    t("aiMonitoring.colClass"),
                     t("aiMonitoring.colDetectionCount"),
                     t("aiMonitoring.colSeverity"),
                     t("aiMonitoring.colConfidence"),
@@ -705,7 +763,7 @@ export function MonitoringDashboard({
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-4 py-12 text-center text-muted-foreground">
+                    <td colSpan={11} className="px-4 py-12 text-center text-muted-foreground">
                       {t("aiMonitoring.noMatching")}
                     </td>
                   </tr>
@@ -753,6 +811,18 @@ export function MonitoringDashboard({
                         )}
                       </td>
                       <td className="px-4 py-3">
+                        {/* تصنيف الكشف: حدث / خطر / التزام */}
+                        {(() => {
+                          const kls = d.detectionClass || detectionClassByType[d.detectionType as DetectionType] || "compliance"
+                          return (
+                            <Badge
+                              text={t(`aiMonitoring.class.${kls}`) === `aiMonitoring.class.${kls}` ? (detectionClassLabels[kls] ?? kls) : t(`aiMonitoring.class.${kls}`)}
+                              className={detectionClassStyles[kls] ?? ""}
+                            />
+                          )
+                        })()}
+                      </td>
+                      <td className="px-4 py-3">
                         {/* عدد مرات الرصد المتكرر لنفس المخالفة المستمرة (بدل صفوف مكررة) */}
                         <span
                           className={
@@ -786,6 +856,8 @@ export function MonitoringDashboard({
                           <SnapshotDialog
                             detectionDbId={d.id}
                             typeLabel={detectionTypeLabel(t, d.detectionType)}
+                            evidence={d.evidenceCriteria?.evidence ?? []}
+                            reasoning={d.evidenceCriteria?.reasoning ?? ""}
                           />
                         ) : (
                           <span className="text-xs text-muted-foreground">-</span>

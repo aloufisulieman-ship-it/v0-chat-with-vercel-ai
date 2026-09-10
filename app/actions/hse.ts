@@ -21,6 +21,7 @@ import {
   user,
   aiDetection,
   aiMonitoringNotification,
+  detectionCorrection,
   orgContextIssue,
   ohsPolicy,
   ohsObjective,
@@ -54,6 +55,8 @@ import {
   severityLabels as detectionSeverityLabels,
   escalationTargetByType,
   detectionCategoryByType,
+  detectionClassByType,
+  detectionClassLabels,
   type DetectionType,
 } from "@/lib/ai-monitoring"
 import { effectiveViolationStatus } from "@/lib/violation-status"
@@ -1806,6 +1809,12 @@ export async function escalateDetection(
   if (target === "violation" || target === "none") {
     return { target: "none", documentNo: "", recordId: 0 }
   }
+  // ISO 45001: لا يُنشأ حادث (incident) إلا من كشف تصنيفه «حدث» (event). يُمنع منعاً
+  // نهائياً إنشاء حادث من كشف مصنّف «خطر» (hazard) أو «التزام» (compliance).
+  const detClass = detectionClassByType[det.detectionType as DetectionType] ?? "compliance"
+  if (target === "incident" && detClass !== "event") {
+    throw new Error("لا يمكن إنشاء حادث من كشف مصنّف كخطر أو التزام")
+  }
 
   const actorRows = await db.select({ name: user.name }).from(user).where(eq(user.id, userId)).limit(1)
   const actor = actorRows[0]?.name || "مستخدم"
@@ -2616,6 +2625,26 @@ export async function getReportData(
         })),
     })
 
+    // التوزيع حسب التصنيف (حدث/خطر/التزام).
+    const byClass = new Map<string, number>()
+    for (const r of counted) {
+      const kls = r.detectionClass || detectionClassByType[r.detectionType as DetectionType] || "compliance"
+      byClass.set(kls, (byClass.get(kls) ?? 0) + 1)
+    }
+    const classOrder = ["event", "hazard", "compliance"]
+    sections.push({
+      key: "smart_monitoring",
+      title: "الرصد الذكي: حسب التصنيف",
+      columns: [
+        { key: "class", label: "التصنيف" },
+        { key: "count", label: "العدد" },
+        { key: "share", label: "النسبة" },
+      ],
+      rows: classOrder
+        .filter((k) => byClass.has(k))
+        .map((k) => ({ class: detectionClassLabels[k] ?? k, count: byClass.get(k) ?? 0, share: pct(byClass.get(k) ?? 0) })),
+    })
+
     // التوزيع حسب الخطورة.
     const bySev = new Map<string, number>()
     for (const r of counted) bySev.set(r.severity, (bySev.get(r.severity) ?? 0) + 1)
@@ -2665,6 +2694,17 @@ export async function getReportData(
       const avgMin = Math.round(totalMin / responded.length)
       avgLabel = avgMin >= 60 ? `${Math.round(avgMin / 6) / 10} ساعة` : `${avgMin} دقيقة`
     }
+    // دقة التصنيف: المؤكَّد ÷ إجمالي المراجَعة، من سجل تصحيحات المدقق.
+    const corrections = await db
+      .select()
+      .from(detectionCorrection)
+      .where(scopeWhere({ organizationId: detectionCorrection.organizationId, userId: detectionCorrection.userId }, scope))
+    const corrFiltered = corrections.filter((c) => inRange(iso(c.correctedAt), from, to))
+    const totalReviewed = corrFiltered.length
+    const correctedRows = corrFiltered.filter((c) => c.oldType !== c.newType)
+    const confirmed = totalReviewed - correctedRows.length
+    const accuracyLabel = totalReviewed > 0 ? `${Math.round((confirmed / totalReviewed) * 100)}%` : "—"
+
     sections.push({
       key: "smart_monitoring",
       title: "الرصد الذكي: مؤشرات الأداء",
@@ -2679,8 +2719,28 @@ export async function getReportData(
         { metric: "نسبة البلاغات الخاطئة", value: pct(falsePositives) },
         { metric: "الكشوفات المُصعَّدة تلقائياً", value: escalatedCount },
         { metric: "متوسط زمن الاستجابة (من الكشف إلى الاعتماد)", value: avgLabel },
+        { metric: "دقة التصنيف (المؤكَّد ÷ إجمالي المراجَعة)", value: accuracyLabel },
+        { metric: "عدد عمليات المراجعة (تأكيد + تصحيح)", value: totalReviewed },
+        { metric: "عدد التصحيحات", value: correctedRows.length },
       ],
     })
+
+    // الأنواع الأكثر تعرّضاً للتصحيح (تصنيف خاطئ صحّحه المدقق).
+    if (correctedRows.length > 0) {
+      const byCorrected = new Map<string, number>()
+      for (const c of correctedRows) byCorrected.set(c.oldType, (byCorrected.get(c.oldType) ?? 0) + 1)
+      sections.push({
+        key: "smart_monitoring",
+        title: "الرصد الذكي: الأنواع الأكثر تعرّضاً للتصحيح",
+        columns: [
+          { key: "type", label: "النوع المُصنَّف خطأً" },
+          { key: "count", label: "عدد التصحيحات" },
+        ],
+        rows: [...byCorrected.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .map(([ty, n]) => ({ type: detectionTypeLabels[ty] ?? ty, count: n })),
+      })
+    }
   }
 
   return sections
