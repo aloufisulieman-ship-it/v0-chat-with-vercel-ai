@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/lib/db"
-import { aiDetection, activeCameraStream, aiMonitoringNotification, user, equipment } from "@/lib/db/schema"
+import { aiDetection, activeCameraStream, aiMonitoringNotification, user, equipment, detectionCorrection } from "@/lib/db/schema"
 import { and, desc, eq, gte, isNull, inArray, or } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { requireUser, requireModuleScope, assertWritable } from "@/lib/session"
@@ -9,9 +9,14 @@ import type { DetectionStatus, FrameViolation, DetectionType } from "@/lib/ai-mo
 import {
   mergeFrameViolations,
   detectionCategoryByType,
-  severityByType,
+  detectionClassByType,
+  severityByClass,
   escalationTargetByType,
-  CONFIDENCE_THRESHOLD,
+  EVENT_AUTO_ESCALATE_THRESHOLD,
+  HAZARD_MIN_CONFIDENCE,
+  DISPLAY_MIN_CONFIDENCE,
+  HAZARD_ESCALATE_REPEAT,
+  detectionTypeLabels,
 } from "@/lib/ai-monitoring"
 import { normalizePlate, normalizeCode } from "@/lib/ai-recognition"
 import { sessionCameraId } from "@/lib/camera-session"
@@ -320,6 +325,7 @@ export async function saveFrameDetection(input: {
       { type: merged.primaryType, severity: merged.primarySeverity },
     )
     const primaryTypeUpd = primary.type as DetectionType
+    const classUpd = detectionClassByType[primaryTypeUpd] ?? "compliance"
     const [updated] = await db
       .update(aiDetection)
       .set({
@@ -328,7 +334,8 @@ export async function saveFrameDetection(input: {
         detectionType: primary.type,
         detectionTypes: JSON.stringify(mergedTypes),
         severity: primary.severity,
-        severityAuto: severityByType[primaryTypeUpd] ?? existing.severityAuto,
+        severityAuto: severityByClass[classUpd] ?? existing.severityAuto,
+        detectionClass: classUpd,
         detectionCategory: detectionCategoryByType[primaryTypeUpd] ?? existing.detectionCategory,
         escalationTarget:
           existing.escalationTarget && existing.escalationTarget !== "none"
@@ -347,13 +354,51 @@ export async function saveFrameDetection(input: {
   }
 
   const detectionId = await nextDetectionId(organizationId)
-  // تصنيف الكشف والخطورة التلقائية وهدف التصعيد مشتقّة من النوع الأساسي.
+  // التصنيف والفئة وهدف التصعيد مشتقّة من النوع الأساسي.
   const primaryType = merged.primaryType as DetectionType
+  const detectionClass = detectionClassByType[primaryType] ?? "compliance"
   const detectionCategory = detectionCategoryByType[primaryType] ?? "behavioral"
-  const severityAuto = severityByType[primaryType] ?? merged.primarySeverity
   const escalationTarget = escalationTargetByType[primaryType] ?? "none"
-  // عتبة الثقة: أقل من 70% يُحفظ «يحتاج مراجعة» ولا يُصعَّد آلياً حتى يعتمده المدقق.
-  const needsReview = merged.primaryConfidence < CONFIDENCE_THRESHOLD
+  const confidence = merged.primaryConfidence
+
+  // الخطورة الرسمية تُشتق من التصنيف (event=حرجة، hazard=متوسطة، compliance=منخفضة).
+  // الخطر يرتفع إلى «عالٍ» إذا تكرّر نفس النوع في نفس الموقع HAZARD_ESCALATE_REPEAT
+  // مرات (بما فيها الحالي) خلال 24 ساعة.
+  let severityAuto: string = severityByClass[detectionClass]
+  if (detectionClass === "hazard") {
+    const dayAgo = new Date(now.getTime() - 24 * 60 * 60_000)
+    const prior = await db
+      .select({ id: aiDetection.id })
+      .from(aiDetection)
+      .where(
+        and(
+          eq(aiDetection.organizationId, organizationId),
+          eq(aiDetection.cameraLocation, cameraLocation),
+          eq(aiDetection.detectionType, primaryType),
+          gte(aiDetection.detectedAt, dayAgo),
+        ),
+      )
+    if (prior.length + 1 >= HAZARD_ESCALATE_REPEAT) severityAuto = "high"
+  }
+
+  // عتبات الاعتماد حسب التصنيف:
+  //  • أي كشف < 60% ثقة: سجل خام «يحتاج مراجعة» ولا يظهر في المؤشرات.
+  //  • حدث < 85%: «يحتاج مراجعة» (ثقة غير كافية لتصنيف حدث) بلا تصعيد.
+  //  • خطر < 70%: «يحتاج مراجعة».
+  //  • غير ذلك: "new" (يُصعَّد الحدث آلياً لاحقاً).
+  let needsReview = false
+  let reviewReason = ""
+  if (confidence < DISPLAY_MIN_CONFIDENCE) {
+    needsReview = true
+    reviewReason = "ثقة منخفضة جداً (أقل من 60%) — سجل خام فقط بانتظار المراجعة"
+  } else if (detectionClass === "event" && confidence < EVENT_AUTO_ESCALATE_THRESHOLD) {
+    needsReview = true
+    reviewReason = "ثقة غير كافية لتصنيف حدث"
+  } else if (detectionClass === "hazard" && confidence < HAZARD_MIN_CONFIDENCE) {
+    needsReview = true
+    reviewReason = "ثقة منخفضة — بانتظار مراجعة المدقق"
+  }
+
   const [row] = await db
     .insert(aiDetection)
     .values({
@@ -365,16 +410,18 @@ export async function saveFrameDetection(input: {
       cameraLocation,
       detectionType: merged.primaryType,
       detectionTypes: JSON.stringify(merged.types),
-      severity: merged.primarySeverity,
+      severity: severityAuto,
       severityAuto,
       detectionCategory,
+      detectionClass,
+      evidenceCriteria: { evidence: merged.evidence, reasoning: merged.reasoning },
       escalationTarget,
-      confidence: String(merged.primaryConfidence / 100),
-      confidenceScore: merged.primaryConfidence,
+      confidence: String(confidence / 100),
+      confidenceScore: confidence,
       snapshotUrl: input.snapshotUrl || "",
       notes: merged.notes,
       status: needsReview ? "needs_review" : "new",
-      reviewReason: needsReview ? "ثقة منخفضة (أقل من 70%) — بانتظار مراجعة المدقق" : "",
+      reviewReason,
       detectionCount: 1,
       lastDetectedAt: now,
       subjectKey,
@@ -385,9 +432,9 @@ export async function saveFrameDetection(input: {
   // إشعار المسؤولين والمفتشين عند الاكتشافات عالية الخطورة/الحرجة (سلوك مدموج من
   // فرع ai-smart-monitoring). لا يوقف فشلُ الإشعار حفظَ الاكتشاف. يُرسَل مرة واحدة
   // عند إنشاء السجل فقط — لا يتكرر مع كل رصد لاحق لنفس المخالفة المستمرة.
-  if (merged.primarySeverity === "high" || merged.primarySeverity === "critical") {
+  if (severityAuto === "high" || severityAuto === "critical") {
     try {
-      await createDetectionNotifications(row, merged.primarySeverity)
+      await createDetectionNotifications(row, severityAuto)
     } catch {
       /* تجاهل أخطاء الإشعار حتى لا يفشل حفظ الاكتشاف */
     }
@@ -488,6 +535,63 @@ export async function updateDetectionStatus(id: number, status: string, notes?: 
 
   await db.update(aiDetection).set(patch).where(where)
   revalidatePath("/ai-monitoring")
+}
+
+// مراجعة تصنيف الكشف من المدقق: تأكيد التصنIF (newType غير مُمرّر أو مطابق) أو
+// تصحيحه إلى نوع آخر. الحالتان تُسجَّلان في detection_corrections لتغذية مؤشر «دقة
+// التصنIF» (المؤكَّد ÷ إجمالي المراجَعة). عند التصحIح يُحدَّث النوع والتصنيف والخطورة
+// المشتقّة، وفي الحالتين يُعلَّم الكشف «تم الاطّلاع» ويُسجَّل زمن الاستجابة.
+export async function reviewDetectionClassification(detectionId: number, newType?: string) {
+  await assertWritable()
+  const { userId, organizationId, isManager } = await requireModuleScope("ai_monitoring")
+  const rows = await db.select({ name: user.name }).from(user).where(eq(user.id, userId)).limit(1)
+  const actor = rows[0]?.name || "مستخدم"
+
+  const where = isManager
+    ? and(eq(aiDetection.organizationId, organizationId), eq(aiDetection.id, detectionId))
+    : and(eq(aiDetection.organizationId, organizationId), eq(aiDetection.id, detectionId), eq(aiDetection.userId, userId))
+  const [det] = await db.select().from(aiDetection).where(where).limit(1)
+  if (!det) throw new Error("الاكتشاف غير موجود")
+
+  const oldType = det.detectionType
+  // النوع الجديد صالح فقط إن كان ضمن الأنواع المعروفة؛ وإلا نعتبرها عملية تأكيد.
+  const corrected = typeof newType === "string" && newType in detectionClassByType && newType !== oldType
+  const finalType = corrected ? (newType as string) : oldType
+
+  await db.insert(detectionCorrection).values({
+    organizationId,
+    userId,
+    detectionId,
+    oldType,
+    newType: finalType,
+    correctedBy: actor,
+  })
+
+  const patch: Partial<typeof aiDetection.$inferInsert> = {
+    respondedAt: new Date(),
+    acknowledgedBy: actor,
+    reviewReason: "",
+  }
+  if (det.status === "new" || det.status === "needs_review") patch.status = "acknowledged"
+  if (corrected) {
+    const klass = detectionClassByType[finalType as DetectionType] ?? "compliance"
+    const sev = severityByClass[klass]
+    patch.detectionType = finalType
+    patch.detectionTypes = JSON.stringify([finalType])
+    patch.detectionClass = klass
+    patch.detectionCategory = detectionCategoryByType[finalType as DetectionType] ?? "behavioral"
+    patch.escalationTarget = escalationTargetByType[finalType as DetectionType] ?? "none"
+    patch.severity = sev
+    patch.severityAuto = sev
+    patch.notes = `${det.notes || ""}${det.notes ? " • " : ""}تصحيح التصنيف: ${
+      detectionTypeLabels[oldType] ?? oldType
+    } ← ${detectionTypeLabels[finalType] ?? finalType} (${actor})`.slice(0, 1000)
+  }
+
+  await db.update(aiDetection).set(patch).where(where)
+  revalidatePath("/ai-monitoring")
+  revalidatePath("/reports")
+  return { corrected, newType: finalType }
 }
 
 export async function deleteDetection(id: number) {

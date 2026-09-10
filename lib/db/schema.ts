@@ -654,6 +654,11 @@ export const aiDetection = pgTable("ai_detections", {
   //   incident (حوادث: اصطدام/سقوط/دخان → مسار الحوادث) | environmental (بيئية:
   //   انسكاب/مخرج مسدود → إجراء تصحيحي).
   detectionCategory: text("detection_category").notNull().default("behavioral"),
+  // تصنيف الكشف (المصدر الرسمي للخطورة والتصعيد): event (حدث) | hazard (خطر) |
+  // compliance (التزام). يميّز «الحدث» عن «الخطر» لمنع تصنيف ظرف خطر كحادث.
+  detectionClass: text("detection_class").notNull().default("compliance"),
+  // الدلائل المرئية التي اعتمد عليها النموذج + تعليله: { evidence: string[], reasoning: string }.
+  evidenceCriteria: jsonb("evidence_criteria").default({}),
   // الخطورة المحسوبة تلقائياً من نوع الكشف (تُميَّز عن severity القابلة للتعديل يدوياً).
   severityAuto: text("severity_auto").notNull().default(""),
   // هدف التصعيد التلقائي: none | incident | near_miss | violation | corrective_action.
@@ -670,6 +675,19 @@ export const aiDetection = pgTable("ai_detections", {
   // وقت أول استجابة بشرية (اطّلاع/معالجة/تصعيد/بلاغ خاطئ) — لقياس زمن الاستجابة.
   respondedAt: timestamp("responded_at"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
+// تصحيحات تصنيف الكشف من قِبل المدقق — سجل تعلُّم يُغذّي مؤشر «دقة التصنيف»
+// وجدول الأنواع الأكثر تعرّضاً للتصحيح في التقارير.
+export const detectionCorrection = pgTable("detection_corrections", {
+  id: serial("id").primaryKey(),
+  organizationId: text("organizationId").notNull(),
+  userId: text("userId").notNull(),
+  detectionId: integer("detection_id").notNull(), // aiDetection.id الرقمي
+  oldType: text("old_type").notNull().default(""),
+  newType: text("new_type").notNull().default(""),
+  correctedBy: text("corrected_by").notNull().default(""),
+  correctedAt: timestamp("corrected_at").notNull().defaultNow(),
 })
 
 // إشعارات المراقبة الذكية — سجل لكل مستلم عن كل اكتشاف عالي الخطورة/حرج.

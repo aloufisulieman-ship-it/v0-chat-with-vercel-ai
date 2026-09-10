@@ -46,11 +46,13 @@ export default async function AiMonitoringPage({
     notes: r.notes ?? "",
     linkedViolationNo: r.linkedViolationNo ?? "",
     detectionCategory: r.detectionCategory ?? "behavioral",
+    detectionClass: r.detectionClass ?? "compliance",
     severityAuto: r.severityAuto ?? "",
     escalationTarget: r.escalationTarget ?? "none",
     escalatedRecordId: r.escalatedRecordId ?? null,
     escalatedDocumentNo: r.escalatedDocumentNo ?? "",
     reviewReason: r.reviewReason ?? "",
+    evidenceCriteria: (r.evidenceCriteria as { evidence?: string[]; reasoning?: string } | null) ?? null,
   }))
 
   return (
