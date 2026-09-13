@@ -574,6 +574,85 @@ export const appNotification = pgTable(
   (t) => [index("app_notification_org_target_idx").on(t.organizationId, t.targetModule, t.read)],
 )
 
+// ---------- مركز الأقسام: الأقسام والإحالات بينها ----------
+// جدول الأقسام: مصدر الحقيقة لأقسام كل مؤسسة. تُبذَر القيم الافتراضية (HSE/HR/FIN/...)
+// لكل مؤسسة عند الترحيل. code فريد داخل المؤسسة.
+export const department = pgTable(
+  "departments",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: text("organizationId").notNull(),
+    code: text("code").notNull(),
+    nameAr: text("name_ar").notNull().default(""),
+    // مدير القسم (اختياري) — يُستخدم لاحقاً لتوجيه الإشعارات والصلاحيات.
+    managerUserId: text("manager_user_id"),
+    email: text("email").notNull().default(""),
+    // اتفاقية مستوى الخدمة بالساعات — تُشتق منها due_at للإحالة عند إنشائها.
+    slaHours: integer("sla_hours").notNull().default(48),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("departments_org_code_idx").on(t.organizationId, t.code)],
+)
+
+// جدول الإحالات: إحالة سجل تشغيلي (مخالفة/حادث/تفتيش/تصريح/خطر/تدقيق/ملاحظة/إجراء)
+// من قسم إلى قسم. حالة السجل الأصلي تُشتق من إحالاته (لا تُكتب يدوياً). لا حذف للأعمدة
+// القديمة (hrStatus/financeStatus) — الترحيل يبني إحالات موازية لها للتوافق الخلفي.
+export const referral = pgTable(
+  "referrals",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: text("organizationId").notNull(),
+    // رقم مرجعي بشري: REF-YYYY-### (تسلسل مستقل لكل مؤسسة).
+    refNo: text("ref_no").notNull().default(""),
+    sourceType: text("source_type").notNull(),
+    sourceId: integer("source_id").notNull(),
+    fromDeptId: integer("from_dept_id"),
+    toDeptId: integer("to_dept_id").notNull(),
+    priority: text("priority").notNull().default("medium"),
+    // new | acknowledged | in_progress | returned | closed
+    status: text("status").notNull().default("new"),
+    assignedToUserId: text("assigned_to_user_id"),
+    notes: text("notes").notNull().default(""),
+    closureNote: text("closure_note").notNull().default(""),
+    closureSignatureUrl: text("closure_signature_url").notNull().default(""),
+    // مرفقات الإحالة: [{ url, name, kind }] بنفس آلية بقية المرفقات.
+    attachments: jsonb("attachments").default([]),
+    dueAt: timestamp("due_at"),
+    createdBy: text("created_by").notNull().default(""),
+    createdByName: text("created_by_name").notNull().default(""),
+    acknowledgedAt: timestamp("acknowledged_at"),
+    closedAt: timestamp("closed_at"),
+    closedBy: text("closed_by").notNull().default(""),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (t) => [
+    index("referrals_org_todept_idx").on(t.organizationId, t.toDeptId, t.status),
+    index("referrals_source_idx").on(t.organizationId, t.sourceType, t.sourceId),
+  ],
+)
+
+// سجل أحداث الإحالة (إدراج فقط): كل انتقال حالة أو تعليق في مسار الإحالة.
+// action: created | acknowledged | assigned | in_progress | returned | closed | comment
+export const referralEvent = pgTable(
+  "referral_events",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: text("organizationId").notNull(),
+    referralId: integer("referral_id").notNull(),
+    actorId: text("actor_id").notNull().default(""),
+    actorName: text("actor_name").notNull().default(""),
+    action: text("action").notNull(),
+    fromStatus: text("from_status").notNull().default(""),
+    toStatus: text("to_status").notNull().default(""),
+    comment: text("comment").notNull().default(""),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("referral_events_referral_idx").on(t.referralId)],
+)
+
 // ملاحظات وإيجابيات الجولة الميدانية.
 // kind: "observation" (ملاحظة/شبه حادثة) أو "positive" (ملاحظة إيجابية).
 export const observation = pgTable("observation", {

@@ -25,6 +25,9 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     autoSignIn: true,
+    // الحد الأدنى موحّد = 8 أحرف مع تحقق الواجهة (minLength={8}) في
+    // components/auth-form.tsx و components/request-org-form.tsx.
+    minPasswordLength: 8,
   },
   user: {
     additionalFields: {
