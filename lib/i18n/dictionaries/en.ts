@@ -72,6 +72,13 @@ export const en: Dictionary = {
     soon: "Soon",
     expandGroup: "Expand",
     collapseGroup: "Collapse",
+    groupOperations: "Daily Operations",
+    groupRecords: "Records",
+    groupResources: "Resources",
+    groupGovernance: "Governance",
+    groupSystem: "System",
+    collapseSidebar: "Collapse sidebar",
+    expandSidebar: "Expand sidebar",
   },
 
   dashboard: {
