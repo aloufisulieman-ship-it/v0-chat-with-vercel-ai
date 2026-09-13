@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/lib/db"
-import { department, referral, referralEvent } from "@/lib/db/schema"
+import { department, referral, referralEvent, user } from "@/lib/db/schema"
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { requireScope, requireModuleScope, assertWritable, requireUser, isOrgManager } from "@/lib/session"
@@ -140,6 +140,120 @@ export async function getReferralWithTimeline(referralId: number) {
     .where(eq(referralEvent.referralId, referralId))
     .orderBy(asc(referralEvent.createdAt))
   return { referral: ref, events }
+}
+
+// خط سير كامل لسجل تشغيلي: يجمع أحداث كل تحويلات نفس السجل المصدر (نفس sourceType+sourceId)
+// لا تحويل واحد فقط — لأن التحويل من قسم لآخر يُغلق تحويلاً ويُنشئ آخر مرتبطاً بنفس المصدر.
+// يُطابَق الفاعل بجدول المستخدم لإظهار الوظيفة والقسم. القراءة معزولة بـ organizationId.
+export async function getReferralChainByRefNo(code: string, refNo: string) {
+  const scope = await requireScope()
+
+  const base = await db
+    .select()
+    .from(referral)
+    .where(and(eq(referral.organizationId, scope.organizationId), eq(referral.refNo, refNo)))
+    .limit(1)
+  const ref = base[0]
+  if (!ref) return null
+
+  // سلسلة التحويلات لنفس السجل المصدر، بترتيب الإنشاء.
+  const chain = await db
+    .select()
+    .from(referral)
+    .where(
+      and(
+        eq(referral.organizationId, scope.organizationId),
+        eq(referral.sourceType, ref.sourceType),
+        eq(referral.sourceId, ref.sourceId),
+      ),
+    )
+    .orderBy(asc(referral.createdAt))
+  const chainIds = chain.map((c) => c.id)
+  const refById = new Map(chain.map((c) => [c.id, c]))
+
+  const depts = await db
+    .select()
+    .from(department)
+    .where(eq(department.organizationId, scope.organizationId))
+  const deptById = new Map(depts.map((d) => [d.id, d]))
+
+  // أحداث كل تحويلات السلسلة، مطابقة الفاعل بجدول المستخدم (الوظيفة/القسم)، بترتيب زمني.
+  const rows = await db
+    .select({
+      id: referralEvent.id,
+      referralId: referralEvent.referralId,
+      actorName: referralEvent.actorName,
+      action: referralEvent.action,
+      fromStatus: referralEvent.fromStatus,
+      toStatus: referralEvent.toStatus,
+      comment: referralEvent.comment,
+      createdAt: referralEvent.createdAt,
+      actorRole: user.role,
+      actorDept: user.department,
+    })
+    .from(referralEvent)
+    .leftJoin(user, eq(user.id, referralEvent.actorId))
+    .where(and(eq(referralEvent.organizationId, scope.organizationId), inArray(referralEvent.referralId, chainIds)))
+    .orderBy(asc(referralEvent.createdAt), asc(referralEvent.id))
+
+  const events = rows.map((e) => {
+    const r = refById.get(e.referralId)
+    const stageDept = r ? deptById.get(r.toDeptId) : null
+    return {
+      id: e.id,
+      action: e.action,
+      actorName: e.actorName,
+      actorRole: e.actorRole ?? "",
+      actorDept: e.actorDept ?? "",
+      stageDeptName: stageDept?.nameAr || stageDept?.code || "",
+      fromStatus: e.fromStatus,
+      toStatus: e.toStatus,
+      comment: e.comment,
+      createdAt: e.createdAt.toISOString(),
+    }
+  })
+
+  // ملخّص المعاملة: المدة الكلية، عدد الأقسام، مرات الإرجاع، والالتزام بالمهلة.
+  const last = chain[chain.length - 1]
+  const firstCreatedAt = chain[0]?.createdAt ?? ref.createdAt
+  const closed = last.status === "closed"
+  const endedAt = closed && last.closedAt ? last.closedAt : new Date()
+  const governingDueAt = last.dueAt
+  const distinctDepts = new Set(chain.map((c) => c.toDeptId))
+  const returnCount = events.filter((e) => e.action === "returned").length
+  const lateMs = governingDueAt ? endedAt.getTime() - governingDueAt.getTime() : 0
+
+  const summary = {
+    firstCreatedAt: firstCreatedAt.toISOString(),
+    endedAt: endedAt.toISOString(),
+    closed,
+    totalMs: endedAt.getTime() - firstCreatedAt.getTime(),
+    deptCount: distinctDepts.size,
+    returnCount,
+    dueAt: governingDueAt ? governingDueAt.toISOString() : null,
+    lateHours: lateMs > 0 ? Math.ceil(lateMs / 3_600_000) : 0,
+    withinSla: governingDueAt ? lateMs <= 0 : true,
+  }
+
+  const chainDepts = chain.map((c) => {
+    const d = deptById.get(c.toDeptId)
+    return { refNo: c.refNo, code: d?.code ?? "", nameAr: d?.nameAr || d?.code || "", status: c.status }
+  })
+
+  return {
+    referral: {
+      id: ref.id,
+      refNo: ref.refNo,
+      sourceType: ref.sourceType,
+      sourceId: ref.sourceId,
+      status: ref.status,
+      priority: ref.priority,
+    },
+    deptCode: code.toUpperCase(),
+    events,
+    chainDepts,
+    summary,
+  }
 }
 
 // إحالات سجل تشغيلي بعينه (لعرضها داخل صفحة المخالفة/الحادث لاحقاً).
@@ -377,6 +491,34 @@ export async function closeReferral(
       closedBy: u.name,
     },
   })
+}
+
+// تصحيح: لا يُحذف أو يُعدَّل أي حدث سابق. التصحيح يُكتب كحدث جديد من نوع "correction"
+// مع سبب إلزامي، دون تغيير حالة الإحالة — فيبقى خط السير سجلاً غير قابل للتلاعب.
+export async function correctReferral(referralId: number, comment: string) {
+  if (!comment?.trim()) throw new Error("سبب التصحيح مطلوب")
+  const scope = await requireModuleScope("departments")
+  await assertWritable()
+  const u = await requireUser()
+  const rows = await db
+    .select({ status: referral.status, toDeptId: referral.toDeptId })
+    .from(referral)
+    .where(and(eq(referral.id, referralId), eq(referral.organizationId, scope.organizationId)))
+    .limit(1)
+  const ref = rows[0]
+  if (!ref) throw new Error("الإحالة غير موجودة")
+  await db.insert(referralEvent).values({
+    organizationId: scope.organizationId,
+    referralId,
+    actorId: u.id,
+    actorName: u.name,
+    action: "correction",
+    fromStatus: ref.status,
+    toStatus: ref.status,
+    comment,
+  })
+  const dept = await getDeptInOrg(scope.organizationId, ref.toDeptId)
+  if (dept) revalidatePath(`/departments/${dept.code}`)
 }
 
 // إضافة تعليق دون تغيير الحالة.

@@ -1,7 +1,8 @@
 "use client"
 
 import { useMemo, useState, useTransition } from "react"
-import { useRouter } from "next/navigation"
+import Link from "next/link"
+import { useParams, useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -88,6 +89,8 @@ function fmt(d: string | null): string {
 // (استلام / بدء / إعادة / إغلاق / تعليق) وخط زمني لكل إحالة.
 export function DepartmentInbox({ items }: { items: Referral[] }) {
   const router = useRouter()
+  const routeParams = useParams<{ code: string }>()
+  const deptCode = (routeParams?.code ?? "").toString().toUpperCase()
   const [tab, setTab] = useState<string>("all")
 
   // أنواع السجلات الحاضرة فعلياً في هذا الصندوق (تبويبات ديناميكية).
@@ -147,7 +150,16 @@ export function DepartmentInbox({ items }: { items: Referral[] }) {
                     return (
                       <TableRow key={it.id}>
                         <TableCell dir="ltr" className="text-start font-mono text-xs">
-                          {it.refNo || `#${it.id}`}
+                          {it.refNo && deptCode ? (
+                            <Link
+                              href={`/departments/${deptCode}/${encodeURIComponent(it.refNo)}`}
+                              className="text-primary underline-offset-4 hover:underline"
+                            >
+                              {it.refNo}
+                            </Link>
+                          ) : (
+                            it.refNo || `#${it.id}`
+                          )}
                         </TableCell>
                         <TableCell className="text-start">
                           <span className="text-sm">
