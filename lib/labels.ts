@@ -169,6 +169,7 @@ export const moduleOptions = [
   { value: "safety_rules", label: "قواعد السلامة" },
   { value: "hr", label: "الموارد البشرية" },
   { value: "finance", label: "المالية" },
+  { value: "departments", label: "مركز الأقسام" },
   { value: "actions", label: "الإجراءات التصحيحية" },
   { value: "audits", label: "التدقيق" },
   { value: "compliance", label: "مطابقة ISO 45001" },

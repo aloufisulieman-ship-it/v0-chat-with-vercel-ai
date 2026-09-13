@@ -2387,6 +2387,7 @@ export const en: Dictionary = {
     safety_rules: "Safety Rules",
     hr: "Human Resources",
     finance: "Finance",
+    departments: "Departments Hub",
     actions: "Corrective Actions",
     audits: "Audits",
     compliance: "ISO 45001 Compliance",
