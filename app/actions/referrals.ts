@@ -4,7 +4,7 @@ import { db } from "@/lib/db"
 import { department, referral, referralEvent } from "@/lib/db/schema"
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
-import { requireScope, requireModuleScope, assertWritable, requireUser } from "@/lib/session"
+import { requireScope, requireModuleScope, assertWritable, requireUser, isOrgManager } from "@/lib/session"
 import {
   computeDueAt,
   isReferralStatus,
@@ -156,6 +156,57 @@ export async function getReferralsForSource(sourceType: ReferralSourceType, sour
       ),
     )
     .orderBy(desc(referral.createdAt))
+}
+
+// بيانات قسم «الأقسام» في القائمة الجانبية: تُبنى ديناميكياً حسب دور المستخدم وارتباطه.
+// المدير/المدير العام/مفتش السلامة/مسؤول المنصّة يرون كل الأقسام + «نظرة عامة»؛ المستخدم
+// العادي المرتبط باسم قسم واحد يرى قسمه فقط («واردي»)؛ غير ذلك لا يرى القسم إطلاقاً.
+export async function getDepartmentsNav() {
+  const u = await requireUser()
+  const manager = u.isPlatformAdmin ? true : isOrgManager({ role: u.role, department: u.department })
+
+  const depts = await db
+    .select()
+    .from(department)
+    .where(and(eq(department.organizationId, u.organizationId), eq(department.isActive, true)))
+    .orderBy(asc(department.id))
+
+  const counts = await db
+    .select({
+      toDeptId: referral.toDeptId,
+      open: sql<number>`count(*) FILTER (WHERE ${referral.status} <> 'closed')`,
+      overdue: sql<number>`count(*) FILTER (WHERE ${referral.status} <> 'closed' AND ${referral.dueAt} IS NOT NULL AND ${referral.dueAt} < now())`,
+    })
+    .from(referral)
+    .where(eq(referral.organizationId, u.organizationId))
+    .groupBy(referral.toDeptId)
+
+  const openByDept = new Map<number, number>()
+  const overdueByDept = new Map<number, number>()
+  for (const c of counts) {
+    openByDept.set(c.toDeptId, Number(c.open))
+    overdueByDept.set(c.toDeptId, Number(c.overdue))
+  }
+
+  if (manager) {
+    const list = depts.map((d) => ({ code: d.code, nameAr: d.nameAr, open: openByDept.get(d.id) ?? 0 }))
+    const overdueTotal = depts.reduce((s, d) => s + (overdueByDept.get(d.id) ?? 0), 0)
+    return { visible: true, mode: "group" as const, canSeeOverview: true, overdueTotal, departments: list }
+  }
+
+  // مستخدم عادي: يُطابَق اسم قسمه (حقل department الحر) باسم قسم فعّال في مؤسسته.
+  const mine = depts.find((d) => d.nameAr.trim() !== "" && d.nameAr.trim() === u.department.trim())
+  if (mine) {
+    return {
+      visible: true,
+      mode: "single" as const,
+      canSeeOverview: false,
+      overdueTotal: overdueByDept.get(mine.id) ?? 0,
+      departments: [{ code: mine.code, nameAr: mine.nameAr, open: openByDept.get(mine.id) ?? 0 }],
+    }
+  }
+
+  return { visible: false, mode: "none" as const, canSeeOverview: false, overdueTotal: 0, departments: [] }
 }
 
 // ---------- كتابات ----------

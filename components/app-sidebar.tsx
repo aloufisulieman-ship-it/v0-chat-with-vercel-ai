@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import useSWR from "swr"
@@ -23,8 +23,7 @@ import {
   Gavel,
   FolderKanban,
   Ban,
-  Banknote,
-  Network,
+  Inbox,
   Footprints,
   Cctv,
   Truck,
@@ -68,7 +67,19 @@ type NavGroup = {
   module: ModuleKey
   children: NavLeaf[]
 }
-type NavEntry = NavLeaf | NavGroup
+// عنصر ديناميكي يمثّل قسم «الأقسام» في القائمة — يُبنى وقت التشغيل من /api/departments/nav
+// (لا يُكتب ثابتاً)، ويقرّر بنفسه أن يظهر كمجموعة قابلة للطي أو كبند مباشر «واردي».
+type NavDepartments = { kind: "departments" }
+type NavEntry = NavLeaf | NavGroup | NavDepartments
+
+// شكل استجابة /api/departments/nav المستهلَكة في القائمة الجانبية.
+type DeptNav = {
+  visible: boolean
+  mode: "group" | "single" | "none"
+  canSeeOverview: boolean
+  overdueTotal: number
+  departments: { code: string; nameAr: string; open: number }[]
+}
 
 // عنصر «التدقيق» القابل للطي — يحتفظ بموقعه بين «الإجراءات التصحيحية» و«الوثائق»
 // وبنفس أيقونة /audits السابقة، ويضم نظرة عامة على التدقيق وكل بنود ISO 45001.
@@ -105,15 +116,70 @@ const nav: NavEntry[] = [
   { href: "/ai-monitoring", labelKey: "modules.ai_monitoring", icon: Cctv, module: "ai_monitoring" },
   { href: "/equipment", labelKey: "nav.equipment", icon: Truck, module: "equipment" },
   { href: "/safety-rules", labelKey: "nav.safetyRules", icon: ScrollText, module: "safety_rules" },
-  { href: "/hr", labelKey: "modules.hr", icon: UserCog, module: "hr" },
-  { href: "/finance", labelKey: "modules.finance", icon: Banknote, module: "finance" },
-  { href: "/departments", labelKey: "modules.departments", icon: Network, module: "departments" },
+  { kind: "departments" },
   { href: "/actions", labelKey: "modules.actions", icon: CheckSquare, module: "actions" },
   auditGroup,
   { href: "/documents", labelKey: "modules.documents", icon: FolderKanban, module: "documents" },
   { href: "/reports", labelKey: "modules.reports", icon: BarChart3, module: "reports" },
   { href: "/settings", labelKey: "modules.settings", icon: Settings, module: "settings" },
 ]
+
+// مكوّن القائمة القابلة للطي — مشترك بين «التدقيق» و«الأقسام». النقر على البند الأب يستدعي
+// onToggle الممرَّر من الأب الذي يبدّل الحالة (open ⇄ close) لا أن يفتح فقط، فيصحّ الانطواء
+// للبندين معاً. الشارة الحمراء (badgeCount) اختيارية وتظهر على الأب عند وجود متأخرات.
+function CollapsibleNavGroup({
+  icon: Icon,
+  label,
+  isOpen,
+  onToggle,
+  active,
+  badgeCount = 0,
+  t,
+  children,
+}: {
+  icon: typeof LayoutDashboard
+  label: string
+  isOpen: boolean
+  onToggle: () => void
+  active: boolean
+  badgeCount?: number
+  t: (key: string) => string
+  children: ReactNode
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={isOpen}
+        className={cn(
+          "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+          active
+            ? "text-sidebar-foreground"
+            : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+        )}
+      >
+        <Icon className="size-5 shrink-0" />
+        <span className="flex-1 text-start">{label}</span>
+        {badgeCount > 0 && (
+          <span
+            className="flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-xs font-bold text-destructive-foreground"
+            aria-label={`${badgeCount}`}
+          >
+            {badgeCount}
+          </span>
+        )}
+        <ChevronDown
+          className={cn("size-4 shrink-0 transition-transform", isOpen ? "rotate-180" : "rotate-0")}
+          aria-label={isOpen ? t("nav.collapseGroup") : t("nav.expandGroup")}
+        />
+      </button>
+      {isOpen && (
+        <ul className="mt-1 flex flex-col gap-1 border-e border-sidebar-border pe-3 me-4">{children}</ul>
+      )}
+    </li>
+  )
+}
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/)
@@ -151,24 +217,27 @@ export function AppSidebar({
   // القائمة المفتوحة مملوكة للمستخدم بالكامل (accordion: قائمة واحدة مفتوحة في كل مرة).
   // الحالة الأولية فقط تُشتقّ من المسار — تُحسب مرة واحدة عند التحميل ولا يُعاد تطبيقها بعدها،
   // كي لا يمنع المسارُ إغلاق القائمة عند الضغط عليها ثانيةً.
-  const [openMenu, setOpenMenu] = useState<string | null>(() =>
-    pathname.startsWith("/audit") ||
-    auditGroup.children.some((child) => pathname.startsWith(child.href))
-      ? "audit"
-      : null,
-  )
-  const auditExpanded = openMenu === "audit"
+  const [openMenu, setOpenMenu] = useState<string | null>(() => {
+    if (
+      pathname.startsWith("/audit") ||
+      auditGroup.children.some((child) => pathname.startsWith(child.href))
+    )
+      return "audit"
+    if (pathname.startsWith("/departments")) return "departments"
+    return null
+  })
 
   // لوحة التحكم فقط هي الصفحة الأساسية الدائمة كي لا يُقفل أي مستخدم خارج النظام.
   // كل صفحة أخرى (بما فيها المراقبة الذكية والإعدادات والصفحات التي كانت "عامة")
   // تخضع لنظام الصلاحيات: تظهر فقط إذا مُنحت الوحدة صراحةً، أو كان الدور admin/manager.
   // مجموعة «التدقيق» تظهر إذا كان أي بند من أبنائها مرئياً.
   const alwaysOn: ModuleKey[] = ["dashboard"]
-  const visible = nav.filter((entry) =>
-    entry.kind === "group"
-      ? auditItems.length > 0
-      : alwaysOn.includes(entry.module) || canSee(entry.module),
-  )
+  const visible = nav.filter((entry) => {
+    if (entry.kind === "group") return auditItems.length > 0
+    // قسم «الأقسام» يمرّ دائماً؛ ظهوره الفعلي يُحسم عميلياً حسب deptNav.visible.
+    if (entry.kind === "departments") return true
+    return alwaysOn.includes(entry.module) || canSee(entry.module)
+  })
   const items: NavEntry[] =
     user?.role === "admin"
       ? [
@@ -178,26 +247,10 @@ export function AppSidebar({
         ]
       : visible
 
-  // شارة الإشعار: عدد بنود الموارد البشرية غير المعالجة (تُجلب فقط لمن يملك الوصول).
-  const hrVisible = visible.some((item) => item.kind !== "group" && item.href === "/hr")
-  const { data: hrData } = useSWR<{ count: number }>(
-    hrVisible ? "/api/hr/pending-count" : null,
-    fetcher,
-    { refreshInterval: 30000 },
-  )
-  const hrCount = hrData?.count ?? 0
-
-  // شارة الإشعار: عدد المخالفات الخارجية غير المعالجة لدى المالية.
-  const financeVisible = visible.some((item) => item.kind !== "group" && item.href === "/finance")
-  const { data: financeData } = useSWR<{ count: number }>(
-    financeVisible ? "/api/finance/pending-count" : null,
-    fetcher,
-    { refreshInterval: 30000 },
-  )
-  const financeCount = financeData?.count ?? 0
-
-  // خريطة عدّادات الإشعارات حسب المسار.
-  const countByHref: Record<string, number> = { "/hr": hrCount, "/finance": financeCount }
+  // بيانات قسم «الأقسام» للقائمة: الأقسام المرئية للمستخدم وعدّاداتها ومجموع المتأخرات.
+  const { data: deptNav } = useSWR<DeptNav>("/api/departments/nav", fetcher, {
+    refreshInterval: 30000,
+  })
 
   async function handleSignOut() {
     await authClient.signOut()
@@ -230,99 +283,191 @@ export function AppSidebar({
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <ul className="flex flex-col gap-1">
             {items.map((entry) => {
-              // مجموعة «التدقيق» القابلة للطي في موقعها ضمن الترتيب.
+              // مجموعة «التدقيق» القابلة للطي — تستخدم نفس مكوّن CollapsibleNavGroup المشترك.
               if (entry.kind === "group") {
-                const GroupIcon = entry.icon
                 return (
-                  <li key="audit-group">
-                    <button
-                      type="button"
-                      onClick={() => setOpenMenu((prev) => (prev === "audit" ? null : "audit"))}
-                      aria-expanded={auditExpanded}
-                      className={cn(
-                        "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                        auditActive
-                          ? "text-sidebar-foreground"
-                          : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground",
-                      )}
-                    >
-                      <GroupIcon className="size-5 shrink-0" />
-                      <span className="flex-1 text-start">{t(entry.labelKey)}</span>
-                      <ChevronDown
-                        className={cn(
-                          "size-4 shrink-0 transition-transform",
-                          auditExpanded ? "rotate-180" : "rotate-0",
-                        )}
-                        aria-label={auditExpanded ? t("nav.collapseGroup") : t("nav.expandGroup")}
-                      />
-                    </button>
-
-                    {auditExpanded && (
-                      <ul className="mt-1 flex flex-col gap-1 border-e border-sidebar-border pe-3 me-4">
-                        {auditItems.map((child) => {
-                          const childActive = pathname.startsWith(child.href)
-                          const ChildIcon = child.icon
-                          const label = t(child.labelKey)
-                          if (child.soon) {
-                            return (
-                              <li key={child.href}>
-                                <span
-                                  aria-disabled="true"
-                                  className="flex cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-sidebar-foreground/40"
-                                >
-                                  <ChildIcon className="size-4 shrink-0" />
-                                  <span className="flex-1">{label}</span>
-                                  {child.clause && (
-                                    <span className="font-mono text-xs text-sidebar-foreground/30" dir="ltr">
-                                      {child.clause}
-                                    </span>
-                                  )}
-                                  <span className="rounded-full bg-sidebar-accent px-1.5 py-0.5 text-[10px] font-semibold text-sidebar-foreground/50">
-                                    {t("nav.soon")}
-                                  </span>
+                  <CollapsibleNavGroup
+                    key="audit-group"
+                    icon={entry.icon}
+                    label={t(entry.labelKey)}
+                    isOpen={openMenu === "audit"}
+                    onToggle={() => setOpenMenu((prev) => (prev === "audit" ? null : "audit"))}
+                    active={auditActive}
+                    t={t}
+                  >
+                    {auditItems.map((child) => {
+                      const childActive = pathname.startsWith(child.href)
+                      const ChildIcon = child.icon
+                      const label = t(child.labelKey)
+                      if (child.soon) {
+                        return (
+                          <li key={child.href}>
+                            <span
+                              aria-disabled="true"
+                              className="flex cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-sidebar-foreground/40"
+                            >
+                              <ChildIcon className="size-4 shrink-0" />
+                              <span className="flex-1">{label}</span>
+                              {child.clause && (
+                                <span className="font-mono text-xs text-sidebar-foreground/30" dir="ltr">
+                                  {child.clause}
                                 </span>
-                              </li>
-                            )
-                          }
-                          return (
-                            <li key={child.href}>
-                              <Link
-                                href={child.href}
-                                onClick={onClose}
-                                aria-current={childActive ? "page" : undefined}
+                              )}
+                              <span className="rounded-full bg-sidebar-accent px-1.5 py-0.5 text-[10px] font-semibold text-sidebar-foreground/50">
+                                {t("nav.soon")}
+                              </span>
+                            </span>
+                          </li>
+                        )
+                      }
+                      return (
+                        <li key={child.href}>
+                          <Link
+                            href={child.href}
+                            onClick={onClose}
+                            aria-current={childActive ? "page" : undefined}
+                            className={cn(
+                              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                              childActive
+                                ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                                : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                            )}
+                          >
+                            <ChildIcon className="size-4 shrink-0" />
+                            <span className="flex-1">{label}</span>
+                            {child.clause && (
+                              <span
                                 className={cn(
-                                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                                  childActive
-                                    ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                                    : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                                  "font-mono text-xs",
+                                  childActive ? "text-sidebar-primary-foreground/70" : "text-sidebar-foreground/40",
                                 )}
+                                dir="ltr"
                               >
-                                <ChildIcon className="size-4 shrink-0" />
-                                <span className="flex-1">{label}</span>
-                                {child.clause && (
-                                  <span
-                                    className={cn(
-                                      "font-mono text-xs",
-                                      childActive ? "text-sidebar-primary-foreground/70" : "text-sidebar-foreground/40",
-                                    )}
-                                    dir="ltr"
-                                  >
-                                    {child.clause}
-                                  </span>
+                                {child.clause}
+                              </span>
+                            )}
+                          </Link>
+                        </li>
+                      )
+                    })}
+                  </CollapsibleNavGroup>
+                )
+              }
+
+              // قسم «الأقسام» الديناميكي — يُبنى من نتيجة /api/departments/nav.
+              if (entry.kind === "departments") {
+                if (!deptNav?.visible) return null
+
+                // مستخدم عادي مرتبط بقسم واحد: بند مباشر «واردي» يفتح قسمه فقط (لا قائمة فرعية).
+                if (deptNav.mode === "single") {
+                  const d = deptNav.departments[0]
+                  if (!d) return null
+                  const href = `/departments/${d.code}`
+                  const active = pathname === href
+                  return (
+                    <li key="departments-single">
+                      <Link
+                        href={href}
+                        onClick={onClose}
+                        className={cn(
+                          "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                          active
+                            ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                            : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                        )}
+                      >
+                        <Inbox className="size-5 shrink-0" />
+                        <span className="flex-1">{t("nav.myInbox")}</span>
+                        {d.open > 0 && (
+                          <span
+                            className={cn(
+                              "flex min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-bold",
+                              active
+                                ? "bg-sidebar-primary-foreground text-sidebar-primary"
+                                : "bg-primary text-primary-foreground",
+                            )}
+                            aria-label={`${d.open}`}
+                          >
+                            {d.open}
+                          </span>
+                        )}
+                      </Link>
+                    </li>
+                  )
+                }
+
+                // مدير/مسؤول: مجموعة قابلة للطي بكل الأقسام النشطة + «نظرة عامة».
+                // الشارة الحمراء على الأب = مجموع الإحالات المتأخرة في كل الأقسام المرئية.
+                return (
+                  <CollapsibleNavGroup
+                    key="departments-group"
+                    icon={Building2}
+                    label={t("nav.departments")}
+                    isOpen={openMenu === "departments"}
+                    onToggle={() => setOpenMenu((prev) => (prev === "departments" ? null : "departments"))}
+                    active={pathname.startsWith("/departments")}
+                    badgeCount={deptNav.overdueTotal}
+                    t={t}
+                  >
+                    {deptNav.departments.map((d) => {
+                      const href = `/departments/${d.code}`
+                      const childActive = pathname === href
+                      return (
+                        <li key={d.code}>
+                          <Link
+                            href={href}
+                            onClick={onClose}
+                            aria-current={childActive ? "page" : undefined}
+                            className={cn(
+                              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                              childActive
+                                ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                                : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                            )}
+                          >
+                            <Building2 className="size-4 shrink-0" />
+                            <span className="flex-1">{d.nameAr}</span>
+                            {d.open > 0 && (
+                              <span
+                                className={cn(
+                                  "flex min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-bold",
+                                  childActive
+                                    ? "bg-sidebar-primary-foreground text-sidebar-primary"
+                                    : "bg-primary text-primary-foreground",
                                 )}
-                              </Link>
-                            </li>
-                          )
-                        })}
-                      </ul>
+                                aria-label={`${d.open}`}
+                              >
+                                {d.open}
+                              </span>
+                            )}
+                          </Link>
+                        </li>
+                      )
+                    })}
+                    {deptNav.canSeeOverview && (
+                      <li key="__overview">
+                        <Link
+                          href="/departments/overview"
+                          onClick={onClose}
+                          aria-current={pathname === "/departments/overview" ? "page" : undefined}
+                          className={cn(
+                            "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                            pathname === "/departments/overview"
+                              ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                              : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                          )}
+                        >
+                          <BarChart3 className="size-4 shrink-0" />
+                          <span className="flex-1">{t("nav.departmentsOverview")}</span>
+                        </Link>
+                      </li>
                     )}
-                  </li>
+                  </CollapsibleNavGroup>
                 )
               }
 
               const active = entry.href === "/" ? pathname === "/" : pathname.startsWith(entry.href)
               const Icon = entry.icon
-              const badgeCount = countByHref[entry.href] ?? 0
               return (
                 <li key={entry.href}>
                   <Link
@@ -337,19 +482,6 @@ export function AppSidebar({
                   >
                     <Icon className="size-5 shrink-0" />
                     <span className="flex-1">{t(entry.labelKey)}</span>
-                    {badgeCount > 0 && (
-                      <span
-                        className={cn(
-                          "flex min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-bold",
-                          active
-                            ? "bg-sidebar-primary-foreground text-sidebar-primary"
-                            : "bg-destructive text-destructive-foreground",
-                        )}
-                        aria-label={`${badgeCount}`}
-                      >
-                        {badgeCount}
-                      </span>
-                    )}
                   </Link>
                 </li>
               )
