@@ -28,6 +28,10 @@ import {
   legalRequirement,
   workerConsultation,
   emergencyPlan,
+  emergencyContact,
+  emergencyEquipment,
+  emergencyDrill,
+  emergencyActivation,
   contractor,
   managementReview,
   internalAudit,
@@ -1249,6 +1253,55 @@ export async function deleteConsultation(id: number) {
 }
 
 /* ---------------- ISO 45001 · التأهب للطوارئ (البند 8.2) ---------------- */
+
+// صلاحية التحرير الكامل: مدير المنصّة/المدير، أو المدير العام/مفتش السلامة (حسب القسم).
+// المدقّق يقرأ فقط؛ بقية المستخدمين يرون الخطط وجهات الاتصال فقط (يُفرض في الصفحة).
+function isEmergencyEditor(u: { role: string; department: string }): boolean {
+  const role = (u.role ?? "").toLowerCase()
+  if (role === "admin" || role === "manager") return true
+  const dept = (u.department ?? "").trim()
+  return dept === "المدير العام" || dept === "مفتش السلامة" || dept === "مدير السلامة"
+}
+async function assertEmergencyEditor() {
+  const u = await requireUser()
+  if (!isEmergencyEditor(u)) {
+    throw new Error("لا تملك صلاحية تعديل بيانات التأهب للطوارئ.")
+  }
+  return u
+}
+
+// مولّد رقم تسلسلي بادئته ثابتة، يحسب أعلى رقم قائم ضمن نفس المؤسسة.
+function nextSeq(existing: string[], prefix: string, width = 3): string {
+  let max = 0
+  for (const s of existing) {
+    const m = String(s ?? "").match(/(\d+)\s*$/)
+    if (m) max = Math.max(max, Number(m[1]))
+  }
+  return `${prefix}${String(max + 1).padStart(width, "0")}`
+}
+// يقبل JSON صريحاً، أو نصاً مفصولاً بأسطر (كل سطر عنصر) — لتسهيل الإدخال من textarea.
+function jsonArr(v: FormDataEntryValue | null): unknown[] {
+  const s = v ? String(v).trim() : ""
+  if (!s) return []
+  try {
+    const parsed = JSON.parse(s)
+    if (Array.isArray(parsed)) return parsed
+  } catch {
+    // ليس JSON — نعامله كأسطر نصّية.
+  }
+  return s
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+}
+function tsOrNull(v: FormDataEntryValue | null): Date | null {
+  const s = v ? String(v) : ""
+  if (!s) return null
+  const d = new Date(s)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+// ----- الخطط -----
 export async function getEmergencyPlans() {
   const scope = await requireScope()
   return db
@@ -1259,28 +1312,396 @@ export async function getEmergencyPlans() {
 }
 export async function createEmergencyPlan(formData: FormData) {
   await assertWritable()
+  const editor = await assertEmergencyEditor()
   const { userId, organizationId } = await requireModuleScope("emergency")
+  const existing = await db
+    .select({ planNo: emergencyPlan.planNo })
+    .from(emergencyPlan)
+    .where(eq(emergencyPlan.organizationId, organizationId))
+  const planNo = nextSeq(existing.map((r) => r.planNo).filter(Boolean) as string[], "MHS-IMS-PLN-HSE-")
   await db.insert(emergencyPlan).values({
     userId,
     organizationId,
+    planNo,
     scenario: str(formData.get("scenario")),
     planType: str(formData.get("planType"), "fire"),
+    severity: str(formData.get("severity"), "medium"),
+    location: str(formData.get("location")),
+    triggerCriteria: str(formData.get("triggerCriteria")),
+    responseSteps: jsonArr(formData.get("responseSteps")),
+    roles: jsonArr(formData.get("roles")),
+    assemblyPoint: str(formData.get("assemblyPoint")),
     responsibleTeam: str(formData.get("responsibleTeam")),
+    reviewDate: dateOrNull(formData.get("reviewDate")),
     lastDrillDate: dateOrNull(formData.get("lastDrillDate")),
     nextDrillDate: dateOrNull(formData.get("nextDrillDate")),
-    status: str(formData.get("status"), "ready"),
+    status: "draft",
+    createdBy: editor.name,
   })
+  revalidatePath("/emergency")
+  revalidatePath("/compliance")
+}
+export async function updateEmergencyPlan(id: number, formData: FormData) {
+  await assertWritable()
+  await assertEmergencyEditor()
+  const scope = await requireModuleScope("emergency")
+  await db
+    .update(emergencyPlan)
+    .set({
+      scenario: str(formData.get("scenario")),
+      planType: str(formData.get("planType"), "fire"),
+      severity: str(formData.get("severity"), "medium"),
+      location: str(formData.get("location")),
+      triggerCriteria: str(formData.get("triggerCriteria")),
+      responseSteps: jsonArr(formData.get("responseSteps")),
+      roles: jsonArr(formData.get("roles")),
+      assemblyPoint: str(formData.get("assemblyPoint")),
+      responsibleTeam: str(formData.get("responsibleTeam")),
+      reviewDate: dateOrNull(formData.get("reviewDate")),
+      lastDrillDate: dateOrNull(formData.get("lastDrillDate")),
+      nextDrillDate: dateOrNull(formData.get("nextDrillDate")),
+      updatedAt: new Date(),
+    })
+    .where(
+      scopeWhere({ organizationId: emergencyPlan.organizationId, userId: emergencyPlan.userId }, scope, eq(emergencyPlan.id, id)),
+    )
+  revalidatePath("/emergency")
+  revalidatePath("/compliance")
+}
+// اعتماد الخطة بثلاثة تواقيع؛ تصبح "معتمدة" فقط عند اكتمالها جميعاً.
+export async function approveEmergencyPlan(id: number, formData: FormData) {
+  await assertWritable()
+  const editor = await assertEmergencyEditor()
+  const scope = await requireModuleScope("emergency")
+  const rows = await db
+    .select()
+    .from(emergencyPlan)
+    .where(
+      scopeWhere({ organizationId: emergencyPlan.organizationId, userId: emergencyPlan.userId }, scope, eq(emergencyPlan.id, id)),
+    )
+    .limit(1)
+  const plan = rows[0]
+  if (!plan) throw new Error("الخطة غير موجودة.")
+  const preparer = str(formData.get("preparerSignature")) || plan.preparerSignature
+  const safety = str(formData.get("safetySignature")) || plan.safetySignature
+  const management = str(formData.get("managementSignature")) || plan.managementSignature
+  const complete = Boolean(preparer && safety && management)
+  await db
+    .update(emergencyPlan)
+    .set({
+      preparerSignature: preparer,
+      safetySignature: safety,
+      managementSignature: management,
+      status: complete ? "approved" : "under_review",
+      approvedAt: complete ? new Date() : null,
+      approvedBy: complete ? editor.name : "",
+      updatedAt: new Date(),
+    })
+    .where(
+      scopeWhere({ organizationId: emergencyPlan.organizationId, userId: emergencyPlan.userId }, scope, eq(emergencyPlan.id, id)),
+    )
   revalidatePath("/emergency")
   revalidatePath("/compliance")
 }
 export async function deleteEmergencyPlan(id: number) {
   await assertWritable()
+  await assertEmergencyEditor()
   const scope = await requireModuleScope("emergency")
   await db
     .delete(emergencyPlan)
     .where(scopeWhere({ organizationId: emergencyPlan.organizationId, userId: emergencyPlan.userId }, scope, eq(emergencyPlan.id, id)))
   revalidatePath("/emergency")
   revalidatePath("/compliance")
+}
+
+// ----- جهات الاتصال -----
+export async function getEmergencyContacts() {
+  const scope = await requireScope()
+  return db
+    .select()
+    .from(emergencyContact)
+    .where(scopeWhere({ organizationId: emergencyContact.organizationId, userId: emergencyContact.userId }, scope))
+    .orderBy(emergencyContact.sortOrder, desc(emergencyContact.createdAt))
+}
+export async function createEmergencyContact(formData: FormData) {
+  await assertWritable()
+  await assertEmergencyEditor()
+  const { userId, organizationId } = await requireModuleScope("emergency")
+  await db.insert(emergencyContact).values({
+    userId,
+    organizationId,
+    name: str(formData.get("name")),
+    phone: str(formData.get("phone")),
+    contactType: str(formData.get("contactType"), "external"),
+    role: str(formData.get("role")),
+    available247: str(formData.get("available247")) === "true",
+    notes: str(formData.get("notes")),
+    sortOrder: num(formData.get("sortOrder"), 100),
+  })
+  revalidatePath("/emergency")
+}
+export async function deleteEmergencyContact(id: number) {
+  await assertWritable()
+  await assertEmergencyEditor()
+  const scope = await requireModuleScope("emergency")
+  await db
+    .delete(emergencyContact)
+    .where(
+      scopeWhere({ organizationId: emergencyContact.organizationId, userId: emergencyContact.userId }, scope, eq(emergencyContact.id, id)),
+    )
+  revalidatePath("/emergency")
+}
+
+// ----- المعدات -----
+export async function getEmergencyEquipment() {
+  const scope = await requireScope()
+  return db
+    .select()
+    .from(emergencyEquipment)
+    .where(scopeWhere({ organizationId: emergencyEquipment.organizationId, userId: emergencyEquipment.userId }, scope))
+    .orderBy(desc(emergencyEquipment.createdAt))
+}
+export async function createEmergencyEquipment(formData: FormData) {
+  await assertWritable()
+  await assertEmergencyEditor()
+  const { userId, organizationId } = await requireModuleScope("emergency")
+  await db.insert(emergencyEquipment).values({
+    userId,
+    organizationId,
+    equipType: str(formData.get("equipType"), "extinguisher"),
+    code: str(formData.get("code")),
+    location: str(formData.get("location")),
+    lastCheckDate: dateOrNull(formData.get("lastCheckDate")),
+    nextCheckDate: dateOrNull(formData.get("nextCheckDate")),
+    status: str(formData.get("status"), "ready"),
+    notes: str(formData.get("notes")),
+  })
+  revalidatePath("/emergency")
+}
+export async function updateEmergencyEquipment(id: number, formData: FormData) {
+  await assertWritable()
+  await assertEmergencyEditor()
+  const scope = await requireModuleScope("emergency")
+  await db
+    .update(emergencyEquipment)
+    .set({
+      equipType: str(formData.get("equipType"), "extinguisher"),
+      code: str(formData.get("code")),
+      location: str(formData.get("location")),
+      lastCheckDate: dateOrNull(formData.get("lastCheckDate")),
+      nextCheckDate: dateOrNull(formData.get("nextCheckDate")),
+      status: str(formData.get("status"), "ready"),
+      notes: str(formData.get("notes")),
+      updatedAt: new Date(),
+    })
+    .where(
+      scopeWhere({ organizationId: emergencyEquipment.organizationId, userId: emergencyEquipment.userId }, scope, eq(emergencyEquipment.id, id)),
+    )
+  revalidatePath("/emergency")
+}
+export async function deleteEmergencyEquipment(id: number) {
+  await assertWritable()
+  await assertEmergencyEditor()
+  const scope = await requireModuleScope("emergency")
+  await db
+    .delete(emergencyEquipment)
+    .where(
+      scopeWhere({ organizationId: emergencyEquipment.organizationId, userId: emergencyEquipment.userId }, scope, eq(emergencyEquipment.id, id)),
+    )
+  revalidatePath("/emergency")
+}
+
+// ----- التمارين -----
+export async function getEmergencyDrills() {
+  const scope = await requireScope()
+  return db
+    .select()
+    .from(emergencyDrill)
+    .where(scopeWhere({ organizationId: emergencyDrill.organizationId, userId: emergencyDrill.userId }, scope))
+    .orderBy(desc(emergencyDrill.drillDate), desc(emergencyDrill.createdAt))
+}
+// تسجيل تمرين؛ عند رصد قصور (needsAction) يُنشأ إجراء تصحيحي (CAPA) من نوع manual مرتبط وصفياً بالتمرين.
+export async function createEmergencyDrill(formData: FormData) {
+  await assertWritable()
+  const editor = await assertEmergencyEditor()
+  const { userId, organizationId } = await requireModuleScope("emergency")
+  const existing = await db
+    .select({ drillNo: emergencyDrill.drillNo })
+    .from(emergencyDrill)
+    .where(eq(emergencyDrill.organizationId, organizationId))
+  const year = new Date().getFullYear()
+  const drillNo = nextSeq(
+    (existing.map((r) => r.drillNo).filter(Boolean) as string[]).filter((n) => n.includes(`-${year}-`)),
+    `DRL-${year}-`,
+  )
+  const planId = num(formData.get("planId"), 0) || null
+  const inserted = await db
+    .insert(emergencyDrill)
+    .values({
+      userId,
+      organizationId,
+      drillNo,
+      planId,
+      drillDate: dateOrNull(formData.get("drillDate")),
+      drillType: str(formData.get("drillType"), "evacuation"),
+      participants: num(formData.get("participants"), 0),
+      evacuationMinutes: num(formData.get("evacuationMinutes"), 0),
+      outcome: str(formData.get("outcome")),
+      notes: str(formData.get("notes")),
+      attachments: jsonArr(formData.get("attachments")),
+      createdBy: editor.name,
+    })
+    .returning({ id: emergencyDrill.id })
+
+  // ربط قصور التمرين بإجراء تصحيحي (اختياري عبر needsAction).
+  if (str(formData.get("needsAction")) === "true") {
+    await db.insert(correctiveAction).values({
+      userId,
+      organizationId,
+      title: `إجراء تصحيحي من تمرين طوارئ ${drillNo}`,
+      source: str(formData.get("actionDescription")) || str(formData.get("notes")),
+      sourceType: "manual",
+      sourceId: inserted[0]?.id ?? null,
+      status: "open",
+      priority: str(formData.get("actionPriority"), "medium"),
+      dueDate: dateOrNull(formData.get("actionDueDate")),
+    })
+    revalidatePath("/corrective-actions")
+  }
+  // إذا ارتبط التمرين بخطة، حدّث تاريخ آخر تمرين عليها.
+  if (planId) {
+    await db
+      .update(emergencyPlan)
+      .set({ lastDrillDate: dateOrNull(formData.get("drillDate")), updatedAt: new Date() })
+      .where(and(eq(emergencyPlan.id, planId), eq(emergencyPlan.organizationId, organizationId)))
+  }
+  revalidatePath("/emergency")
+}
+export async function deleteEmergencyDrill(id: number) {
+  await assertWritable()
+  await assertEmergencyEditor()
+  const scope = await requireModuleScope("emergency")
+  await db
+    .delete(emergencyDrill)
+    .where(scopeWhere({ organizationId: emergencyDrill.organizationId, userId: emergencyDrill.userId }, scope, eq(emergencyDrill.id, id)))
+  revalidatePath("/emergency")
+}
+
+// ----- البلاغات (التفعيل الفعلي) -----
+export async function getEmergencyActivations() {
+  const scope = await requireScope()
+  return db
+    .select()
+    .from(emergencyActivation)
+    .where(scopeWhere({ organizationId: emergencyActivation.organizationId, userId: emergencyActivation.userId }, scope))
+    .orderBy(desc(emergencyActivation.reportedAt), desc(emergencyActivation.createdAt))
+}
+export async function createEmergencyActivation(formData: FormData) {
+  await assertWritable()
+  const editor = await assertEmergencyEditor()
+  const { userId, organizationId } = await requireModuleScope("emergency")
+  const existing = await db
+    .select({ activationNo: emergencyActivation.activationNo })
+    .from(emergencyActivation)
+    .where(eq(emergencyActivation.organizationId, organizationId))
+  const year = new Date().getFullYear()
+  const activationNo = nextSeq(
+    (existing.map((r) => r.activationNo).filter(Boolean) as string[]).filter((n) => n.includes(`-${year}-`)),
+    `ACT-${year}-`,
+  )
+  await db.insert(emergencyActivation).values({
+    userId,
+    organizationId,
+    activationNo,
+    planId: num(formData.get("planId"), 0) || null,
+    scenario: str(formData.get("scenario")),
+    description: str(formData.get("description")),
+    reportedAt: tsOrNull(formData.get("reportedAt")) ?? new Date(),
+    arrivedAt: tsOrNull(formData.get("arrivedAt")),
+    closedAt: tsOrNull(formData.get("closedAt")),
+    outcome: str(formData.get("outcome")),
+    createdBy: editor.name,
+  })
+  revalidatePath("/emergency")
+}
+export async function deleteEmergencyActivation(id: number) {
+  await assertWritable()
+  await assertEmergencyEditor()
+  const scope = await requireModuleScope("emergency")
+  await db
+    .delete(emergencyActivation)
+    .where(
+      scopeWhere({ organizationId: emergencyActivation.organizationId, userId: emergencyActivation.userId }, scope, eq(emergencyActivation.id, id)),
+    )
+  revalidatePath("/emergency")
+}
+// تحويل بلاغ الطوارئ إلى حادث في وحدة الحوادث، وحفظ الرابط على البلاغ.
+export async function convertActivationToIncident(id: number) {
+  await assertWritable()
+  const editor = await assertEmergencyEditor()
+  const scope = await requireModuleScope("emergency")
+  const rows = await db
+    .select()
+    .from(emergencyActivation)
+    .where(
+      scopeWhere({ organizationId: emergencyActivation.organizationId, userId: emergencyActivation.userId }, scope, eq(emergencyActivation.id, id)),
+    )
+    .limit(1)
+  const act = rows[0]
+  if (!act) throw new Error("البلاغ غير موجود.")
+  if (act.convertedIncidentId) throw new Error("سبق تحويل هذا البلاغ إلى حادث.")
+  const inserted = await db
+    .insert(incident)
+    .values({
+      userId: act.userId,
+      organizationId: act.organizationId,
+      title: `حادث من بلاغ طوارئ ${act.activationNo || ""}`.trim(),
+      description: act.description || act.scenario,
+      severity: "high",
+      status: "open",
+      location: "",
+      incidentDate: (act.reportedAt ? new Date(act.reportedAt) : new Date()).toISOString().slice(0, 10),
+      reportedBy: editor.name,
+    })
+    .returning({ id: incident.id })
+  const incidentId = inserted[0]?.id ?? null
+  await db
+    .update(emergencyActivation)
+    .set({ convertedIncidentId: incidentId, updatedAt: new Date() })
+    .where(eq(emergencyActivation.id, id))
+  revalidatePath("/emergency")
+  revalidatePath("/incidents")
+  return incidentId
+}
+
+// ----- مؤشرات الأداء (KPI) -----
+export async function getEmergencyStats() {
+  const scope = await requireScope()
+  const w = (t: { organizationId: any; userId: any }) => scopeWhere({ organizationId: t.organizationId, userId: t.userId }, scope)
+  const [plans, contacts, equipment, drills, activations] = await Promise.all([
+    db.select().from(emergencyPlan).where(w(emergencyPlan)),
+    db.select().from(emergencyContact).where(w(emergencyContact)),
+    db.select().from(emergencyEquipment).where(w(emergencyEquipment)),
+    db.select().from(emergencyDrill).where(w(emergencyDrill)),
+    db.select().from(emergencyActivation).where(w(emergencyActivation)),
+  ])
+  const today = new Date()
+  const equipDue = equipment.filter((e) => {
+    if (e.status !== "ready") return true
+    if (!e.nextCheckDate) return false
+    return new Date(e.nextCheckDate as unknown as string) < today
+  }).length
+  return {
+    plansTotal: plans.length,
+    plansApproved: plans.filter((p) => p.status === "approved").length,
+    plansDraft: plans.filter((p) => p.status !== "approved").length,
+    contactsTotal: contacts.length,
+    equipmentTotal: equipment.length,
+    equipmentDue: equipDue,
+    drillsTotal: drills.length,
+    activationsTotal: activations.length,
+    activationsOpen: activations.filter((a) => !a.closedAt).length,
+  }
 }
 
 /* ---------------- ISO 45001 · المقاولون (البند 8.1.4) ---------------- */
