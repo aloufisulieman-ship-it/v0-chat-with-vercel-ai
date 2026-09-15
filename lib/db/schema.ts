@@ -584,7 +584,7 @@ export const department = pgTable(
     organizationId: text("organizationId").notNull(),
     code: text("code").notNull(),
     nameAr: text("name_ar").notNull().default(""),
-    // مدير القسم (اختياري) — يُستخدم لاحقاً لتوجيه الإشعارات والصلاحيات.
+    // مدير القسم (اختياري) — يُستخدم لاحقاً لتوجيه الإشعارات وا��صلاحيات.
     managerUserId: text("manager_user_id"),
     email: text("email").notNull().default(""),
     // اتفاقية مستوى الخدمة بالساعات — تُشتق منها due_at للإحالة عند إنشائها.
@@ -959,18 +959,112 @@ export const workerConsultation = pgTable("worker_consultation", {
 })
 
 // البند 8.2 — التأهب للطوارئ والاستجابة لها: خطط الطوارئ وتماريــنها.
-// planType: fire (حريق) | chemical (كيميائي) | medical (طبي) | evacuation (إخلاء) | natural (طبيعي).
-// status: ready (جاهزة) | needs_review (تحتاج مراجعة) | outdated (منتهية).
+// scenario: نص السيناريو (حريق | إصابة بليغة/دهس | انسكاب مواد | انقطاع كهرباء | طقس وسيول | حادث رافعة | إخلاء عام).
+// planType: fire | chemical | medical | evacuation | natural (متوافق مع القديم؛ يُشتق من السيناريو).
+// severity: low | medium | high | critical.
+// status: draft (مسودة) | approved (معتمدة) | under_review (قيد المراجعة). (القيمة القديمة ready تُعامل كـ approved.)
 export const emergencyPlan = pgTable("emergency_plan", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
   organizationId: text("organizationId").notNull(),
+  planNo: text("plan_no").notNull().default(""),
   scenario: text("scenario").notNull(),
   planType: text("plan_type").notNull().default("fire"),
+  severity: text("severity").notNull().default("medium"),
+  location: text("location").notNull().default(""),
+  triggerCriteria: text("trigger_criteria").notNull().default(""),
+  // خطوات الاستجابة المرقّمة: [{ order, text }].
+  responseSteps: jsonb("response_steps").default([]),
+  // فريق الطوارئ وأدواره: [{ role, name }] — قائد الحادث، مسؤول الإخلاء، المسعف، الاتصال.
+  roles: jsonb("roles").default([]),
+  assemblyPoint: text("assembly_point").notNull().default(""),
   responsibleTeam: text("responsible_team").notNull().default(""),
+  reviewDate: date("review_date"),
   lastDrillDate: date("last_drill_date"),
   nextDrillDate: date("next_drill_date"),
+  status: text("status").notNull().default("draft"),
+  // اعتماد الخطة بثلاثة تواقيع (Data URLs). الخطة تُعتمد فقط عند اكتمال الثلاثة.
+  preparerSignature: text("preparer_signature").notNull().default(""),
+  safetySignature: text("safety_signature").notNull().default(""),
+  managementSignature: text("management_signature").notNull().default(""),
+  approvedAt: timestamp("approved_at"),
+  approvedBy: text("approved_by").notNull().default(""),
+  createdBy: text("created_by").notNull().default(""),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+// جهات اتصال الطوارئ (داخلية/خارجية) — الدفاع المدني، الإسعاف، فريق السلامة الداخلي...
+// contactType: internal (داخلية) | external (خارجية).
+export const emergencyContact = pgTable("emergency_contact", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
+  name: text("name").notNull(),
+  phone: text("phone").notNull().default(""),
+  contactType: text("contact_type").notNull().default("external"),
+  role: text("role").notNull().default(""),
+  available247: boolean("available_247").notNull().default(false),
+  notes: text("notes").notNull().default(""),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+// معدات الطوارئ — الطفايات، صناديق الإسعاف، أجهزة AED، الخراطيم، نقاط التجمع، مخارج الطوارئ.
+// equipType: extinguisher | first_aid | aed | hose | assembly_point | exit | other.
+// status: ready (جاهزة) | needs_maintenance (تحتاج صيانة) | expired (منتهية).
+export const emergencyEquipment = pgTable("emergency_equipment", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
+  equipType: text("equip_type").notNull().default("extinguisher"),
+  code: text("code").notNull().default(""),
+  location: text("location").notNull().default(""),
+  lastCheckDate: date("last_check_date"),
+  nextCheckDate: date("next_check_date"),
   status: text("status").notNull().default("ready"),
+  notes: text("notes").notNull().default(""),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+// تمارين الطوارئ (الإخلاء/الحريق/الإسعاف/الانسكاب) وربطها بخطة.
+// drillType: evacuation | fire | first_aid | spill.
+export const emergencyDrill = pgTable("emergency_drill", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
+  drillNo: text("drill_no").notNull().default(""),
+  planId: integer("plan_id"),
+  drillDate: date("drill_date"),
+  drillType: text("drill_type").notNull().default("evacuation"),
+  participants: integer("participants").notNull().default(0),
+  evacuationMinutes: integer("evacuation_minutes").notNull().default(0),
+  outcome: text("outcome").notNull().default(""),
+  notes: text("notes").notNull().default(""),
+  attachments: jsonb("attachments").default([]),
+  createdBy: text("created_by").notNull().default(""),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+// بلاغات تفعيل الطوارئ الفعلية: وقت البلاغ، الوصول، الإغلاق، الخطة المستخدمة، النتيجة.
+// قابلة للتحويل إلى حادث في وحدة الحوادث (convertedIncidentId يحفظ الرابط).
+export const emergencyActivation = pgTable("emergency_activation", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  organizationId: text("organizationId").notNull(),
+  activationNo: text("activation_no").notNull().default(""),
+  planId: integer("plan_id"),
+  scenario: text("scenario").notNull().default(""),
+  description: text("description").notNull().default(""),
+  reportedAt: timestamp("reported_at"),
+  arrivedAt: timestamp("arrived_at"),
+  closedAt: timestamp("closed_at"),
+  outcome: text("outcome").notNull().default(""),
+  convertedIncidentId: integer("converted_incident_id"),
+  createdBy: text("created_by").notNull().default(""),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
