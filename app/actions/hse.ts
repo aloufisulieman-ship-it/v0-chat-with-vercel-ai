@@ -75,6 +75,7 @@ import {
 import { saveDataUrlAttachment } from "@/lib/attachments-server"
 import { assertNotArchived, logRecordEvent } from "@/app/actions/lifecycle"
 import { deptForClassification } from "@/lib/lifecycle"
+import { incidentColumns, violationColumns } from "@/lib/audit-redaction"
 
 function str(v: FormDataEntryValue | null, fallback = "") {
   return v == null ? fallback : String(v)
@@ -165,7 +166,7 @@ export async function saveCompany(formData: FormData) {
 export async function getIncidents() {
   const scope = await requireScope()
   return db
-    .select()
+    .select(incidentColumns(scope))
     .from(incident)
     .where(scopeWhere({ organizationId: incident.organizationId, userId: incident.userId }, scope))
     .orderBy(desc(incident.createdAt))
@@ -1031,6 +1032,51 @@ export async function createAudit(formData: FormData) {
   }
   revalidatePath("/audits")
 }
+// تحديث تدقيق قائم دون حذفه: ينقل الحالة (مجدول → قيد المعالجة → مكتمل) ويصحّح
+// النتيجة والبيانات الوصفية، مع الحفاظ على السجل التاريخي ورقمه.
+export async function updateAudit(formData: FormData) {
+  await assertWritable()
+  const scope = await requireModuleScope("audits")
+  const id = Number(formData.get("id"))
+  if (!Number.isFinite(id)) throw new Error("معرّف غير صالح")
+
+  const title = str(formData.get("title"))
+  if (!title.trim()) throw new Error("عنوان التدقيق مطلوب")
+  const status = str(formData.get("status"), "scheduled")
+  const score = num(formData.get("score"))
+
+  const updated = await db
+    .update(audit)
+    .set({
+      title,
+      standard: str(formData.get("standard")),
+      auditor: str(formData.get("auditor")),
+      score,
+      status,
+      auditDate: dateOrNull(formData.get("auditDate")),
+    })
+    .where(scopeWhere({ organizationId: audit.organizationId, userId: audit.userId }, scope, eq(audit.id, id)))
+    .returning({ id: audit.id })
+  if (!updated[0]) throw new Error("التدقيق غير موجود أو لا تملك صلاحية تعديله")
+
+  // نفس قاعدة الإنشاء (ISO 45001 §10.2): إغلاق تدقيق بنتيجة دون العتبة يفتح إجراءً
+  // تصحيحياً. ensureCorrectiveAction لا يكرّر الإجراء لنفس المصدر.
+  if (status === "closed" && score < AUDIT_NONCONFORMITY_SCORE) {
+    await ensureCorrectiveAction({
+      organizationId: scope.organizationId,
+      userId: scope.userId,
+      sourceType: "audit",
+      sourceId: id,
+      title: `معالجة عدم مطابقة في تدقيق: ${title}`,
+      priority: score < 60 ? "high" : "medium",
+      sourceLabel: `تدقيق: ${title} (${score}%)`,
+    })
+    revalidatePath("/actions")
+  }
+  revalidatePath("/audits")
+  revalidatePath("/compliance")
+}
+
 export async function deleteAudit(id: number) {
   await assertWritable()
   const scope = await requireModuleScope("audits")
@@ -1782,13 +1828,18 @@ export async function getInternalAudits() {
     .where(scopeWhere({ organizationId: internalAudit.organizationId, userId: internalAudit.userId }, scope))
     .orderBy(desc(internalAudit.createdAt))
 }
+// إنشاء/حذف سجل تدقيق داخلي: لمدير النظام فقط، لأن السجل يدخل مباشرةً في حساب
+// نسبة المطابقة لبند ISO 45001 §9.2 في صفحة الامتثال.
 export async function createInternalAudit(formData: FormData) {
   await assertWritable()
-  const { userId, organizationId } = await requireModuleScope("internal-audit")
+  const { userId, organizationId, role } = await requireModuleScope("internal-audit")
+  if (role !== "admin") throw new Error("إضافة تدقيق داخلي متاحة لمدير النظام فقط")
+  const title = str(formData.get("title")).trim()
+  if (!title) throw new Error("عنوان التدقيق الداخلي مطلوب")
   await db.insert(internalAudit).values({
     userId,
     organizationId,
-    title: str(formData.get("title")),
+    title,
     scope: str(formData.get("scope")),
     auditor: str(formData.get("auditor")),
     auditDate: dateOrNull(formData.get("auditDate")),
@@ -1796,16 +1847,54 @@ export async function createInternalAudit(formData: FormData) {
     status: str(formData.get("status"), "planned"),
     result: str(formData.get("result")),
   })
-  revalidatePath("/internal-audit")
+  revalidatePath("/audits")
   revalidatePath("/compliance")
 }
+
+// تحديث تدقيق داخلي قائم (إغلاقه أو تصحيح نتيجته) دون حذف السجل.
+export async function updateInternalAudit(formData: FormData) {
+  await assertWritable()
+  const scope = await requireModuleScope("internal-audit")
+  if (scope.role !== "admin") throw new Error("تعديل التدقيق الداخلي متاح لمدير النظام فقط")
+  const id = Number(formData.get("id"))
+  if (!Number.isFinite(id)) throw new Error("معرّف غير صالح")
+  const title = str(formData.get("title")).trim()
+  if (!title) throw new Error("عنوان التدقيق الداخلي مطلوب")
+
+  const updated = await db
+    .update(internalAudit)
+    .set({
+      title,
+      scope: str(formData.get("scope")),
+      auditor: str(formData.get("auditor")),
+      auditDate: dateOrNull(formData.get("auditDate")),
+      nonconformities: Math.max(0, num(formData.get("nonconformities"))),
+      status: str(formData.get("status"), "planned"),
+      result: str(formData.get("result")),
+      updatedAt: new Date(),
+    })
+    .where(
+      scopeWhere(
+        { organizationId: internalAudit.organizationId, userId: internalAudit.userId },
+        scope,
+        eq(internalAudit.id, id),
+      ),
+    )
+    .returning({ id: internalAudit.id })
+  if (!updated[0]) throw new Error("التدقيق الداخلي غير موجود")
+
+  revalidatePath("/audits")
+  revalidatePath("/compliance")
+}
+
 export async function deleteInternalAudit(id: number) {
   await assertWritable()
   const scope = await requireModuleScope("internal-audit")
+  if (scope.role !== "admin") throw new Error("حذف التدقيق الداخلي متاح لمدير النظام فقط")
   await db
     .delete(internalAudit)
     .where(scopeWhere({ organizationId: internalAudit.organizationId, userId: internalAudit.userId }, scope, eq(internalAudit.id, id)))
-  revalidatePath("/internal-audit")
+  revalidatePath("/audits")
   revalidatePath("/compliance")
 }
 
@@ -1813,7 +1902,7 @@ export async function deleteInternalAudit(id: number) {
   export async function getViolations() {
   const scope = await requireModuleScope("violations")
   return db
-    .select()
+    .select(violationColumns(scope))
     .from(violation)
     .where(scopeWhere({ organizationId: violation.organizationId, userId: violation.userId }, scope))
     .orderBy(desc(violation.createdAt))
@@ -2782,14 +2871,14 @@ export async function getDashboardData() {
   // العزل بين المؤسس��ت صارم (organizationId دائماً)؛ وداخل المؤسسة يرى المديرُ كل
   // السجلات والموظفُ سجلاته فقط عبر scopeWhere.
   const [inc, ins, per, rsk, act, obs, vio, trend, detectionTrend] = await Promise.all([
-    db.select().from(incident).where(scopeWhere({ organizationId: incident.organizationId, userId: incident.userId }, scope)),
+    db.select(incidentColumns(scope)).from(incident).where(scopeWhere({ organizationId: incident.organizationId, userId: incident.userId }, scope)),
     db.select().from(inspection).where(scopeWhere({ organizationId: inspection.organizationId, userId: inspection.userId }, scope)),
     db.select().from(permit).where(scopeWhere({ organizationId: permit.organizationId, userId: permit.userId }, scope)),
     db.select().from(risk).where(scopeWhere({ organizationId: risk.organizationId, userId: risk.userId }, scope)),
     db.select().from(correctiveAction).where(scopeWhere({ organizationId: correctiveAction.organizationId, userId: correctiveAction.userId }, scope)),
     db.select().from(observation).where(scopeWhere({ organizationId: observation.organizationId, userId: observation.userId }, scope)),
     db
-      .select()
+      .select(violationColumns(scope))
       .from(violation)
       .where(scopeWhere({ organizationId: violation.organizationId, userId: violation.userId }, scope))
       .orderBy(desc(violation.createdAt)),
@@ -2852,7 +2941,7 @@ export async function getReportData(
 
   if (type === "incidents" || type === "all") {
     const rows = await db
-      .select()
+      .select(incidentColumns(scope))
       .from(incident)
       .where(scopeWhere({ organizationId: incident.organizationId, userId: incident.userId }, scope))
       .orderBy(desc(incident.createdAt))
@@ -2883,7 +2972,7 @@ export async function getReportData(
 
   if (type === "violations" || type === "all") {
     const rows = await db
-      .select()
+      .select(violationColumns(scope))
       .from(violation)
       .where(scopeWhere({ organizationId: violation.organizationId, userId: violation.userId }, scope))
       .orderBy(desc(violation.createdAt))

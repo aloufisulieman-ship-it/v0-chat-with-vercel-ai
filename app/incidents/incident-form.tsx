@@ -21,6 +21,7 @@ import {
   type IncidentParty,
 } from "@/lib/incident-types"
 import { useI18n } from "@/lib/i18n/client"
+import { assertTotalUploadSize, fileToUploadDataUrl } from "@/lib/image-compress"
 import {
   incidentSeverityLabel,
   incidentStatusOptLabel,
@@ -150,22 +151,33 @@ export function IncidentFormDialog({ defaultReporter = "", equipmentOptions = []
     setParties((prev) => prev.map((p, i) => (i === index ? { ...p, [key]: value } : p)))
   }
 
-  function readFileToDataUrl(file: File, onDone: (dataUrl: string) => void) {
-    const reader = new FileReader()
-    reader.onload = () => onDone(reader.result as string)
-    reader.readAsDataURL(file)
+  // كل صور الحادثة تمرّ عبر الضغط الموحّد مع فرض حدّ الحجم ورسالة عربية واضحة.
+  async function readUpload(file: File, onDone: (dataUrl: string) => void) {
+    try {
+      onDone(await fileToUploadDataUrl(file))
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "تعذّر رفع الصورة", variant: "destructive" })
+    }
   }
 
-  function handlePartyPhoto(index: number, e: React.ChangeEvent<HTMLInputElement>) {
+  async function handlePartyPhoto(index: number, e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
-    if (file) readFileToDataUrl(file, (url) => updateParty(index, "injuryPhoto", url))
     e.target.value = ""
+    if (file) await readUpload(file, (url) => updateParty(index, "injuryPhoto", url))
   }
 
-  function handleSitePhotos(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleSitePhotos(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? [])
-    files.forEach((f) => readFileToDataUrl(f, (url) => setSitePhotos((prev) => [...prev, url])))
     e.target.value = ""
+    for (const f of files) {
+      await readUpload(f, (url) =>
+        setSitePhotos((prev) => {
+          const next = [...prev, url]
+          assertTotalUploadSize(next)
+          return next
+        }),
+      )
+    }
   }
 
   function handleSave() {

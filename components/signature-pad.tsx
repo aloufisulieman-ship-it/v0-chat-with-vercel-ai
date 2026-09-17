@@ -77,9 +77,11 @@ export function SignaturePad({
   async function save() {
     const canvas = canvasRef.current
     if (!canvas || !hasInk) return
-    const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"))
+    // JPEG على خلفية بيضاء بدل PNG الخام: نفس وضوح التوقيع بحجم أصغر بكثير، فلا
+    // تتراكم التواقيع مع الصور وتتجاوز حدّ حجم الطلب.
+    const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.8))
     if (!blob) return
-    const file = new File([blob], `signature-${Date.now()}.png`, { type: "image/png" })
+    const file = new File([blob], `signature-${Date.now()}.jpg`, { type: "image/jpeg" })
     await onSave(file)
     clear()
   }

@@ -8,6 +8,7 @@ import { and, desc, eq, ne } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { randomUUID } from "crypto"
 import { serializePermissions } from "@/lib/permissions"
+import type { AssignableRole } from "@/lib/roles"
 
 export async function getUsers() {
   const admin = await requireAdmin()
@@ -31,7 +32,7 @@ export async function createUser(input: {
   name: string
   email: string
   password: string
-  role: "admin" | "manager" | "user"
+  role: AssignableRole
   department: string
   permissions: string[]
 }): Promise<{ success?: true; error?: string }> {
@@ -143,7 +144,7 @@ export async function rejectUser(id: string) {
   revalidatePath("/users")
 }
 
-export async function setUserRole(id: string, role: "admin" | "manager" | "user") {
+export async function setUserRole(id: string, role: AssignableRole) {
   await assertWritable()
   const admin = await requireAdmin()
   // Cannot change your own role (avoid locking yourself out of admin).

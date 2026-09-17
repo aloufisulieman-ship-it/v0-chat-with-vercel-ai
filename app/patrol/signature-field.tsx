@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react"
 import SignatureCanvas from "react-signature-canvas"
 import { X, PenLine } from "lucide-react"
 import { useI18n } from "@/lib/i18n/client"
+import { compressSignatureDataUrl } from "@/lib/image-compress"
 
 // حقل توقيع رقمي مبني على react-signature-canvas.
 // يُستورد ديناميكياً (ssr:false) من patrol-client لأن المكتبة تعتمد على DOM.
@@ -53,9 +54,13 @@ export default function SignatureField({
     }
   }, [value])
 
-  function handleEnd() {
+  async function handleEnd() {
     if (disabled || !padRef.current) return
-    onChange(padRef.current.isEmpty() ? "" : padRef.current.toDataURL())
+    if (padRef.current.isEmpty()) {
+      onChange("")
+      return
+    }
+    onChange(await compressSignatureDataUrl(padRef.current.toDataURL()))
   }
   function clear() {
     padRef.current?.clear()

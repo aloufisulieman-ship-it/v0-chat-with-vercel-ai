@@ -32,6 +32,7 @@ import {
   updateUserPermissions,
 } from "@/app/actions/users"
 import { parsePermissions } from "@/lib/permissions"
+import type { AssignableRole } from "@/lib/roles"
 import { departmentOptions } from "@/lib/labels"
 import { toast } from "@/hooks/use-toast"
 import { useI18n } from "@/lib/i18n/client"
@@ -75,17 +76,18 @@ function RoleSelect({
   userId: string
   role: string
   disabled: boolean
-  onChange: (id: string, role: "admin" | "manager" | "user") => void
+  onChange: (id: string, role: AssignableRole) => void
 }) {
   const { t } = useI18n()
   return (
-    <Select value={role} disabled={disabled} onValueChange={(v) => onChange(userId, v as "admin" | "manager" | "user")}>
+    <Select value={role} disabled={disabled} onValueChange={(v) => onChange(userId, v as AssignableRole)}>
       <SelectTrigger className="h-9 w-36">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="admin">{t("usersManager.roleAdmin")}</SelectItem>
         <SelectItem value="manager">{t("usersManager.roleManager")}</SelectItem>
+        <SelectItem value="auditor">{t("usersManager.roleAuditor")}</SelectItem>
         <SelectItem value="user">{t("usersManager.roleUser")}</SelectItem>
       </SelectContent>
     </Select>
@@ -122,7 +124,7 @@ function CreateUserDialog() {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [role, setRole] = useState<"admin" | "manager" | "user">("user")
+  const [role, setRole] = useState<AssignableRole>("user")
   const [department, setDepartment] = useState("")
   const [perms, setPerms] = useState<string[]>([])
   const [isPending, startTransition] = useTransition()
@@ -202,13 +204,14 @@ function CreateUserDialog() {
           </div>
           <div className="grid gap-2">
             <Label>{t("usersManager.roleLabel")}</Label>
-            <Select value={role} onValueChange={(v) => setRole(v as "admin" | "manager" | "user")}>
+            <Select value={role} onValueChange={(v) => setRole(v as AssignableRole)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="admin">{t("usersManager.roleAdmin")}</SelectItem>
                 <SelectItem value="manager">{t("usersManager.roleManager")}</SelectItem>
+                <SelectItem value="auditor">{t("usersManager.roleAuditor")}</SelectItem>
                 <SelectItem value="user">{t("usersManager.roleUser")}</SelectItem>
               </SelectContent>
             </Select>

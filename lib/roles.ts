@@ -1,7 +1,7 @@
 // المصدر الوحيد لتعريف الأدوار وحالات الحساب في النظام (يُستخدم في إدارة المستخدمين
 // والتوثيق داخل الواجهة). الصلاحيات الفعلية للوحدات تُحسم في lib/permissions.ts.
 
-export const ASSIGNABLE_ROLES = ["admin", "manager", "user"] as const
+export const ASSIGNABLE_ROLES = ["admin", "manager", "auditor", "user"] as const
 export type AssignableRole = (typeof ASSIGNABLE_ROLES)[number]
 
 export const ACCOUNT_STATUSES = ["active", "suspended", "banned"] as const
@@ -36,6 +36,14 @@ export const ROLE_DEFINITIONS: Record<
       en: "Full module access and sees all organization records, but no user management and cannot reopen archived records.",
     },
     access: { ar: "كل الوحدات — بلا إدارة مستخدمين", en: "All modules — no user management" },
+  },
+  auditor: {
+    label: { ar: "مدقق", en: "Auditor" },
+    description: {
+      ar: "مدقق ISO 45001: وصول بنطاق مدير السلامة والصحة المهنية لوحدات التدقيق والامتثال ويرى كل سجلات المؤسسة، ويحوّل رصد المراقبة الذكية إلى مخالفة ويوقّع عليها. لا يرى وحدتَي الموارد البشرية والمالية، وتُحجب عنه بيانات الإجراءات التأديبية والتسويات المالية من قاعدة البيانات نفسها.",
+      en: "ISO 45001 auditor: HSE-manager-level access to audit and compliance modules across all organization records, converts AI detections into violations and signs them. No access to HR or Finance modules, and disciplinary actions and financial settlements are stripped at the query level.",
+    },
+    access: { ar: "وحدات تدقيق ISO 45001 — بلا بيانات تأديبية أو تسويات", en: "ISO 45001 audit modules — no disciplinary or settlement data" },
   },
   user: {
     label: { ar: "مستخدم", en: "User" },

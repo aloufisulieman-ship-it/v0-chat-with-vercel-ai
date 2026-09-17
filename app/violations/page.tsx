@@ -24,6 +24,7 @@ import { ViolationEditDialog } from "./violation-edit-dialog"
 import { LifecycleFilterBar } from "@/components/lifecycle/lifecycle-filter-bar"
 import { DeptBadge, DueDateBadge, LifecycleBadge, SourceBadge } from "@/components/lifecycle/lifecycle-badges"
 import { LifecycleActions } from "@/components/lifecycle/lifecycle-actions"
+import { AUDITOR_SIGNATURE_ROLE } from "@/lib/signature-roles"
 import { applyLifecycleFilters, isArchived, lifecycleLabel, lifecycleUi, normalizeLifecycle } from "@/lib/lifecycle"
 
 type Violation = Awaited<ReturnType<typeof getViolations>>[number]
@@ -155,8 +156,11 @@ export default async function ViolationsPage({
                     { label: t("violations.sigAuditor"), value: aiSignatureInfo[r.id].auditor },
                     { label: t("violations.sigHrOfficer"), value: aiSignatureInfo[r.id].hrOfficer },
                   ]
-                : []),
+                : [{ label: t("violations.sigAuditor"), value: "" }]),
             ]}
+            // خانة توقيع المدقق متاحة على كل مخالفة (لا الآلية فقط) ليوقّع المدقق
+            // على ما يراجعه ضمن التواقيع الرسمية.
+            extraSignatureRoles={[AUDITOR_SIGNATURE_ROLE]}
             initialAttachments={[]}
             emailSender={emailSender}
             emailContext={{

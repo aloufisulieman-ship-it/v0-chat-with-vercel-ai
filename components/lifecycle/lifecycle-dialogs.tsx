@@ -20,17 +20,10 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/hooks/use-toast"
 import { closeRecord, referRecord, reopenRecord } from "@/app/actions/lifecycle"
 import { DEPTS, deptLabel, lifecycleUi, type Dept, type LifecycleModule } from "@/lib/lifecycle"
+import { fileToUploadDataUrl } from "@/lib/image-compress"
 
 type L = "ar" | "en"
 
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader()
-    r.onload = () => resolve(String(r.result))
-    r.onerror = () => reject(r.error)
-    r.readAsDataURL(file)
-  })
-}
 
 // ---------- نافذة الإحالة ----------
 export function ReferDialog({
@@ -177,7 +170,7 @@ export function CloseDialog({
     setBusy(true)
     try {
       const file = fileRef.current?.files?.[0]
-      const evidenceDataUrl = file ? await fileToDataUrl(file) : undefined
+      const evidenceDataUrl = file ? await fileToUploadDataUrl(file) : undefined
       await closeRecord({ module, id: recordId, closureAction: action.trim(), evidenceDataUrl })
       toast({ title: locale === "en" ? "Record closed and archived" : "تم إغلاق السجل وأرشفته" })
       onOpenChange(false)

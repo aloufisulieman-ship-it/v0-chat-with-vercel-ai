@@ -29,6 +29,7 @@ import { toast } from "@/hooks/use-toast"
 import type { EmployeeRecord } from "./employee-registry"
 import { useI18n } from "@/lib/i18n/client"
 import type { TFunction } from "@/lib/i18n/translate"
+import { compressSignatureDataUrl, fileToUploadDataUrl } from "@/lib/image-compress"
 
 // ===== Worker groups & weekly schedule =====
 // JS getDay(): 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
@@ -160,10 +161,10 @@ function SignaturePad({ value, onChange }: { value: string; onChange: (v: string
     ctx.lineTo(pos.x, pos.y)
     ctx.stroke()
   }
-  function end() {
+  async function end() {
     if (!drawingRef.current) return
     drawingRef.current = false
-    onChange(canvasRef.current!.toDataURL())
+    onChange(await compressSignatureDataUrl(canvasRef.current!.toDataURL()))
   }
   function clear() {
     const canvas = canvasRef.current!
@@ -295,12 +296,15 @@ export function ToolboxTalkTab({ employees, initialSessions }: { employees: Empl
     } : row))
   }
 
-  function handlePhoto(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handlePhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
+    e.target.value = ""
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => setPhoto(typeof reader.result === "string" ? reader.result : "")
-    reader.readAsDataURL(file)
+    try {
+      setPhoto(await fileToUploadDataUrl(file))
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "تعذّر رفع الصورة", variant: "destructive" })
+    }
   }
 
   function resetForm() {

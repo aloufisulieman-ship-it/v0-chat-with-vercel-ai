@@ -12,6 +12,7 @@ import { createTrainingFull } from "@/app/actions/hse"
 import { inspectionStatusOptions } from "@/lib/labels"
 import { useI18n } from "@/lib/i18n/client"
 import { statusLabel } from "@/lib/i18n/labels"
+import { compressSignatureDataUrl } from "@/lib/image-compress"
 
 // لوحة توقيع رقمية تدعم الماوس واللمس (بصمة الإصبع على الشاشة) وتحفظ كصورة base64.
 function SignaturePad({
@@ -61,9 +62,9 @@ function SignaturePad({
     ctx.lineTo(pos.x, pos.y)
     ctx.stroke()
   }
-  function end() {
+  async function end() {
     setDrawing(false)
-    onChange(canvasRef.current!.toDataURL())
+    onChange(await compressSignatureDataUrl(canvasRef.current!.toDataURL()))
   }
   function clear() {
     const canvas = canvasRef.current!

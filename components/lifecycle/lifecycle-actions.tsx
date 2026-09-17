@@ -59,7 +59,10 @@ export function LifecycleActions({
 
   const canRefer = canTransition(from, "referred")
   const canStart = canTransition(from, "in_progress")
-  const canClose = canTransition(from, "closed")
+  // السجل المحال إلى جهة (HR/المالية) يُغلق من لوحة الجهة المختصة حصراً، حيث يُلتقط
+  // توقيع موظفها الرسمي. لذلك يُخفى زر الإغلاق العام هنا، ويرفضه الخادم أيضاً بلا توقيع.
+  const referredToDept = assignedDept === "hr" || assignedDept === "finance"
+  const canClose = canTransition(from, "closed") && !referredToDept
   const canReopen = isAdmin && from === "archived"
 
   const lockedDept: Dept | null = module === "incidents" ? deptForClassification(classification) : null

@@ -14,6 +14,7 @@ import {
 import { type SignatureRole } from "@/lib/signature-roles"
 import { toast } from "@/hooks/use-toast"
 import { useI18n } from "@/lib/i18n/client"
+import { fileToUploadFile } from "@/lib/image-compress"
 
 export function fileUrl(pathname: string) {
   return `/api/file?pathname=${encodeURIComponent(pathname)}`
@@ -63,7 +64,8 @@ export function AttachmentsManager({
     fd.set("module", module)
     fd.set("recordId", String(recordId))
     fd.set("kind", kind)
-    fd.set("file", file)
+    // الصور تُضغط قبل الإرسال ويُفرض حدّ الحجم برسالة عربية بدل فشل غامض من الخادم.
+    fd.set("file", await fileToUploadFile(file))
     const row = await uploadAttachment(fd)
     return row as AttachmentRow
   }

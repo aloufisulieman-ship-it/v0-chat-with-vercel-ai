@@ -33,6 +33,8 @@ import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
 import { ToastAction } from "@/components/ui/toast"
 import { useI18n } from "@/lib/i18n/client"
+import { toast } from "@/hooks/use-toast"
+import { fileToUploadDataUrl } from "@/lib/image-compress"
 
 // استبدال بسيط لعناصر النائبة {name}/{time}/{saved}... في نصوص الترجمة.
 function fill(template: string, vars: Record<string, string | number>): string {
@@ -351,13 +353,15 @@ function PhotoCapture({ onCapture }: { onCapture: (b: string) => void }) {
         accept="image/*"
         capture="environment"
         className="hidden"
-        onChange={(e) => {
+        onChange={async (e) => {
           const f = e.target.files?.[0]
-          if (!f) return
-          const r = new FileReader()
-          r.onload = () => onCapture(r.result as string)
-          r.readAsDataURL(f)
           e.target.value = ""
+          if (!f) return
+          try {
+            onCapture(await fileToUploadDataUrl(f))
+          } catch (err) {
+            toast({ title: err instanceof Error ? err.message : "تعذّر رفع الصورة", variant: "destructive" })
+          }
         }}
       />
       <button

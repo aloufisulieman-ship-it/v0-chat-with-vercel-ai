@@ -6,6 +6,8 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { assertWritable, requireModuleScope, requireScope, requireUser } from "@/lib/session"
 import { saveDataUrlAttachment } from "@/lib/attachments-server"
+import { hasRoleSignature } from "@/lib/signature-check"
+import { FINANCE_OFFICER_SIGNATURE_ROLE, HR_OFFICER_SIGNATURE_ROLE } from "@/lib/signature-roles"
 import {
   canTransition,
   deptForClassification,
@@ -240,6 +242,28 @@ export async function closeRecord(input: {
   const from = normalizeLifecycle(row.lifecycleStatus)
   if (!canTransition(from, "closed")) throw new Error("لا يمكن إغلاق السجل في حالته الحالية")
 
+  // شرط التوقيع قبل الإغلاق — نفس القاعدة المطبّقة في لوحتَي HR والمالية
+  // (app/actions/hr.ts و app/actions/finance.ts). يُفرض هنا أيضاً حتى لا يكون
+  // مسار الإغلاق العام طريقاً لتجاوز التوقيع الرسمي للجهة المحال إليها.
+  const assignedDept = (row.assignedDept as Dept | null) ?? null
+  if (assignedDept === "hr" || assignedDept === "finance") {
+    const roleKey = assignedDept === "hr" ? HR_OFFICER_SIGNATURE_ROLE.key : FINANCE_OFFICER_SIGNATURE_ROLE.key
+    const signed = await hasRoleSignature({
+      organizationId: scope.organizationId,
+      userId: u.id,
+      module: input.module,
+      recordId: input.id,
+      roleKey,
+    })
+    if (!signed) {
+      throw new Error(
+        assignedDept === "hr"
+          ? "لا يمكن الإغلاق قبل حفظ توقيع موظف الموارد البشرية — يتم الإغلاق من لوحة الموارد البشرية"
+          : "لا يمكن الإغلاق قبل حفظ توقيع موظف المالية — يتم الإغلاق من لوحة المالية",
+      )
+    }
+  }
+
   // ملف إثبات اختياري → مرفق من نوع closure_evidence.
   let evidenceUrl = ""
   if (input.evidenceDataUrl?.startsWith("data:")) {
@@ -259,7 +283,7 @@ export async function closeRecord(input: {
     }
   }
 
-  const dept = row.assignedDept as Dept | null
+  const dept = assignedDept
   const now = new Date()
   const legacy =
     dept === "hr"

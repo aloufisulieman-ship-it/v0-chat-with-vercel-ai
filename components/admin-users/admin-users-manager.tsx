@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils"
 import type { AdminUserRow, AuditRow } from "@/app/actions/admin-users"
 import { resetUserPassword, revokeUserSessions, setAccountStatus, setUserRole } from "@/app/actions/admin-users"
 import { ACCOUNT_STATUS_UI, ASSIGNABLE_ROLES, AUDIT_ACTION_LABELS, ROLE_DEFINITIONS, type AccountStatus } from "@/lib/roles"
-import { moduleOptions, parsePermissions } from "@/lib/permissions"
+import { AUDITOR_MODULES, isAuditor, moduleOptions, parsePermissions } from "@/lib/permissions"
 
 type Loc = "ar" | "en"
 
@@ -239,10 +239,14 @@ function UserRow({ u, self, locale }: { u: AdminUserRow; self: boolean; locale: 
   const [dialog, setDialog] = useState<null | "password" | "suspend" | "ban">(null)
   // نحسب فقط المفاتيح المعروفة حالياً (قد تحوي القيمة المخزّنة مفاتيح وحدات قديمة).
   const validKeys = new Set<string>(moduleOptions.map((m) => m.value))
+  // الأدوار ذات الوصول المحسوم بالدور (لا بقائمة صلاحيات مخزّنة): admin و manager كل
+  // الوحدات، والمدقق وحدات تدقيق ISO 45001 الثابتة.
   const modules =
     u.role === "admin" || u.role === "manager"
       ? null
-      : parsePermissions(u.permissions).filter((k) => validKeys.has(k)).length
+      : isAuditor(u.role)
+        ? AUDITOR_MODULES.length
+        : parsePermissions(u.permissions).filter((k) => validKeys.has(k)).length
   const statusUi = ACCOUNT_STATUS_UI[(u.accountStatus as AccountStatus) ?? "active"] ?? ACCOUNT_STATUS_UI.active
 
   const run = (fn: () => Promise<{ success?: true; error?: string }>, okMsg: string) =>
@@ -513,7 +517,7 @@ function AuditTable({ rows, locale }: { rows: AuditRow[]; locale: Loc }) {
 
 function RolesGuide({ locale }: { locale: Loc }) {
   const en = locale === "en"
-  const roles = ["admin", "manager", "user", "platform_admin"] as const
+  const roles = ["admin", "manager", "auditor", "user", "platform_admin"] as const
   return (
     <div className="flex flex-col gap-4">
       <Card className="overflow-hidden p-0">

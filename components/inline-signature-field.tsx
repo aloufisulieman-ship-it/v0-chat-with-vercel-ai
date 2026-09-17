@@ -5,6 +5,7 @@ import { Eraser } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { useI18n } from "@/lib/i18n/client"
+import { compressSignatureDataUrl } from "@/lib/image-compress"
 
 // حقل توقيع مضمّن: يرسم المستخدم بإصبعه/فأرته، ويُخزَّن الناتج كـ data URL في callback.
 // يُستخدم داخل النماذج التي تُرسل FormData موحّدة (التوقيع كنص data URL).
@@ -61,10 +62,10 @@ export function InlineSignatureField({
     ctx.stroke()
     if (!hasInk) setHasInk(true)
   }
-  function end() {
+  async function end() {
     if (!drawing.current) return
     drawing.current = false
-    if (hasInk) onChange(canvasRef.current!.toDataURL("image/png"))
+    if (hasInk) onChange(await compressSignatureDataUrl(canvasRef.current!.toDataURL("image/png")))
   }
   function clear() {
     const canvas = canvasRef.current
