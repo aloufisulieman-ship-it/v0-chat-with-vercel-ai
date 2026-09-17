@@ -20,6 +20,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "@/hooks/use-toast"
 import { useI18n } from "@/lib/i18n/client"
+import { useIsAuditor } from "@/components/user-role-context"
 
 export interface FieldDef {
   name: string
@@ -40,14 +41,24 @@ export function RecordDialog({
   triggerLabel,
   fields,
   action,
+  trigger,
+  hiddenFields,
+  allowAuditor = false,
 }: {
   title: string
   description?: string
   triggerLabel?: string
   fields: FieldDef[]
   action: (formData: FormData) => Promise<void>
+  // زر فتح بديل (مثل أيقونة تعديل داخل صف جدول) بدل زر "إضافة" الافتراضي.
+  trigger?: React.ReactNode
+  // قيم تُرسَل مع النموذج دون عرضها (مثل معرّف السجل عند التعديل).
+  hiddenFields?: Record<string, string | number>
+  // يُعرض للمدقق أيضاً: لسجل التدقيق وحده، فهو دفتر ملاحظاته المصرّح له بالكتابة فيه.
+  allowAuditor?: boolean
 }) {
   const { t } = useI18n()
+  const isAuditor = useIsAuditor()
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
 
@@ -69,13 +80,18 @@ export function RecordDialog({
     })
   }
 
+  // المدقق لا يُنشئ ولا يعدّل السجلات (عدا سجل التدقيق عبر allowAuditor).
+  if (isAuditor && !allowAuditor) return null
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="gap-2 self-start sm:self-auto">
-          <Plus className="size-4" />
-          {triggerLabel ?? t("recordDialog.addNew")}
-        </Button>
+        {trigger ?? (
+          <Button className="gap-2 self-start sm:self-auto">
+            <Plus className="size-4" />
+            {triggerLabel ?? t("recordDialog.addNew")}
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
@@ -83,6 +99,10 @@ export function RecordDialog({
           {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
         <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {hiddenFields &&
+            Object.entries(hiddenFields).map(([name, value]) => (
+              <input key={name} type="hidden" name={name} value={String(value)} />
+            ))}
           {fields.map((f) => (
             <div key={f.name} className={`flex flex-col gap-2 ${f.full || f.type === "textarea" ? "sm:col-span-2" : ""}`}>
               <Label htmlFor={f.name}>
@@ -90,7 +110,14 @@ export function RecordDialog({
                 {f.required && <span className="text-destructive"> *</span>}
               </Label>
               {f.type === "textarea" ? (
-                <Textarea id={f.name} name={f.name} placeholder={f.placeholder} required={f.required} rows={3} />
+                <Textarea
+                  id={f.name}
+                  name={f.name}
+                  placeholder={f.placeholder}
+                  required={f.required}
+                  rows={3}
+                  defaultValue={f.defaultValue}
+                />
               ) : f.type === "select" ? (
                 <Select name={f.name} defaultValue={f.defaultValue ? String(f.defaultValue) : f.options?.[0]?.value}>
                   <SelectTrigger id={f.name}>

@@ -13,7 +13,7 @@ import { createViolationFull } from "@/app/actions/hse"
 import type { EmployeeRecord } from "@/app/training/employee-registry"
 import { EquipmentCombobox, type EquipmentOption } from "@/components/equipment-combobox"
 import { violationStatusOptions } from "@/lib/labels"
-import { compressImage } from "@/lib/image-compress"
+import { assertTotalUploadSize, compressImage, fileToUploadDataUrl } from "@/lib/image-compress"
 import {
   categoryOptions,
   internalActionOptions,
@@ -23,6 +23,7 @@ import {
 } from "@/lib/violation-category"
 import { useI18n } from "@/lib/i18n/client"
 import { statusLabel, categoryOptionLabel, internalActionLabel, violationTypeLabel } from "@/lib/i18n/labels"
+import { useIsAuditor } from "@/components/user-role-context"
 
 const VIOLATION_TYPES = [
   "عدم ارتداء خوذة السلامة",
@@ -260,33 +261,24 @@ export function ViolationFormDialog({
     setManagerSignature("")
   }
 
-  async function fileToDataUrl(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(reader.result as string)
-      reader.onerror = () => reject(new Error(t("violationForm.fileReadFailed")))
-      reader.readAsDataURL(file)
-    })
-  }
-
   async function handleDocUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const input = e.currentTarget
     const files = Array.from(input.files ?? [])
     input.value = ""
 
     try {
+      // اضغط النماذج المصورة؛ PDF وWord يبقيان بصيغتهما الأصلية مع فرض حدّ الحجم.
       const docs = await Promise.all(
-        files.map(async (file) => ({
-          name: file.name,
-          // اضغط النماذج المصورة فقط؛ PDF وWord يبقيان بصيغتهما الأصلية.
-          dataUrl: file.type.startsWith("image/")
-            ? await compressImage(file, 1200, 0.7)
-            : await fileToDataUrl(file),
-        })),
+        files.map(async (file) => ({ name: file.name, dataUrl: await fileToUploadDataUrl(file) })),
       )
-      setManualDocs((prev) => [...prev, ...docs])
-    } catch {
-      toast({ title: t("violationForm.filePrepFailed"), variant: "destructive" })
+      const next = [...manualDocs, ...docs]
+      assertTotalUploadSize([...images, ...next.map((d) => d.dataUrl)])
+      setManualDocs(next)
+    } catch (err) {
+      toast({
+        title: err instanceof Error ? err.message : t("violationForm.filePrepFailed"),
+        variant: "destructive",
+      })
     }
   }
 
@@ -297,9 +289,14 @@ export function ViolationFormDialog({
 
     try {
       const compressed = await Promise.all(files.map((file) => compressImage(file, 1200, 0.7)))
-      setImages((prev) => [...prev, ...compressed])
-    } catch {
-      toast({ title: t("violationForm.imageCompressFailed"), variant: "destructive" })
+      const next = [...images, ...compressed]
+      assertTotalUploadSize([...next, ...manualDocs.map((d) => d.dataUrl)])
+      setImages(next)
+    } catch (err) {
+      toast({
+        title: err instanceof Error ? err.message : t("violationForm.imageCompressFailed"),
+        variant: "destructive",
+      })
     }
   }
 
@@ -332,6 +329,10 @@ export function ViolationFormDialog({
   }
 
   const steps = [t("violationForm.stepData"), t("violationForm.stepEvidence"), t("violationForm.stepSignatures")]
+
+  // المدقق لا يملك هذا الإجراء — والخادم يرفضه أيضاً.
+  const isAuditor = useIsAuditor()
+  if (isAuditor) return null
 
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetForm() }}>

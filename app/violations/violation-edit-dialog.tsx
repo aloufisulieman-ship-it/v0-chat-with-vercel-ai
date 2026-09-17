@@ -11,10 +11,11 @@ import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/hooks/use-toast"
 import { updateViolation } from "@/app/actions/hse"
 import { violationStatusOptions } from "@/lib/labels"
-import { compressImage } from "@/lib/image-compress"
+import { assertTotalUploadSize, fileToUploadDataUrl } from "@/lib/image-compress"
 import { categoryOptions, type ViolationCategory } from "@/lib/violation-category"
 import { useI18n } from "@/lib/i18n/client"
 import { statusLabel, categoryOptionLabel } from "@/lib/i18n/labels"
+import { useIsAuditor } from "@/components/user-role-context"
 
 type ViolationRow = {
   id: number
@@ -63,15 +64,6 @@ export function ViolationEditDialog({ violation }: { violation: ViolationRow }) 
   // نماذج ورقية ممسوحة إضافية تُرفع أثناء التعديل.
   const [manualDocs, setManualDocs] = useState<{ name: string; dataUrl: string }[]>([])
 
-  async function fileToDataUrl(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(reader.result as string)
-      reader.onerror = () => reject(new Error(t("violationForm.fileReadFailed")))
-      reader.readAsDataURL(file)
-    })
-  }
-
   async function handleDocUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const input = e.currentTarget
     const files = Array.from(input.files ?? [])
@@ -79,16 +71,16 @@ export function ViolationEditDialog({ violation }: { violation: ViolationRow }) 
 
     try {
       const docs = await Promise.all(
-        files.map(async (file) => ({
-          name: file.name,
-          dataUrl: file.type.startsWith("image/")
-            ? await compressImage(file, 1200, 0.7)
-            : await fileToDataUrl(file),
-        })),
+        files.map(async (file) => ({ name: file.name, dataUrl: await fileToUploadDataUrl(file) })),
       )
-      setManualDocs((prev) => [...prev, ...docs])
-    } catch {
-      toast({ title: t("violationForm.filePrepFailed"), variant: "destructive" })
+      const next = [...manualDocs, ...docs]
+      assertTotalUploadSize(next.map((d) => d.dataUrl))
+      setManualDocs(next)
+    } catch (err) {
+      toast({
+        title: err instanceof Error ? err.message : t("violationForm.filePrepFailed"),
+        variant: "destructive",
+      })
     }
   }
 
@@ -112,6 +104,10 @@ export function ViolationEditDialog({ violation }: { violation: ViolationRow }) 
       }
     })
   }
+
+  // المدقق لا يملك هذا الإجراء — والخادم يرفضه أيضاً.
+  const isAuditor = useIsAuditor()
+  if (isAuditor) return null
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

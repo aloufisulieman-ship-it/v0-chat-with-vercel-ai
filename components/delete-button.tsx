@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { toast } from "@/hooks/use-toast"
 import { useI18n } from "@/lib/i18n/client"
+import { useIsAuditor } from "@/components/user-role-context"
 
 export function DeleteButton({
   id,
@@ -24,6 +25,7 @@ export function DeleteButton({
   action: (id: number) => Promise<void>
 }) {
   const { t } = useI18n()
+  const isAuditor = useIsAuditor()
   const [isPending, startTransition] = useTransition()
 
   function onConfirm() {
@@ -40,6 +42,9 @@ export function DeleteButton({
       }
     })
   }
+
+  // المدقق لا يحذف أي سجل — والخادم يرفض الحذف منه أصلاً.
+  if (isAuditor) return null
 
   return (
     <AlertDialog>

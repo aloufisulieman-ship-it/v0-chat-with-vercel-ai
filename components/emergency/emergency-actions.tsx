@@ -25,6 +25,7 @@ import {
   createEmergencyDrill,
   convertActivationToIncident,
 } from "@/app/actions/hse"
+import { useIsAuditor } from "@/components/user-role-context"
 
 export type PlanLite = {
   id: number
@@ -83,6 +84,10 @@ export function PlanApproveDialog({ plan }: { plan: PlanLite }) {
       }
     })
   }
+
+  // المدقق لا يملك هذا الإجراء — والخادم يرفضه أيضاً.
+  const isAuditor = useIsAuditor()
+  if (isAuditor) return null
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -238,6 +243,10 @@ export function ConvertIncidentButton({ id, converted }: { id: number; converted
   if (converted) {
     return <span className="text-xs text-muted-foreground">{t("emergencyMod.alreadyConverted")}</span>
   }
+  // المدقق لا يملك هذا الإجراء — والخادم يرفضه أيضاً.
+  const isAuditor = useIsAuditor()
+  if (isAuditor) return null
+
   return (
     <Button
       variant="ghost"
@@ -298,6 +307,10 @@ export function DrillCreateDialog({ plans }: { plans: { id: number; scenario: st
     { value: "medical", label: t("emergencyMod.drillMedical") },
     { value: "spill", label: t("emergencyMod.drillSpill") },
   ]
+
+  // المدقق لا يملك هذا الإجراء — والخادم يرفضه أيضاً.
+  const isAuditor = useIsAuditor()
+  if (isAuditor) return null
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

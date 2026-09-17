@@ -16,6 +16,7 @@ import { hasRecordRoleSignature } from "@/app/actions/attachments"
 import { InlineRoleSignature } from "@/components/inline-role-signature"
 import { type SignatureRole } from "@/lib/signature-roles"
 import { ImageLightbox, useLightbox, type LightboxImage } from "@/components/image-lightbox"
+import { assertTotalUploadSize, fileToUploadDataUrl } from "@/lib/image-compress"
 
 type HrAction = (formData: FormData) => Promise<void>
 
@@ -72,14 +73,21 @@ export function HrActionCard({
   const [signed, setSigned] = useState(false)
   const [pending, startTransition] = useTransition()
 
-  function handleFiles(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFiles(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? [])
-    files.forEach((f) => {
-      const reader = new FileReader()
-      reader.onload = () => setAttachments((prev) => [...prev, reader.result as string])
-      reader.readAsDataURL(f)
-    })
     e.target.value = ""
+    for (const f of files) {
+      try {
+        const dataUrl = await fileToUploadDataUrl(f)
+        setAttachments((prev) => {
+          const next = [...prev, dataUrl]
+          assertTotalUploadSize(next)
+          return next
+        })
+      } catch (err) {
+        toast({ title: err instanceof Error ? err.message : "تعذّر إرفاق الملف", variant: "destructive" })
+      }
+    }
   }
 
   function submit() {

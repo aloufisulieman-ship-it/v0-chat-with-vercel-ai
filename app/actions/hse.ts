@@ -49,6 +49,7 @@ import {
   requireScope,
   requireUser,
   assertWritable,
+  isActingAsAuditor,
   type ModuleScope,
 } from "@/lib/session"
 import { scopeWhere } from "@/lib/scope"
@@ -75,6 +76,7 @@ import {
 import { saveDataUrlAttachment } from "@/lib/attachments-server"
 import { assertNotArchived, logRecordEvent } from "@/app/actions/lifecycle"
 import { deptForClassification } from "@/lib/lifecycle"
+import { incidentColumns, violationColumns } from "@/lib/audit-redaction"
 
 function str(v: FormDataEntryValue | null, fallback = "") {
   return v == null ? fallback : String(v)
@@ -114,9 +116,12 @@ export async function getCompany() {
 export async function saveCompany(formData: FormData) {
   // قفل الإعداد الأولي: مسؤول المنصّة (readOnly = وضع الدخول إلى المؤسسة) يتجاوز القفل
   // ويعدّل دائماً؛ مدير المؤسسة يُرفض حفظه على الخادم بعد أن يصبح settingsLocked = true.
+  // ملاحظة: حارس الكتابة يُستدعى داخل الفرع غير الانتحالي فقط لأن مسؤول المنصّة
+  // يعدّل ملف المؤسسة عمداً أثناء الدخول إليها.
   const { userId, organizationId, readOnly } = await requireScope()
   const isPlatformAdminActing = readOnly
   if (!isPlatformAdminActing) {
+    await assertWritable()
     const { locked } = await getSettingsLock(organizationId)
     if (locked) throw new Error(SETTINGS_LOCKED_MESSAGE)
   }
@@ -165,7 +170,7 @@ export async function saveCompany(formData: FormData) {
 export async function getIncidents() {
   const scope = await requireScope()
   return db
-    .select()
+    .select(incidentColumns(scope))
     .from(incident)
     .where(scopeWhere({ organizationId: incident.organizationId, userId: incident.userId }, scope))
     .orderBy(desc(incident.createdAt))
@@ -997,7 +1002,8 @@ export async function getAudits() {
     .orderBy(desc(audit.createdAt))
 }
 export async function createAudit(formData: FormData) {
-  await assertWritable()
+  // سجل التدقيق هو دفتر ملاحظات المدقق نفسه، فيكتب فيه ويغلق تدقيقه.
+  await assertWritable("audit_log")
   const { userId, organizationId } = await requireModuleScope("audits")
   const title = str(formData.get("title"))
   const score = num(formData.get("score"))
@@ -1031,6 +1037,51 @@ export async function createAudit(formData: FormData) {
   }
   revalidatePath("/audits")
 }
+// تحديث تدقيق قائم دون حذفه: ينقل الحالة (مجدول → قيد المعالجة → مكتمل) ويصحّح
+// النتيجة والبيانات الوصفية، مع الحفاظ على السجل التاريخي ورقمه.
+export async function updateAudit(formData: FormData) {
+  await assertWritable("audit_log")
+  const scope = await requireModuleScope("audits")
+  const id = Number(formData.get("id"))
+  if (!Number.isFinite(id)) throw new Error("معرّف غير صالح")
+
+  const title = str(formData.get("title"))
+  if (!title.trim()) throw new Error("عنوان التدقيق مطلوب")
+  const status = str(formData.get("status"), "scheduled")
+  const score = num(formData.get("score"))
+
+  const updated = await db
+    .update(audit)
+    .set({
+      title,
+      standard: str(formData.get("standard")),
+      auditor: str(formData.get("auditor")),
+      score,
+      status,
+      auditDate: dateOrNull(formData.get("auditDate")),
+    })
+    .where(scopeWhere({ organizationId: audit.organizationId, userId: audit.userId }, scope, eq(audit.id, id)))
+    .returning({ id: audit.id })
+  if (!updated[0]) throw new Error("التدقيق غير موجود أو لا تملك صلاحية تعديله")
+
+  // نفس قاعدة الإنشاء (ISO 45001 §10.2): إغلاق تدقيق بنتيجة دون العتبة يفتح إجراءً
+  // تصحيحياً. ensureCorrectiveAction لا يكرّر الإجراء لنفس المصدر.
+  if (status === "closed" && score < AUDIT_NONCONFORMITY_SCORE) {
+    await ensureCorrectiveAction({
+      organizationId: scope.organizationId,
+      userId: scope.userId,
+      sourceType: "audit",
+      sourceId: id,
+      title: `معالجة عدم مطابقة في تدقيق: ${title}`,
+      priority: score < 60 ? "high" : "medium",
+      sourceLabel: `تدقيق: ${title} (${score}%)`,
+    })
+    revalidatePath("/actions")
+  }
+  revalidatePath("/audits")
+  revalidatePath("/compliance")
+}
+
 export async function deleteAudit(id: number) {
   await assertWritable()
   const scope = await requireModuleScope("audits")
@@ -1782,13 +1833,18 @@ export async function getInternalAudits() {
     .where(scopeWhere({ organizationId: internalAudit.organizationId, userId: internalAudit.userId }, scope))
     .orderBy(desc(internalAudit.createdAt))
 }
+// إنشاء/حذف سجل تدقيق داخلي: لمدير النظام فقط، لأن السجل يدخل مباشرةً في حساب
+// نسبة المطابقة لبند ISO 45001 §9.2 في صفحة الامتثال.
 export async function createInternalAudit(formData: FormData) {
   await assertWritable()
-  const { userId, organizationId } = await requireModuleScope("internal-audit")
+  const { userId, organizationId, role } = await requireModuleScope("internal-audit")
+  if (role !== "admin") throw new Error("إضافة تدقيق داخلي متاحة لمدير النظام فقط")
+  const title = str(formData.get("title")).trim()
+  if (!title) throw new Error("عنوان التدقيق الداخلي مطلوب")
   await db.insert(internalAudit).values({
     userId,
     organizationId,
-    title: str(formData.get("title")),
+    title,
     scope: str(formData.get("scope")),
     auditor: str(formData.get("auditor")),
     auditDate: dateOrNull(formData.get("auditDate")),
@@ -1796,16 +1852,54 @@ export async function createInternalAudit(formData: FormData) {
     status: str(formData.get("status"), "planned"),
     result: str(formData.get("result")),
   })
-  revalidatePath("/internal-audit")
+  revalidatePath("/audits")
   revalidatePath("/compliance")
 }
+
+// تحديث تدقيق داخلي قائم (إغلاقه أو تصحيح نتيجته) دون حذف السجل.
+export async function updateInternalAudit(formData: FormData) {
+  await assertWritable()
+  const scope = await requireModuleScope("internal-audit")
+  if (scope.role !== "admin") throw new Error("تعديل التدقيق الداخلي متاح لمدير النظام فقط")
+  const id = Number(formData.get("id"))
+  if (!Number.isFinite(id)) throw new Error("معرّف غير صالح")
+  const title = str(formData.get("title")).trim()
+  if (!title) throw new Error("عنوان التدقيق الداخلي مطلوب")
+
+  const updated = await db
+    .update(internalAudit)
+    .set({
+      title,
+      scope: str(formData.get("scope")),
+      auditor: str(formData.get("auditor")),
+      auditDate: dateOrNull(formData.get("auditDate")),
+      nonconformities: Math.max(0, num(formData.get("nonconformities"))),
+      status: str(formData.get("status"), "planned"),
+      result: str(formData.get("result")),
+      updatedAt: new Date(),
+    })
+    .where(
+      scopeWhere(
+        { organizationId: internalAudit.organizationId, userId: internalAudit.userId },
+        scope,
+        eq(internalAudit.id, id),
+      ),
+    )
+    .returning({ id: internalAudit.id })
+  if (!updated[0]) throw new Error("التدقيق الداخلي غير موجود")
+
+  revalidatePath("/audits")
+  revalidatePath("/compliance")
+}
+
 export async function deleteInternalAudit(id: number) {
   await assertWritable()
   const scope = await requireModuleScope("internal-audit")
+  if (scope.role !== "admin") throw new Error("حذف التدقيق الداخلي متاح لمدير النظام فقط")
   await db
     .delete(internalAudit)
     .where(scopeWhere({ organizationId: internalAudit.organizationId, userId: internalAudit.userId }, scope, eq(internalAudit.id, id)))
-  revalidatePath("/internal-audit")
+  revalidatePath("/audits")
   revalidatePath("/compliance")
 }
 
@@ -1813,7 +1907,7 @@ export async function deleteInternalAudit(id: number) {
   export async function getViolations() {
   const scope = await requireModuleScope("violations")
   return db
-    .select()
+    .select(violationColumns(scope))
     .from(violation)
     .where(scopeWhere({ organizationId: violation.organizationId, userId: violation.userId }, scope))
     .orderBy(desc(violation.createdAt))
@@ -2047,7 +2141,8 @@ export async function acceptDetectionAsViolation(
   detectionId: number,
   category: "internal" | "external",
   ) {
-  await assertWritable()
+  // من صميم عمل المدقق: تحويل الرصد الآلي إلى مخالفة رسمية.
+  await assertWritable("ai_review")
   const { userId, organizationId } = await requireModuleScope("ai_monitoring")
   if (category !== "internal" && category !== "external") {
     throw new Error("يجب تحديد تصنيف المخالفة: داخلية أو خارجية")
@@ -2203,10 +2298,21 @@ export type EscalationResult = {
 
 export async function escalateDetection(
   detectionId: number,
-  options?: { override?: "incident" | "near_miss" | "corrective_action"; reviewerNotes?: string },
+  options?: {
+    override?: "incident" | "near_miss" | "corrective_action"
+    reviewerNotes?: string
+    // توقيع المُصعِّد يُحفظ على السجل الناتج. إلزامي للمدقق.
+    signatureDataUrl?: string
+  },
 ): Promise<EscalationResult> {
-  await assertWritable()
+  // تصعيد الرصد إلى حادث أو إجراء تصحيحي جزء من فرز المدقق للمراقبة الذكية.
+  await assertWritable("ai_review")
   const { userId, organizationId } = await requireModuleScope("ai_monitoring")
+  const actingAsAuditor = await isActingAsAuditor()
+  const signature = options?.signatureDataUrl?.trim() || ""
+  if (actingAsAuditor && !signature.startsWith("data:image")) {
+    throw new Error("توقيع المدقق إلزامي لتصعيد الرصد — وقّع ثم أعد المحاولة")
+  }
 
   const [det] = await db
     .select()
@@ -2249,6 +2355,25 @@ export async function escalateDetection(
     (det.notes && det.notes.trim().length > 0 ? det.notes.trim() : typeLabel) +
     ` — رصد آلي بالمراقبة الذكية (الخطورة: ${sevLabel}، نسبة الثقة ${det.confidenceScore}%).` +
     reviewerSuffix
+
+  // توقيع المُصعِّد على السجل الناتج، بنفس آلية التواقيع الرسمية (signature:auditor)
+  // فيظهر في نافذة التفاصيل وتقرير PDF إلى جانب اسمه المسجّل في السجل نفسه.
+  async function attachReviewerSignature(module: string, recordId: number) {
+    if (!signature.startsWith("data:image")) return
+    try {
+      await saveDataUrlAttachment(
+        userId,
+        organizationId,
+        module,
+        recordId,
+        roleKindFor(AUDITOR_SIGNATURE_ROLE.key),
+        signature,
+        `auditor-signature-${Date.now()}`,
+      )
+    } catch {
+      /* فشل حفظ التوقيع لا يُسقط التصعيد — الاسم مسجّل في السجل وسجل الحركة */
+    }
+  }
 
   // إرفاق لقطة الإثبات إلى السجل الناتج (أفضل جهد لا يُفشل العملية).
   async function attachSnapshot(module: string, recordId: number) {
@@ -2333,7 +2458,8 @@ export async function escalateDetection(
         incidentDate: detectedAt.toISOString().slice(0, 10),
         incidentTime: detectedAt.toTimeString().slice(0, 5),
         description: baseDesc,
-        reportedBy: `رصد ذكي — ${det.inspectorName || actor}`,
+        // اسم من صعّد الرصد مسجَّل في السجل نفسه (لا في سجل الحركة وحده).
+        reportedBy: `رصد ذكي — ${det.inspectorName || actor} · صعّده: ${actor}`,
         immediateActions: isCritical ? "تم إصدار أمر إيقاف العمل تلقائياً بانتظار تدخّل مدير السلامة." : "",
         // دورة الحياة: سجل جديد بمصدر رصد آلي — يبقى بانتظار اعتماد المدقق (غير محال).
         source: "ai_detection",
@@ -2343,6 +2469,7 @@ export async function escalateDetection(
     const recordId = inserted.id
 
     await attachSnapshot("incidents", recordId)
+    await attachReviewerSignature("incidents", recordId)
     await logRecordEvent({
       organizationId,
       module: "incidents",
@@ -2387,7 +2514,7 @@ export async function escalateDetection(
       organizationId,
       code,
       title: `${typeLabel}${det.cameraLocation ? ` — ${det.cameraLocation}` : ""}`,
-      source: "رصد ذكي (المراقبة الذكية)",
+      source: `رصد ذكي (المراقبة الذكية) · صعّده: ${actor}`,
       sourceType: "manual",
       sourceId: det.id,
       assignedTo,
@@ -2398,6 +2525,7 @@ export async function escalateDetection(
     })
     .returning({ id: correctiveAction.id })
   const capaId = insertedCapa.id
+  await attachReviewerSignature("actions", capaId)
 
   await db
     .update(aiDetection)
@@ -2418,7 +2546,8 @@ export async function escalateDetection(
 
 // بلاغ خاطئ من المدقق: يستبعد الكشف من الإحصائيات ويحفظ السبب للتحسين.
 export async function markDetectionFalsePositive(detectionId: number, reason: string) {
-  await assertWritable()
+  // قرار فرز على طابور الرصد لا تعديل على سجل — جزء من مراجعة المدقق.
+  await assertWritable("ai_review")
   const { userId, organizationId, isManager } = await requireModuleScope("ai_monitoring")
   const rows = await db.select({ name: user.name }).from(user).where(eq(user.id, userId)).limit(1)
   const actor = rows[0]?.name || "مستخدم"
@@ -2782,14 +2911,14 @@ export async function getDashboardData() {
   // العزل بين المؤسس��ت صارم (organizationId دائماً)؛ وداخل المؤسسة يرى المديرُ كل
   // السجلات والموظفُ سجلاته فقط عبر scopeWhere.
   const [inc, ins, per, rsk, act, obs, vio, trend, detectionTrend] = await Promise.all([
-    db.select().from(incident).where(scopeWhere({ organizationId: incident.organizationId, userId: incident.userId }, scope)),
+    db.select(incidentColumns(scope)).from(incident).where(scopeWhere({ organizationId: incident.organizationId, userId: incident.userId }, scope)),
     db.select().from(inspection).where(scopeWhere({ organizationId: inspection.organizationId, userId: inspection.userId }, scope)),
     db.select().from(permit).where(scopeWhere({ organizationId: permit.organizationId, userId: permit.userId }, scope)),
     db.select().from(risk).where(scopeWhere({ organizationId: risk.organizationId, userId: risk.userId }, scope)),
     db.select().from(correctiveAction).where(scopeWhere({ organizationId: correctiveAction.organizationId, userId: correctiveAction.userId }, scope)),
     db.select().from(observation).where(scopeWhere({ organizationId: observation.organizationId, userId: observation.userId }, scope)),
     db
-      .select()
+      .select(violationColumns(scope))
       .from(violation)
       .where(scopeWhere({ organizationId: violation.organizationId, userId: violation.userId }, scope))
       .orderBy(desc(violation.createdAt)),
@@ -2852,7 +2981,7 @@ export async function getReportData(
 
   if (type === "incidents" || type === "all") {
     const rows = await db
-      .select()
+      .select(incidentColumns(scope))
       .from(incident)
       .where(scopeWhere({ organizationId: incident.organizationId, userId: incident.userId }, scope))
       .orderBy(desc(incident.createdAt))
@@ -2883,7 +3012,7 @@ export async function getReportData(
 
   if (type === "violations" || type === "all") {
     const rows = await db
-      .select()
+      .select(violationColumns(scope))
       .from(violation)
       .where(scopeWhere({ organizationId: violation.organizationId, userId: violation.userId }, scope))
       .orderBy(desc(violation.createdAt))

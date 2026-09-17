@@ -18,6 +18,7 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useI18n } from "@/lib/i18n/client"
+import { useIsAuditor } from "@/components/user-role-context"
 
 export type SafetyRuleRecord = {
   id: number
@@ -38,6 +39,10 @@ function RuleDialog({ item }: { item?: SafetyRuleRecord }) {
     setOpen(false)
     return null
   }, null)
+
+  // المدقق لا يملك هذا الإجراء — والخادم يرفضه أيضاً.
+  const isAuditor = useIsAuditor()
+  if (isAuditor) return null
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -82,6 +87,10 @@ function RuleDialog({ item }: { item?: SafetyRuleRecord }) {
 
 function DeleteRuleButton({ item }: { item: SafetyRuleRecord }) {
   const { t, dir } = useI18n()
+  // المدقق لا يملك هذا الإجراء — والخادم يرفضه أيضاً.
+  const isAuditor = useIsAuditor()
+  if (isAuditor) return null
+
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild><Button variant="ghost" size="icon" aria-label={t("safetyRules.deleteAria").replace("{location}", item.location)}><Trash2 /></Button></AlertDialogTrigger>

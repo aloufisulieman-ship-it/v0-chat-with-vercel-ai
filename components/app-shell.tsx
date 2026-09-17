@@ -17,6 +17,7 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { RaqeebLogo, RaqeebMark } from "@/components/raqeeb-logo"
 import { useI18n } from "@/lib/i18n/client"
+import { UserRoleProvider } from "@/components/user-role-context"
 
 export function AppShell({
   title,
@@ -56,6 +57,7 @@ export function AppShell({
   }
 
   return (
+    <UserRoleProvider role={user.role ?? ""}>
     <div className="flex min-h-screen overflow-x-hidden bg-background">
       <AppSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} />
 
@@ -168,5 +170,6 @@ export function AppShell({
         </footer>
       </div>
     </div>
+    </UserRoleProvider>
   )
 }

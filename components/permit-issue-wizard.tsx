@@ -20,6 +20,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n/client"
+import { assertTotalUploadSize, fileToUploadDataUrl } from "@/lib/image-compress"
 import { InlineSignatureField } from "@/components/inline-signature-field"
 import {
   PERMIT_TYPES,
@@ -28,6 +29,7 @@ import {
   GAS_FIELDS,
   permitTypeLabel,
 } from "@/lib/permit-workflow"
+import { useIsAuditor } from "@/components/user-role-context"
 
 type Attachment = { url: string; name: string; kind: string }
 
@@ -85,15 +87,19 @@ export function PermitIssueWizard({
 
   async function onFiles(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? [])
-    for (const file of files) {
-      const dataUrl = await new Promise<string>((resolve) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(String(reader.result))
-        reader.readAsDataURL(file)
-      })
-      setAttachments((prev) => [...prev, { url: dataUrl, name: file.name, kind: file.type }])
-    }
     e.target.value = ""
+    for (const file of files) {
+      try {
+        const dataUrl = await fileToUploadDataUrl(file)
+        setAttachments((prev) => {
+          const next = [...prev, { url: dataUrl, name: file.name, kind: file.type }]
+          assertTotalUploadSize(next.map((a) => a.url))
+          return next
+        })
+      } catch (err) {
+        toast({ title: err instanceof Error ? err.message : "تعذّر إرفاق الملف", variant: "destructive" })
+      }
+    }
   }
 
   // تحقق كل خطوة قبل الانتقال. (نصوص datetime-local بنفس الصيغة تُقارن زمنياً بالمقارنة النصية)
@@ -143,6 +149,10 @@ export function PermitIssueWizard({
   }
 
   const steps = [t("permitWizard.step1"), t("permitWizard.step2"), t("permitWizard.step3")]
+
+  // المدقق لا يملك هذا الإجراء — والخادم يرفضه أيضاً.
+  const isAuditor = useIsAuditor()
+  if (isAuditor) return null
 
   return (
     <Dialog

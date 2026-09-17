@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { SignaturePad } from "@/components/signature-pad"
+import { fileToUploadDataUrl } from "@/lib/image-compress"
 import { toast } from "@/hooks/use-toast"
 import { useI18n } from "@/lib/i18n/client"
 import { cn } from "@/lib/utils"
@@ -34,6 +35,7 @@ import {
   RISK_CLOSE_THRESHOLD,
   bandOf,
 } from "@/lib/risk-lifecycle"
+import { useIsAuditor } from "@/components/user-role-context"
 
 export type RiskLifecycleRow = {
   id: number
@@ -45,15 +47,6 @@ export type RiskLifecycleRow = {
   residualLikelihood: number | null
   residualConsequence: number | null
   status: string | null
-}
-
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = () => reject(new Error("read error"))
-    reader.readAsDataURL(file)
-  })
 }
 
 export function RiskLifecycleActions({
@@ -91,6 +84,10 @@ export function RiskLifecycleActions({
       }
     })
   }
+
+  // المدقق لا يملك هذا الإجراء — والخادم يرفضه أيضاً.
+  const isAuditor = useIsAuditor()
+  if (isAuditor) return null
 
   return (
     <>
@@ -205,7 +202,7 @@ export function RiskLifecycleActions({
             onSave={async (file) => {
               setSavingSig(true)
               try {
-                const dataUrl = await fileToDataUrl(file)
+                const dataUrl = await fileToUploadDataUrl(file)
                 await closeRiskWithSignature({ riskId: risk.id, signatureDataUrl: dataUrl })
                 toast({ title: t("riskLifecycle.closed") })
                 setDialog(null)

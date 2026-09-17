@@ -4,10 +4,10 @@ import { db } from "@/lib/db"
 import { attachment } from "@/lib/db/schema"
 import { and, asc, eq } from "drizzle-orm"
 import { put, del } from "@vercel/blob"
-import { requireScope, assertWritable } from "@/lib/session"
+import { requireScope, assertWritable, isActingAsAuditor } from "@/lib/session"
 import { hasRoleSignature } from "@/lib/signature-check"
-import { roleKindFor } from "@/lib/signature-roles"
-import { assertNotArchived } from "@/app/actions/lifecycle"
+import { roleKindFor, SIGNATURE_KIND_PREFIX } from "@/lib/signature-roles"
+import { assertNotArchived, assertRecordOpen } from "@/app/actions/lifecycle"
 
 export type AttachmentRow = {
   id: number
@@ -80,19 +80,27 @@ export async function getAttachmentsForModule(module: string): Promise<Attachmen
 
 // Upload one file (photo or signature) to Vercel Blob and record it in the DB.
 export async function uploadAttachment(formData: FormData) {
-  await assertWritable()
-  const { userId, organizationId } = await requireScope()
   const module = String(formData.get("module") || "")
   const recordId = Number(formData.get("recordId") || 0)
   const kind = String(formData.get("kind") || "photo")
   const file = formData.get("file") as File | null
 
+  // المدقق يُسمح له بالتوقيع فقط؛ أي مرفق آخر (صورة/مستند) كتابةٌ على السجل فتُرفض.
+  const isSignature = kind === "signature" || kind.startsWith(SIGNATURE_KIND_PREFIX)
+  await assertWritable(isSignature ? "sign" : undefined)
+  const { userId, organizationId } = await requireScope()
+
   if (!module || !recordId || !file) {
     throw new Error("بيانات المرفق غير مكتملة")
   }
-  // السجلات المؤرشفة للقراءة فقط — لا مرفقات جديدة.
+  // السجلات المؤرشفة للقراءة فقط — لا مرفقات جديدة. والمدقق يُمنع أيضاً من التوقيع
+  // على سجل مغلق (لا المؤرشف وحده).
   if (module === "violations" || module === "incidents") {
-    await assertNotArchived(module, recordId, organizationId)
+    if (await isActingAsAuditor()) {
+      await assertRecordOpen(module, recordId, organizationId)
+    } else {
+      await assertNotArchived(module, recordId, organizationId)
+    }
   }
 
   const safeName = file.name?.replace(/[^\w.\-]+/g, "_") || `${kind}.png`

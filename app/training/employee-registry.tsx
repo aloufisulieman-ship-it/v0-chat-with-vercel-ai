@@ -12,6 +12,9 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useI18n } from "@/lib/i18n/client"
+import { toast } from "@/hooks/use-toast"
+import { fileToUploadDataUrl } from "@/lib/image-compress"
+import { useIsAuditor } from "@/components/user-role-context"
 
 export type EmployeeRecord = {
   id: number
@@ -38,18 +41,25 @@ function EmployeeDialog({ employee }: { employee?: EmployeeRecord }) {
   const [photo, setPhoto] = useState(employee?.photoUrl ?? "")
   const action: EmployeeAction = employee ? updateEmployee : createEmployee
 
-  function onPhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function onPhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
+    e.target.value = ""
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => setPhoto(String(reader.result || ""))
-    reader.readAsDataURL(file)
+    try {
+      setPhoto(await fileToUploadDataUrl(file))
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "تعذّر رفع الصورة", variant: "destructive" })
+    }
   }
   const [, formAction, pending] = useActionState(async (_: null, formData: FormData) => {
     await action(formData)
     setOpen(false)
     return null
   }, null)
+
+  // المدقق لا يملك هذا الإجراء — والخادم يرفضه أيضاً.
+  const isAuditor = useIsAuditor()
+  if (isAuditor) return null
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -109,6 +119,10 @@ function EmployeeDialog({ employee }: { employee?: EmployeeRecord }) {
 
 function DeleteEmployeeButton({ employee }: { employee: EmployeeRecord }) {
   const { t, dir } = useI18n()
+  // المدقق لا يملك هذا الإجراء — والخادم يرفضه أيضاً.
+  const isAuditor = useIsAuditor()
+  if (isAuditor) return null
+
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild><Button variant="ghost" size="icon" aria-label={t("employeeReg.deleteAria").replace("{name}", employee.name)}><Trash2 /></Button></AlertDialogTrigger>

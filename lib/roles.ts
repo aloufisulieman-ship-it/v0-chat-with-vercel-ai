@@ -1,7 +1,7 @@
 // المصدر الوحيد لتعريف الأدوار وحالات الحساب في النظام (يُستخدم في إدارة المستخدمين
 // والتوثيق داخل الواجهة). الصلاحيات الفعلية للوحدات تُحسم في lib/permissions.ts.
 
-export const ASSIGNABLE_ROLES = ["admin", "manager", "user"] as const
+export const ASSIGNABLE_ROLES = ["admin", "manager", "auditor", "user"] as const
 export type AssignableRole = (typeof ASSIGNABLE_ROLES)[number]
 
 export const ACCOUNT_STATUSES = ["active", "suspended", "banned"] as const
@@ -36,6 +36,14 @@ export const ROLE_DEFINITIONS: Record<
       en: "Full module access and sees all organization records, but no user management and cannot reopen archived records.",
     },
     access: { ar: "كل الوحدات — بلا إدارة مستخدمين", en: "All modules — no user management" },
+  },
+  auditor: {
+    label: { ar: "مدقق", en: "Auditor" },
+    description: {
+      ar: "مدقق ISO 45001: يرى كل سجلات المؤسسة في وحدات التدقيق والامتثال، ويوقّع على السجلات المفتوحة، ويحوّل رصد المراقبة الذكية إلى مخالفة، ويسجّل ملاحظات التدقيق. لا يعدّل أي سجل ولا يحذفه، ولا يكتب على سجل مغلق أو مؤرشف. لا يرى وحدتَي الموارد البشرية والمالية، وتُحجب عنه بيانات الإجراءات التأديبية والتسويات من قاعدة البيانات نفسها.",
+      en: "ISO 45001 auditor: sees every organization record across audit and compliance modules, signs open records, converts AI detections into violations and logs audit notes. Cannot edit or delete any record, and cannot write to a closed or archived one. No access to HR or Finance modules, and disciplinary actions and financial settlements are stripped at the query level.",
+    },
+    access: { ar: "قراءة وتوقيع في وحدات ISO 45001 — بلا تعديل أو حذف", en: "Read and sign across ISO 45001 modules — no edit or delete" },
   },
   user: {
     label: { ar: "مستخدم", en: "User" },

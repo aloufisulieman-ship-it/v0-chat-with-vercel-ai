@@ -5,7 +5,7 @@ import { user as userTable, organization } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
-import { hasModuleAccess, isPlatformAdmin, type ModuleKey } from "@/lib/permissions"
+import { hasModuleAccess, isAuditor, isPlatformAdmin, type ModuleKey } from "@/lib/permissions"
 import { getEnteredOrgId } from "@/lib/platform-admin"
 
 export type AppUser = {
@@ -56,15 +56,21 @@ export type ModuleScope = {
   isManager: boolean
   // صحيح عندما يكون الطلب في وضع انتحال مسؤول المنصّة — تُمنع كل التعديلات.
   readOnly: boolean
+  // صحيح لدور المدقق: تُحجب عنه أعمدة الإجراءات التأديبية والتسويات المالية في
+  // الاستعلام نفسه (lib/audit-redaction.ts)، لا في الواجهة فقط.
+  isAuditor: boolean
 }
 
 // قاعدة الرؤية داخل المؤسسة الواحدة: المدير/الأدمن والمدير العام ومفتش السلامة يرَون
 // كل سجلات مؤسستهم؛ بقية المستخدمين يرَون سجلاتهم فقط. (نفس القاعدة التي كانت مطبّقة
 // في المخالفات والملاحظات، موحّدة الآن في مصدر واحد.)
+// المدقق ضمنهم: التدقيق لا يستقيم على عيّنة من السجلات، فيرى كل سجلات مؤسسته
+// (مع حجب الأعمدة التأديبية والمالية عنه على مستوى الاستعلام).
 export function isOrgManager(u: { role: string; department: string }): boolean {
   return (
     u.role === "admin" ||
     u.role === "manager" ||
+    isAuditor(u.role) ||
     u.department === "المدير العام" ||
     u.department === "مفتش السلامة"
   )
@@ -132,6 +138,7 @@ function scopeFrom(u: AppUser): ModuleScope {
     role: u.role,
     isManager: u.isPlatformAdmin ? true : isOrgManager(u),
     readOnly: u.impersonating,
+    isAuditor: isAuditor(u.role),
   }
 }
 
@@ -160,10 +167,11 @@ export async function requireAdmin(): Promise<AppUser> {
   return u
 }
 
-// مسؤول HSE / المراجع: صاحب دور admin أو manager.
+// مسؤول HSE / المراجع: صاحب دور admin أو manager، والمدقق معهم لأن تحويل رصد
+// المراقبة الذكية إلى مخالفة جزء أصيل من عمله (ويوقّع عليها بتوقيع المدقق).
 // صفحات المراجعة (اللوحة، البث المباشر، التسجيلات) حصرية لهذه الفئة.
 export function isHseReviewer(role: string | null | undefined): boolean {
-  return role === "admin" || role === "manager"
+  return role === "admin" || role === "manager" || isAuditor(role)
 }
 
 // مسؤول المنصّة أثناء الدخول إلى مؤسسة يُعامَل معاملة المراجع (قراءة فقط).
@@ -236,14 +244,36 @@ export async function getCurrentUser(): Promise<AppUser | null> {
   return loadSessionUser()
 }
 
+// العمليات الكتابية الوحيدة المسموحة لدور المدقق. أي كتابة أخرى مرفوضة على الخادم
+// بحكم غياب النيّة، فالمنع افتراضي ولا يعتمد على تذكّر إضافة حارس في كل إجراء جديد:
+//   sign      = حفظ توقيعه الرسمي على سجل مفتوح
+//   ai_review = فرز المراقبة الذكية (تحويل رصد إلى مخالفة، وتعليمه بلاغاً خاطئاً)
+//   audit_log = تسجيل ملاحظات التدقيق في سجل التدقيق الخاص به
+export type AuditorWriteIntent = "sign" | "ai_review" | "audit_log"
+const AUDITOR_WRITE_INTENTS: readonly AuditorWriteIntent[] = ["sign", "ai_review", "audit_log"]
+
+export const AUDITOR_READ_ONLY_MESSAGE =
+  "دور المدقق للقراءة والتوقيع فقط — لا يملك تعديل السجلات أو حذفها. المسموح: التوقيع، وتحويل رصد المراقبة الذكية إلى مخالفة، وتسجيل ملاحظات التدقيق."
+
 // حارس الكتابة الموحّد: يُستدعى في مط��ع كل server action يعدّل بيانات. يمنع أي تعديل
-// أثناء وضع انتحال مسؤول المنصّة (عرض المؤسسة = قراءة فقط). مستقل عن ترتيب الاستدعاء
+// أثناء وضع انتحال مسؤول المنصّة (عرض المؤسسة = قراءة فقط)، ويمنع دور المدقق من أي
+// كتابة عدا العمليات المصرّح بها صراحةً عبر intent. مستقل عن ترتيب الاستدعاء
 // وعن أي helper نطاق استُخدم، فلا يمكن تفويته بتغيير مصدر النطاق.
-export async function assertWritable(): Promise<void> {
+export async function assertWritable(intent?: AuditorWriteIntent): Promise<void> {
   const u = await loadSessionUser()
   if (u?.impersonating) {
     throw new Error("وضع عرض المؤسسة للقراءة فقط — لا يمكن إجراء تعديلات أثناء دخول مسؤول المنصّة")
   }
+  if (u && isAuditor(u.role) && !(intent && AUDITOR_WRITE_INTENTS.includes(intent))) {
+    throw new Error(AUDITOR_READ_ONLY_MESSAGE)
+  }
+}
+
+// هل يعمل الطلب الحالي بدور المدقق؟ للقيود الإضافية الخاصة به (مثل منع التوقيع على
+// سجل مغلق أو مؤرشف) حيث لا يكفي حارس الكتابة وحده.
+export async function isActingAsAuditor(): Promise<boolean> {
+  const u = await loadSessionUser()
+  return !!u && isAuditor(u.role)
 }
 
 // حارس صفحات مسؤول المنصّة: يعيد المستخدم إن كان platform_admin، وإلا يوجّهه للجذر.

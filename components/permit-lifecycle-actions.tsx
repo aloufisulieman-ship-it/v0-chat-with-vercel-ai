@@ -35,6 +35,7 @@ import {
   resumePermit,
   archivePermit,
 } from "@/app/actions/permit-workflow"
+import { useIsAuditor } from "@/components/user-role-context"
 
 type Dlg = null | "approve" | "reject" | "close" | "extend" | "suspend"
 
@@ -92,6 +93,10 @@ export function PermitLifecycleActions({
   }
 
   const emailHref = `mailto:?subject=${encodeURIComponent(`${t("permitLifecycle.emailSubject")} ${documentNo}`)}`
+
+  // المدقق لا يملك هذا الإجراء — والخادم يرفضه أيضاً.
+  const isAuditor = useIsAuditor()
+  if (isAuditor) return null
 
   return (
     <>

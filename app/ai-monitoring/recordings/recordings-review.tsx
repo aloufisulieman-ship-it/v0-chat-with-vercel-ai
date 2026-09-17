@@ -37,6 +37,7 @@ import {
 import { AudioRecorder } from "./audio-recorder"
 import { useI18n } from "@/lib/i18n/client"
 import type { TFunction } from "@/lib/i18n/translate"
+import { useIsAuditor } from "@/components/user-role-context"
 
 function fmtDuration(sec: number) {
   const m = Math.floor(sec / 60)
@@ -231,6 +232,7 @@ function RecordingCard({
   onDeleted: () => void
 }) {
   const { t, locale, formatNumber } = useI18n()
+  const isAuditor = useIsAuditor()
   const [deleting, setDeleting] = useState(false)
 
   async function handleDelete(e: React.MouseEvent) {
@@ -289,6 +291,7 @@ function RecordingCard({
       <div className="flex flex-col gap-2 p-3">
         <div className="flex items-center justify-between gap-2">
           <span className="truncate text-sm font-semibold text-foreground">{rec.cameraName}</span>
+          {!isAuditor && (
           <button
             onClick={handleDelete}
             disabled={deleting}
@@ -297,6 +300,7 @@ function RecordingCard({
           >
             {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
           </button>
+          )}
         </div>
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
@@ -471,6 +475,7 @@ function ScreenshotCard({
   onLink: () => void
 }) {
   const { t } = useI18n()
+  const isAuditor = useIsAuditor()
   const violationHref = useMemo(() => {
     const params = new URLSearchParams({ from: "recording", evidence: shot.imageUrl })
     if (detectedBy) params.set("detectedBy", detectedBy)
@@ -491,6 +496,7 @@ function ScreenshotCard({
         <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1 py-0.5 text-[10px] font-medium text-white">
           {fmtDuration(shot.atSeconds)}
         </span>
+        {!isAuditor && (
         <button
           onClick={onDelete}
           className="absolute right-1 top-1 rounded bg-black/60 p-1 text-white opacity-0 transition-opacity hover:bg-destructive group-hover:opacity-100"
@@ -498,6 +504,7 @@ function ScreenshotCard({
         >
           <X className="size-3.5" />
         </button>
+        )}
       </div>
       <div className="p-2">
         {shot.linkedViolationId != null ? (

@@ -12,6 +12,50 @@ export function isPlatformAdmin(role: string | null | undefined): boolean {
   return role === PLATFORM_ADMIN_ROLE
 }
 
+// دور المدقق: صلاحيات مدير السلامة والصحة المهنية لكن بنطاق تدقيق ISO 45001 حصراً.
+export const AUDITOR_ROLE = "auditor"
+
+export function isAuditor(role: string | null | undefined): boolean {
+  return role === AUDITOR_ROLE
+}
+
+// الوحدات التي يملكها المدقق تلقائياً (نطاق تدقيق ISO 45001). ما عداها ممنوع عليه
+// مهما كانت صلاحياته المحفوظة — وعلى رأسها "hr" و"finance" و"users" و"settings":
+// فبيانات الإجراءات التأديبية والتسويات المالية خارج نطاق التدقيق تماماً.
+export const AUDITOR_MODULES: ModuleKey[] = [
+  "dashboard",
+  "audits",
+  "internal-audit",
+  "compliance",
+  "incidents",
+  "violations",
+  "risks",
+  "inspections",
+  "permits",
+  "training",
+  "employees",
+  "equipment",
+  "safety_rules",
+  // الجولة التفتيشية أداة إدخال ميداني بحتة (تسجّل مخالفات وملاحظات) ولا يملك
+  // المدقق الكتابة فيها، ونتائجها تظهر له في المخالفات والتقارير — فهي خارج نطاقه.
+  "ai_monitoring",
+  "actions",
+  "context",
+  "policy",
+  "objectives",
+  "legal-register",
+  "consultation",
+  "emergency",
+  "contractors",
+  "management-review",
+  "documents",
+  "reports",
+]
+
+export function auditorCanAccess(module: ModuleKey): boolean {
+  return AUDITOR_MODULES.includes(module)
+}
+
 // Parse the stored permissions string (a JSON array of module values) into an array.
 export function parsePermissions(raw: string | null | undefined): ModuleKey[] {
   if (!raw) return []
@@ -42,6 +86,7 @@ export function serializePermissions(modules: string[]): string {
 }
 
 // admin و manager يملكان وصولاً تلقائياً كاملاً لكل الوحدات (حمايةً من قفلهم خارجاً)،
+// والمدقق يملك تلقائياً وحدات تدقيق ISO 45001 فقط ولا يتجاوزها ولو مُنحت له صراحةً،
 // وأي دور آخر (مثل "user") يجب أن تكون الوحدة ضمن قائمة صلاحياته الصريحة.
 export function hasModuleAccess(
   role: string | null | undefined,
@@ -49,5 +94,6 @@ export function hasModuleAccess(
   module: ModuleKey,
 ): boolean {
   if (role === "admin" || role === "manager") return true
+  if (isAuditor(role)) return auditorCanAccess(module)
   return parsePermissions(permissionsRaw).includes(module)
 }

@@ -20,6 +20,7 @@ import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useI18n } from "@/lib/i18n/client"
+import { useIsAuditor } from "@/components/user-role-context"
 
 export type EquipmentRecord = {
   id: number
@@ -75,6 +76,10 @@ function EquipmentDialog({ item, typeOptions }: { item?: EquipmentRecord; typeOp
     return null
   }, null)
   const uid = item?.id ?? "new"
+
+  // المدقق لا يملك هذا الإجراء — والخادم يرفضه أيضاً.
+  const isAuditor = useIsAuditor()
+  if (isAuditor) return null
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -196,6 +201,10 @@ function EquipmentDialog({ item, typeOptions }: { item?: EquipmentRecord; typeOp
 function DeleteEquipmentButton({ item }: { item: EquipmentRecord }) {
   const { t, dir } = useI18n()
   const labelId = item.fleetNo || item.plateNumber
+  // المدقق لا يملك هذا الإجراء — والخادم يرفضه أيضاً.
+  const isAuditor = useIsAuditor()
+  if (isAuditor) return null
+
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild><Button variant="ghost" size="icon" aria-label={t("equipmentReg.deleteAria").replace("{plate}", labelId)}><Trash2 /></Button></AlertDialogTrigger>

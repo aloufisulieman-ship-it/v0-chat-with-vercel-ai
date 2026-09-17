@@ -15,6 +15,7 @@ import { hasRecordRoleSignature } from "@/app/actions/attachments"
 import { InlineRoleSignature } from "@/components/inline-role-signature"
 import { type SignatureRole } from "@/lib/signature-roles"
 import { ImageLightbox, useLightbox, type LightboxImage } from "@/components/image-lightbox"
+import { fileToUploadDataUrl } from "@/lib/image-compress"
 
 type FinanceAction = (formData: FormData) => Promise<void>
 
@@ -65,13 +66,15 @@ export function FinanceActionCard({
   const [signed, setSigned] = useState(false)
   const [pending, startTransition] = useTransition()
 
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => setReceipt(reader.result as string)
-    reader.readAsDataURL(file)
     e.target.value = ""
+    if (!file) return
+    try {
+      setReceipt(await fileToUploadDataUrl(file))
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "تعذّر رفع الإيصال", variant: "destructive" })
+    }
   }
 
   function submit() {

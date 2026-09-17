@@ -22,6 +22,7 @@ import {
   type LifecycleModule,
 } from "@/lib/lifecycle"
 import { CloseDialog, ReferDialog, ReopenDialog } from "./lifecycle-dialogs"
+import { useIsAuditor } from "@/components/user-role-context"
 
 type L = "ar" | "en"
 
@@ -53,13 +54,17 @@ export function LifecycleActions({
   const s = lifecycleUi(locale)
   const router = useRouter()
   const { toast } = useToast()
+  const isAuditor = useIsAuditor()
   const from = normalizeLifecycle(status)
   const [dlg, setDlg] = useState<"refer" | "close" | "reopen" | null>(null)
   const [busy, setBusy] = useState(false)
 
   const canRefer = canTransition(from, "referred")
   const canStart = canTransition(from, "in_progress")
-  const canClose = canTransition(from, "closed")
+  // السجل المحال إلى جهة (HR/المالية) يُغلق من لوحة الجهة المختصة حصراً، حيث يُلتقط
+  // توقيع موظفها الرسمي. لذلك يُخفى زر الإغلاق العام هنا، ويرفضه الخادم أيضاً بلا توقيع.
+  const referredToDept = assignedDept === "hr" || assignedDept === "finance"
+  const canClose = canTransition(from, "closed") && !referredToDept
   const canReopen = isAdmin && from === "archived"
 
   const lockedDept: Dept | null = module === "incidents" ? deptForClassification(classification) : null
@@ -120,7 +125,8 @@ export function LifecycleActions({
     </>
   )
 
-  if (items.length === 0) return null
+  // المدقق لا يحيل ولا يعالج ولا يغلق ولا يعيد فتح السجلات.
+  if (isAuditor || items.length === 0) return null
 
   if (variant === "buttons") {
     return (
