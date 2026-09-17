@@ -115,9 +115,12 @@ export async function getCompany() {
 export async function saveCompany(formData: FormData) {
   // قفل الإعداد الأولي: مسؤول المنصّة (readOnly = وضع الدخول إلى المؤسسة) يتجاوز القفل
   // ويعدّل دائماً؛ مدير المؤسسة يُرفض حفظه على الخادم بعد أن يصبح settingsLocked = true.
+  // ملاحظة: حارس الكتابة يُستدعى داخل الفرع غير الانتحالي فقط لأن مسؤول المنصّة
+  // يعدّل ملف المؤسسة عمداً أثناء الدخول إليها.
   const { userId, organizationId, readOnly } = await requireScope()
   const isPlatformAdminActing = readOnly
   if (!isPlatformAdminActing) {
+    await assertWritable()
     const { locked } = await getSettingsLock(organizationId)
     if (locked) throw new Error(SETTINGS_LOCKED_MESSAGE)
   }
@@ -998,7 +1001,8 @@ export async function getAudits() {
     .orderBy(desc(audit.createdAt))
 }
 export async function createAudit(formData: FormData) {
-  await assertWritable()
+  // سجل التدقيق هو دفتر ملاحظات المدقق نفسه، فيكتب فيه ويغلق تدقيقه.
+  await assertWritable("audit_log")
   const { userId, organizationId } = await requireModuleScope("audits")
   const title = str(formData.get("title"))
   const score = num(formData.get("score"))
@@ -1035,7 +1039,7 @@ export async function createAudit(formData: FormData) {
 // تحديث تدقيق قائم دون حذفه: ينقل الحالة (مجدول → قيد المعالجة → مكتمل) ويصحّح
 // النتيجة والبيانات الوصفية، مع الحفاظ على السجل التاريخي ورقمه.
 export async function updateAudit(formData: FormData) {
-  await assertWritable()
+  await assertWritable("audit_log")
   const scope = await requireModuleScope("audits")
   const id = Number(formData.get("id"))
   if (!Number.isFinite(id)) throw new Error("معرّف غير صالح")
@@ -2136,7 +2140,8 @@ export async function acceptDetectionAsViolation(
   detectionId: number,
   category: "internal" | "external",
   ) {
-  await assertWritable()
+  // من صميم عمل المدقق: تحويل الرصد الآلي إلى مخالفة رسمية.
+  await assertWritable("ai_review")
   const { userId, organizationId } = await requireModuleScope("ai_monitoring")
   if (category !== "internal" && category !== "external") {
     throw new Error("يجب تحديد تصنيف المخالفة: داخلية أو خارجية")
@@ -2507,7 +2512,8 @@ export async function escalateDetection(
 
 // بلاغ خاطئ من المدقق: يستبعد الكشف من الإحصائيات ويحفظ السبب للتحسين.
 export async function markDetectionFalsePositive(detectionId: number, reason: string) {
-  await assertWritable()
+  // قرار فرز على طابور الرصد لا تعديل على سجل — جزء من مراجعة المدقق.
+  await assertWritable("ai_review")
   const { userId, organizationId, isManager } = await requireModuleScope("ai_monitoring")
   const rows = await db.select({ name: user.name }).from(user).where(eq(user.id, userId)).limit(1)
   const actor = rows[0]?.name || "مستخدم"

@@ -498,6 +498,8 @@ export async function getUnreadAiNotifications() {
 
 // تعليم كل إشعارات المستخدم الحالي غير المقروءة كمقروءة.
 export async function markAiNotificationsRead() {
+  // حالة قراءة إشعارات المستخدم نفسه، لا تعديل على سجل — متاحة للمدقق ضمن مراجعته.
+  await assertWritable("ai_review")
   const current = await requireUser()
   await db
     .update(aiMonitoringNotification)

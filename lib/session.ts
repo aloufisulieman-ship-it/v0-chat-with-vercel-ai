@@ -244,14 +244,36 @@ export async function getCurrentUser(): Promise<AppUser | null> {
   return loadSessionUser()
 }
 
+// العمليات الكتابية الوحيدة المسموحة لدور المدقق. أي كتابة أخرى مرفوضة على الخادم
+// بحكم غياب النيّة، فالمنع افتراضي ولا يعتمد على تذكّر إضافة حارس في كل إجراء جديد:
+//   sign      = حفظ توقيعه الرسمي على سجل مفتوح
+//   ai_review = فرز المراقبة الذكية (تحويل رصد إلى مخالفة، وتعليمه بلاغاً خاطئاً)
+//   audit_log = تسجيل ملاحظات التدقيق في سجل التدقيق الخاص به
+export type AuditorWriteIntent = "sign" | "ai_review" | "audit_log"
+const AUDITOR_WRITE_INTENTS: readonly AuditorWriteIntent[] = ["sign", "ai_review", "audit_log"]
+
+export const AUDITOR_READ_ONLY_MESSAGE =
+  "دور المدقق للقراءة والتوقيع فقط — لا يملك تعديل السجلات أو حذفها. المسموح: التوقيع، وتحويل رصد المراقبة الذكية إلى مخالفة، وتسجيل ملاحظات التدقيق."
+
 // حارس الكتابة الموحّد: يُستدعى في مط��ع كل server action يعدّل بيانات. يمنع أي تعديل
-// أثناء وضع انتحال مسؤول المنصّة (عرض المؤسسة = قراءة فقط). مستقل عن ترتيب الاستدعاء
+// أثناء وضع انتحال مسؤول المنصّة (عرض المؤسسة = قراءة فقط)، ويمنع دور المدقق من أي
+// كتابة عدا العمليات المصرّح بها صراحةً عبر intent. مستقل عن ترتيب الاستدعاء
 // وعن أي helper نطاق استُخدم، فلا يمكن تفويته بتغيير مصدر النطاق.
-export async function assertWritable(): Promise<void> {
+export async function assertWritable(intent?: AuditorWriteIntent): Promise<void> {
   const u = await loadSessionUser()
   if (u?.impersonating) {
     throw new Error("وضع عرض المؤسسة للقراءة فقط — لا يمكن إجراء تعديلات أثناء دخول مسؤول المنصّة")
   }
+  if (u && isAuditor(u.role) && !(intent && AUDITOR_WRITE_INTENTS.includes(intent))) {
+    throw new Error(AUDITOR_READ_ONLY_MESSAGE)
+  }
+}
+
+// هل يعمل الطلب الحالي بدور المدقق؟ للقيود الإضافية الخاصة به (مثل منع التوقيع على
+// سجل مغلق أو مؤرشف) حيث لا يكفي حارس الكتابة وحده.
+export async function isActingAsAuditor(): Promise<boolean> {
+  const u = await loadSessionUser()
+  return !!u && isAuditor(u.role)
 }
 
 // حارس صفحات مسؤول المنصّة: يعيد المستخدم إن كان platform_admin، وإلا يوجّهه للجذر.

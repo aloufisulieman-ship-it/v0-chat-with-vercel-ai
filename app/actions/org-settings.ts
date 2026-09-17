@@ -4,7 +4,7 @@ import { db } from "@/lib/db"
 import { orgSettings, vehicleType, violationType, inspectionCategory, organization } from "@/lib/db/schema"
 import { eq, asc } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
-import { requireScope, requireHseReviewerScope } from "@/lib/session"
+import { requireScope, requireHseReviewerScope, assertWritable } from "@/lib/session"
 import { getSettingsLock, lockSettings, SETTINGS_LOCKED_MESSAGE } from "@/lib/settings-lock"
 import {
   MAX_GATES,
@@ -120,6 +120,9 @@ export async function saveOperationalSettings(
   // قفل الإعداد الأولي: مسؤول المنصّة (readOnly = وضع الدخول إلى المؤسسة) يتجاوز القفل
   // ويعدّل دائماً؛ مدير المؤسسة يُرفض حفظه على الخادم بعد القفل برسالة موحّدة.
   const { organizationId, isManager, readOnly } = await requireHseReviewerScope()
+  // المدقق يمرّ من بوابة المراجع ويُحسب مديراً في نطاق الرؤية، فيلزم حارس الكتابة
+  // هنا صراحةً كي لا يعدّل إعدادات التشغيل.
+  if (!readOnly) await assertWritable()
   if (!isManager) return { ok: false, error: "التعديل مقصور على مدير المؤسسة" }
   const isPlatformAdminActing = readOnly
   if (!isPlatformAdminActing) {
@@ -188,6 +191,7 @@ export async function saveOperationalSettings(
 export async function requestSettingsUnlock(): Promise<{ ok: boolean; error?: string }> {
   const { organizationId, isManager, readOnly } = await requireHseReviewerScope()
   if (readOnly) return { ok: false, error: "مسؤول المنصّة يعدّل الإعدادات مباشرة دون طلب" }
+  await assertWritable()
   if (!isManager) return { ok: false, error: "الطلب مقصور على مدير المؤسسة" }
   const { locked } = await getSettingsLock(organizationId)
   if (!locked) return { ok: false, error: "الإعدادات غير مقفلة" }

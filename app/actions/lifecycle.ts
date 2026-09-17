@@ -54,6 +54,23 @@ export async function assertNotArchived(module: LifecycleModule, id: number, org
   }
 }
 
+// حارس أوسع للمدقق: السجل المغلق أو المؤرشف لا يقبل منه أي كتابة (ولو توقيعاً).
+// يشمل السجلات القديمة التي أُغلقت قبل توحيد دورة الحياة فبقيت status = "closed"
+// دون lifecycleStatus = "archived".
+export async function assertRecordOpen(module: LifecycleModule, id: number, organizationId: string) {
+  const t = tableFor(module)
+  const [row] = await db
+    .select({ lifecycleStatus: t.lifecycleStatus, status: t.status })
+    .from(t)
+    .where(and(eq(t.id, id), eq(t.organizationId, organizationId)))
+    .limit(1)
+  if (!row) return
+  const lc = normalizeLifecycle(row.lifecycleStatus)
+  if (lc === "archived" || lc === "closed" || row.status === "closed") {
+    throw new Error("السجل مغلق أو مؤرشف — للقراءة فقط.")
+  }
+}
+
 // تسجيل حدث في سجل الحركة (إدراج فقط).
 export async function logRecordEvent(input: {
   organizationId: string
