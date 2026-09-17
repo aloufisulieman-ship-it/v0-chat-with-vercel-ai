@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useI18n } from "@/lib/i18n/client"
 import { toast } from "@/hooks/use-toast"
 import { fileToUploadDataUrl } from "@/lib/image-compress"
+import { useIsAuditor } from "@/components/user-role-context"
 
 export type EmployeeRecord = {
   id: number
@@ -55,6 +56,10 @@ function EmployeeDialog({ employee }: { employee?: EmployeeRecord }) {
     setOpen(false)
     return null
   }, null)
+
+  // المدقق لا يملك هذا الإجراء — والخادم يرفضه أيضاً.
+  const isAuditor = useIsAuditor()
+  if (isAuditor) return null
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -114,6 +119,10 @@ function EmployeeDialog({ employee }: { employee?: EmployeeRecord }) {
 
 function DeleteEmployeeButton({ employee }: { employee: EmployeeRecord }) {
   const { t, dir } = useI18n()
+  // المدقق لا يملك هذا الإجراء — والخادم يرفضه أيضاً.
+  const isAuditor = useIsAuditor()
+  if (isAuditor) return null
+
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild><Button variant="ghost" size="icon" aria-label={t("employeeReg.deleteAria").replace("{name}", employee.name)}><Trash2 /></Button></AlertDialogTrigger>

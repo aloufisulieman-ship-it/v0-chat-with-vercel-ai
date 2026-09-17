@@ -15,6 +15,7 @@ import { assertTotalUploadSize, fileToUploadDataUrl } from "@/lib/image-compress
 import { categoryOptions, type ViolationCategory } from "@/lib/violation-category"
 import { useI18n } from "@/lib/i18n/client"
 import { statusLabel, categoryOptionLabel } from "@/lib/i18n/labels"
+import { useIsAuditor } from "@/components/user-role-context"
 
 type ViolationRow = {
   id: number
@@ -103,6 +104,10 @@ export function ViolationEditDialog({ violation }: { violation: ViolationRow }) 
       }
     })
   }
+
+  // المدقق لا يملك هذا الإجراء — والخادم يرفضه أيضاً.
+  const isAuditor = useIsAuditor()
+  if (isAuditor) return null
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

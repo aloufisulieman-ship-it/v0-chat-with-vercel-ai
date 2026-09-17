@@ -1876,6 +1876,7 @@ export const en: Dictionary = {
       type: "Event Type",
       notes: "Inspector Notes",
       notesPlaceholder: "Add a note (required for a false report)…",
+      auditorSignature: "Auditor signature (required to escalate)",
       confirmIncident: "Confirm as Incident",
       toNearMiss: "Convert to Near Miss",
       falsePositive: "False Report",

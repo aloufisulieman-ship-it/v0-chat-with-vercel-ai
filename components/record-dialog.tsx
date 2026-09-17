@@ -20,6 +20,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "@/hooks/use-toast"
 import { useI18n } from "@/lib/i18n/client"
+import { useIsAuditor } from "@/components/user-role-context"
 
 export interface FieldDef {
   name: string
@@ -42,6 +43,7 @@ export function RecordDialog({
   action,
   trigger,
   hiddenFields,
+  allowAuditor = false,
 }: {
   title: string
   description?: string
@@ -52,8 +54,11 @@ export function RecordDialog({
   trigger?: React.ReactNode
   // قيم تُرسَل مع النموذج دون عرضها (مثل معرّف السجل عند التعديل).
   hiddenFields?: Record<string, string | number>
+  // يُعرض للمدقق أيضاً: لسجل التدقيق وحده، فهو دفتر ملاحظاته المصرّح له بالكتابة فيه.
+  allowAuditor?: boolean
 }) {
   const { t } = useI18n()
+  const isAuditor = useIsAuditor()
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
 
@@ -74,6 +79,9 @@ export function RecordDialog({
       }
     })
   }
+
+  // المدقق لا يُنشئ ولا يعدّل السجلات (عدا سجل التدقيق عبر allowAuditor).
+  if (isAuditor && !allowAuditor) return null
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

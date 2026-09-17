@@ -49,6 +49,7 @@ import {
   requireScope,
   requireUser,
   assertWritable,
+  isActingAsAuditor,
   type ModuleScope,
 } from "@/lib/session"
 import { scopeWhere } from "@/lib/scope"
@@ -2297,10 +2298,21 @@ export type EscalationResult = {
 
 export async function escalateDetection(
   detectionId: number,
-  options?: { override?: "incident" | "near_miss" | "corrective_action"; reviewerNotes?: string },
+  options?: {
+    override?: "incident" | "near_miss" | "corrective_action"
+    reviewerNotes?: string
+    // توقيع المُصعِّد يُحفظ على السجل الناتج. إلزامي للمدقق.
+    signatureDataUrl?: string
+  },
 ): Promise<EscalationResult> {
-  await assertWritable()
+  // تصعيد الرصد إلى حادث أو إجراء تصحيحي جزء من فرز المدقق للمراقبة الذكية.
+  await assertWritable("ai_review")
   const { userId, organizationId } = await requireModuleScope("ai_monitoring")
+  const actingAsAuditor = await isActingAsAuditor()
+  const signature = options?.signatureDataUrl?.trim() || ""
+  if (actingAsAuditor && !signature.startsWith("data:image")) {
+    throw new Error("توقيع المدقق إلزامي لتصعيد الرصد — وقّع ثم أعد المحاولة")
+  }
 
   const [det] = await db
     .select()
@@ -2343,6 +2355,25 @@ export async function escalateDetection(
     (det.notes && det.notes.trim().length > 0 ? det.notes.trim() : typeLabel) +
     ` — رصد آلي بالمراقبة الذكية (الخطورة: ${sevLabel}، نسبة الثقة ${det.confidenceScore}%).` +
     reviewerSuffix
+
+  // توقيع المُصعِّد على السجل الناتج، بنفس آلية التواقيع الرسمية (signature:auditor)
+  // فيظهر في نافذة التفاصيل وتقرير PDF إلى جانب اسمه المسجّل في السجل نفسه.
+  async function attachReviewerSignature(module: string, recordId: number) {
+    if (!signature.startsWith("data:image")) return
+    try {
+      await saveDataUrlAttachment(
+        userId,
+        organizationId,
+        module,
+        recordId,
+        roleKindFor(AUDITOR_SIGNATURE_ROLE.key),
+        signature,
+        `auditor-signature-${Date.now()}`,
+      )
+    } catch {
+      /* فشل حفظ التوقيع لا يُسقط التصعيد — الاسم مسجّل في السجل وسجل الحركة */
+    }
+  }
 
   // إرفاق لقطة الإثبات إلى السجل الناتج (أفضل جهد لا يُفشل العملية).
   async function attachSnapshot(module: string, recordId: number) {
@@ -2427,7 +2458,8 @@ export async function escalateDetection(
         incidentDate: detectedAt.toISOString().slice(0, 10),
         incidentTime: detectedAt.toTimeString().slice(0, 5),
         description: baseDesc,
-        reportedBy: `رصد ذكي — ${det.inspectorName || actor}`,
+        // اسم من صعّد الرصد مسجَّل في السجل نفسه (لا في سجل الحركة وحده).
+        reportedBy: `رصد ذكي — ${det.inspectorName || actor} · صعّده: ${actor}`,
         immediateActions: isCritical ? "تم إصدار أمر إيقاف العمل تلقائياً بانتظار تدخّل مدير السلامة." : "",
         // دورة الحياة: سجل جديد بمصدر رصد آلي — يبقى بانتظار اعتماد المدقق (غير محال).
         source: "ai_detection",
@@ -2437,6 +2469,7 @@ export async function escalateDetection(
     const recordId = inserted.id
 
     await attachSnapshot("incidents", recordId)
+    await attachReviewerSignature("incidents", recordId)
     await logRecordEvent({
       organizationId,
       module: "incidents",
@@ -2481,7 +2514,7 @@ export async function escalateDetection(
       organizationId,
       code,
       title: `${typeLabel}${det.cameraLocation ? ` — ${det.cameraLocation}` : ""}`,
-      source: "رصد ذكي (المراقبة الذكية)",
+      source: `رصد ذكي (المراقبة الذكية) · صعّده: ${actor}`,
       sourceType: "manual",
       sourceId: det.id,
       assignedTo,
@@ -2492,6 +2525,7 @@ export async function escalateDetection(
     })
     .returning({ id: correctiveAction.id })
   const capaId = insertedCapa.id
+  await attachReviewerSignature("actions", capaId)
 
   await db
     .update(aiDetection)

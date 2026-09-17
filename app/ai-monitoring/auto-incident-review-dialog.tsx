@@ -27,6 +27,8 @@ import { markDetectionFalsePositive, escalateDetection } from "@/app/actions/hse
 import { reviewDetectionClassification } from "@/app/actions/ai-monitoring"
 import { toast } from "@/hooks/use-toast"
 import { useI18n } from "@/lib/i18n/client"
+import { useIsAuditor } from "@/components/user-role-context"
+import { InlineSignatureField } from "@/components/inline-signature-field"
 
 // الحقول التي تحتاجها نافذة مراجعة الحادث الآلي (شكل مصغّر من صف الكشف).
 type DetectionLike = {
@@ -53,6 +55,9 @@ export function AutoIncidentReviewDialog({ detection: d }: { detection: Detectio
   const [open, setOpen] = useState(false)
   const [pending, setPending] = useState<null | "incident" | "near_miss" | "false" | "confirm" | "correct">(null)
   const [notes, setNotes] = useState("")
+  // توقيع المدقق على التصعيد: إلزامي له، واختياري لمن سواه (الخادم يفرض ذلك).
+  const isAuditor = useIsAuditor()
+  const [signature, setSignature] = useState("")
   const [selectedType, setSelectedType] = useState(d.detectionType)
   const [snapshot, setSnapshot] = useState<string | null>(null)
   const [snapFailed, setSnapFailed] = useState(false)
@@ -83,6 +88,7 @@ export function AutoIncidentReviewDialog({ detection: d }: { detection: Detectio
   function reset() {
     setPending(null)
     setNotes("")
+    setSignature("")
     setSelectedType(d.detectionType)
   }
 
@@ -123,7 +129,11 @@ export function AutoIncidentReviewDialog({ detection: d }: { detection: Detectio
   async function escalate(kind: "incident" | "near_miss") {
     setPending(kind)
     try {
-      const { documentNo } = await escalateDetection(d.id, { override: kind, reviewerNotes: notes })
+      const { documentNo } = await escalateDetection(d.id, {
+        override: kind,
+        reviewerNotes: notes,
+        signatureDataUrl: signature || undefined,
+      })
       await mutate(DETECTIONS_KEY)
       toast({
         title: t("aiMonitoring.review.created"),
@@ -315,6 +325,15 @@ export function AutoIncidentReviewDialog({ detection: d }: { detection: Detectio
               placeholder={t("aiMonitoring.review.notesPlaceholder")}
             />
           </div>
+
+          {/* توقيع المدقق — يُحفظ على السجل الناتج ضمن التواقيع الرسمية */}
+          {isAuditor && (
+            <InlineSignatureField
+              label={t("aiMonitoring.review.auditorSignature")}
+              required
+              onChange={setSignature}
+            />
+          )}
         </div>
 
         <DialogFooter className="flex-col gap-2 sm:flex-row sm:gap-2">

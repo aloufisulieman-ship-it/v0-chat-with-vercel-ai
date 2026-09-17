@@ -35,6 +35,7 @@ import {
   RISK_CLOSE_THRESHOLD,
   bandOf,
 } from "@/lib/risk-lifecycle"
+import { useIsAuditor } from "@/components/user-role-context"
 
 export type RiskLifecycleRow = {
   id: number
@@ -83,6 +84,10 @@ export function RiskLifecycleActions({
       }
     })
   }
+
+  // المدقق لا يملك هذا الإجراء — والخادم يرفضه أيضاً.
+  const isAuditor = useIsAuditor()
+  if (isAuditor) return null
 
   return (
     <>

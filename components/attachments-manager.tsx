@@ -15,6 +15,7 @@ import { type SignatureRole } from "@/lib/signature-roles"
 import { toast } from "@/hooks/use-toast"
 import { useI18n } from "@/lib/i18n/client"
 import { fileToUploadFile } from "@/lib/image-compress"
+import { useIsAuditor } from "@/components/user-role-context"
 
 export function fileUrl(pathname: string) {
   return `/api/file?pathname=${encodeURIComponent(pathname)}`
@@ -37,6 +38,9 @@ export function AttachmentsManager({
   readOnly?: boolean
 }) {
   const { t } = useI18n()
+  // المدقق يوقّع فقط: تُخفى عنه إضافة الصور وحذف المرفقات، ويبقى قسم التواقيع.
+  const isAuditor = useIsAuditor()
+  const canManageFiles = !readOnly && !isAuditor
   const [items, setItems] = useState<AttachmentRow[]>(initial)
   const [isPending, startTransition] = useTransition()
   const [uploadingCount, setUploadingCount] = useState(0)
@@ -138,7 +142,7 @@ export function AttachmentsManager({
               {photos.length}
             </span>
           </h4>
-          {!readOnly && (
+          {canManageFiles && (
           <Button
             type="button"
             size="sm"
@@ -190,7 +194,7 @@ export function AttachmentsManager({
                     <ZoomIn className="size-3.5" />
                   </span>
                 </button>
-                {!readOnly && <button
+                {canManageFiles && <button
                   type="button"
                   onClick={() => remove(p.id)}
                   disabled={isPending}
@@ -252,7 +256,7 @@ export function AttachmentsManager({
                   >
                     <Download className="size-3.5" /> {t("attachments.open")}
                   </a>
-                  {!readOnly && <button
+                  {canManageFiles && <button
                     type="button"
                     onClick={() => remove(d.id)}
                     disabled={isPending}
@@ -301,7 +305,7 @@ export function AttachmentsManager({
                   className="h-24 w-full object-contain p-2"
                   crossOrigin="anonymous"
                 />
-                {!readOnly && <button
+                {canManageFiles && <button
                   type="button"
                   onClick={() => remove(s.id)}
                   disabled={isPending}

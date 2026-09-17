@@ -13,6 +13,7 @@ import { inspectionStatusOptions } from "@/lib/labels"
 import { useI18n } from "@/lib/i18n/client"
 import { statusLabel } from "@/lib/i18n/labels"
 import { compressSignatureDataUrl } from "@/lib/image-compress"
+import { useIsAuditor } from "@/components/user-role-context"
 
 // لوحة توقيع رقمية تدعم الماوس واللمس (بصمة الإصبع على الشاشة) وتحفظ كصورة base64.
 function SignaturePad({
@@ -184,6 +185,10 @@ export function TrainingFormDialog() {
       }
     })
   }
+
+  // المدقق لا يملك هذا الإجراء — والخادم يرفضه أيضاً.
+  const isAuditor = useIsAuditor()
+  if (isAuditor) return null
 
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetForm() }}>

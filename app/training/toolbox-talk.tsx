@@ -30,6 +30,7 @@ import type { EmployeeRecord } from "./employee-registry"
 import { useI18n } from "@/lib/i18n/client"
 import type { TFunction } from "@/lib/i18n/translate"
 import { compressSignatureDataUrl, fileToUploadDataUrl } from "@/lib/image-compress"
+import { useIsAuditor } from "@/components/user-role-context"
 
 // ===== Worker groups & weekly schedule =====
 // JS getDay(): 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
@@ -222,6 +223,8 @@ type StoredToolboxSession = {
 
 export function ToolboxTalkTab({ employees, initialSessions }: { employees: EmployeeRecord[]; initialSessions: StoredToolboxSession[] }) {
   const { t, locale, dir } = useI18n()
+  // المدقق يقرأ سجل جلسات التوعية ويطبعها، ولا يسجّل جلسة جديدة ولا يحذف.
+  const isAuditor = useIsAuditor()
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const today = new Date()
@@ -620,12 +623,13 @@ export function ToolboxTalkTab({ employees, initialSessions }: { employees: Empl
         </Card>
 
         <div className="flex justify-end gap-2">
+{!isAuditor && (<>
           <Button variant="outline" onClick={resetForm} className="gap-1">
             {t("trainingMod.tbReset")}
           </Button>
           <Button onClick={handleSave} disabled={pending} className="gap-2">
               <Save className="size-4" /> {pending ? t("trainingMod.tbSaving") : t("trainingMod.tbSaveSession")}
-          </Button>
+          </Button></>)}
         </div>
       </TabsContent>
 
@@ -659,6 +663,7 @@ export function ToolboxTalkTab({ employees, initialSessions }: { employees: Empl
                     <Button variant="outline" size="sm" className="gap-1" onClick={() => printSession(s)}>
                       <Printer className="size-4" /> {t("trainingMod.tbPrintPdf")}
                     </Button>
+                    {!isAuditor && (
                     <button
                       type="button"
                       onClick={() => deleteSession(s)}
@@ -667,6 +672,7 @@ export function ToolboxTalkTab({ employees, initialSessions }: { employees: Empl
                     >
                       <Trash2 className="size-4" />
                     </button>
+                    )}
                   </div>
                 </CardContent>
               </Card>

@@ -112,6 +112,7 @@ export default async function AuditsPage() {
             fields={auditFields(r)}
             action={updateAudit}
             hiddenFields={{ id: r.id }}
+            allowAuditor
             trigger={editTrigger(t("auditsMod.editAria"))}
           />
           <DeleteButton id={r.id} action={deleteAudit} />
@@ -156,7 +157,7 @@ export default async function AuditsPage() {
       title={t("pageHeaders.auditsTitle")}
       subtitle={t("pageHeaders.auditsSubtitle")}
       user={user}
-      action={<RecordDialog title={t("auditsMod.dialogTitle")} description={t("auditsMod.dialogDesc")} triggerLabel={t("auditsMod.trigger")} fields={fields} action={createAudit} />}
+      action={<RecordDialog title={t("auditsMod.dialogTitle")} description={t("auditsMod.dialogDesc")} triggerLabel={t("auditsMod.trigger")} fields={fields} action={createAudit} allowAuditor />}
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard label={t("auditsMod.kpiTotal")} value={audits.length} icon={ClipboardList} tone="blue" />

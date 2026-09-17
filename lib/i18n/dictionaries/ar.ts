@@ -1927,6 +1927,7 @@ export const ar = {
       type: "نوع الحدث",
       notes: "ملاحظات المدقق",
       notesPlaceholder: "أضف ملاحظة (إلزامية عند البلاغ الخاطئ)…",
+      auditorSignature: "توقيع المدقق (إلزامي للتصعيد)",
       confirmIncident: "اعتماد كحادث",
       toNearMiss: "تحويل إلى وشيك",
       falsePositive: "بلاغ خاطئ",

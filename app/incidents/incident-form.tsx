@@ -30,6 +30,7 @@ import {
   partyHospitalizedLabel,
   incidentTypeCatalogLabel,
 } from "@/lib/i18n/labels"
+import { useIsAuditor } from "@/components/user-role-context"
 
 function SignaturePad({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   const { t } = useI18n()
@@ -206,6 +207,10 @@ export function IncidentFormDialog({ defaultReporter = "", equipmentOptions = []
   }
 
   const steps = [t("incidentForm.stepData"), t("incidentForm.stepParties"), t("incidentForm.stepSignatures")]
+
+  // المدقق لا يملك هذا الإجراء — والخادم يرفضه أيضاً.
+  const isAuditor = useIsAuditor()
+  if (isAuditor) return null
 
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetForm() }}>

@@ -18,6 +18,7 @@ import { toast } from "@/hooks/use-toast"
 import { useI18n } from "@/lib/i18n/client"
 import { completeCorrectiveAction } from "@/app/actions/risk-lifecycle"
 import { fileToUploadDataUrl } from "@/lib/image-compress"
+import { useIsAuditor } from "@/components/user-role-context"
 
 export function CompleteActionDialog({ actionId }: { actionId: number }) {
   const { t } = useI18n()
@@ -51,6 +52,10 @@ export function CompleteActionDialog({ actionId }: { actionId: number }) {
       }
     })
   }
+
+  // المدقق لا يملك هذا الإجراء — والخادم يرفضه أيضاً.
+  const isAuditor = useIsAuditor()
+  if (isAuditor) return null
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

@@ -29,6 +29,7 @@ import {
   GAS_FIELDS,
   permitTypeLabel,
 } from "@/lib/permit-workflow"
+import { useIsAuditor } from "@/components/user-role-context"
 
 type Attachment = { url: string; name: string; kind: string }
 
@@ -148,6 +149,10 @@ export function PermitIssueWizard({
   }
 
   const steps = [t("permitWizard.step1"), t("permitWizard.step2"), t("permitWizard.step3")]
+
+  // المدقق لا يملك هذا الإجراء — والخادم يرفضه أيضاً.
+  const isAuditor = useIsAuditor()
+  if (isAuditor) return null
 
   return (
     <Dialog

@@ -36,7 +36,8 @@ export const AUDITOR_MODULES: ModuleKey[] = [
   "employees",
   "equipment",
   "safety_rules",
-  "patrol",
+  // الجولة التفتيشية أداة إدخال ميداني بحتة (تسجّل مخالفات وملاحظات) ولا يملك
+  // المدقق الكتابة فيها، ونتائجها تظهر له في المخالفات والتقارير — فهي خارج نطاقه.
   "ai_monitoring",
   "actions",
   "context",

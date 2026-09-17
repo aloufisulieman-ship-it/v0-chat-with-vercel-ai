@@ -23,6 +23,7 @@ import {
 } from "@/lib/violation-category"
 import { useI18n } from "@/lib/i18n/client"
 import { statusLabel, categoryOptionLabel, internalActionLabel, violationTypeLabel } from "@/lib/i18n/labels"
+import { useIsAuditor } from "@/components/user-role-context"
 
 const VIOLATION_TYPES = [
   "عدم ارتداء خوذة السلامة",
@@ -328,6 +329,10 @@ export function ViolationFormDialog({
   }
 
   const steps = [t("violationForm.stepData"), t("violationForm.stepEvidence"), t("violationForm.stepSignatures")]
+
+  // المدقق لا يملك هذا الإجراء — والخادم يرفضه أيضاً.
+  const isAuditor = useIsAuditor()
+  if (isAuditor) return null
 
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetForm() }}>

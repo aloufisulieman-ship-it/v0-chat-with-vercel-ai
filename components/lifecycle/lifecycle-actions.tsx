@@ -22,6 +22,7 @@ import {
   type LifecycleModule,
 } from "@/lib/lifecycle"
 import { CloseDialog, ReferDialog, ReopenDialog } from "./lifecycle-dialogs"
+import { useIsAuditor } from "@/components/user-role-context"
 
 type L = "ar" | "en"
 
@@ -53,6 +54,7 @@ export function LifecycleActions({
   const s = lifecycleUi(locale)
   const router = useRouter()
   const { toast } = useToast()
+  const isAuditor = useIsAuditor()
   const from = normalizeLifecycle(status)
   const [dlg, setDlg] = useState<"refer" | "close" | "reopen" | null>(null)
   const [busy, setBusy] = useState(false)
@@ -123,7 +125,8 @@ export function LifecycleActions({
     </>
   )
 
-  if (items.length === 0) return null
+  // المدقق لا يحيل ولا يعالج ولا يغلق ولا يعيد فتح السجلات.
+  if (isAuditor || items.length === 0) return null
 
   if (variant === "buttons") {
     return (
