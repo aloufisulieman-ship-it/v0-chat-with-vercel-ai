@@ -18,6 +18,7 @@ import {
   deleteInternalAudit,
 } from "@/app/actions/hse"
 import { inspectionStatusOptions } from "@/lib/labels"
+import { AuditStatusControl } from "./audit-status-control"
 import { getServerT } from "@/lib/i18n/server"
 import { statusLabel } from "@/lib/i18n/labels"
 import { cn } from "@/lib/utils"
@@ -42,6 +43,8 @@ export default async function AuditsPage() {
   const [audits, internalAudits] = await Promise.all([getAudits(), getInternalAudits()])
   const { t } = await getServerT()
   const isAdmin = user.role === "admin"
+  // تغيير حالة التدقيق: مدير النظام ومدير السلامة فقط (نفس الشرط المفروض على الخادم).
+  const canChangeStatus = user.role === "admin" || user.role === "manager"
   const statusOptions = inspectionStatusOptions.map((o) => ({ value: o.value, label: statusLabel(t, o.value) }))
 
   // نفس تعريف الحقول للإضافة والتعديل؛ التعديل يمرّرها بالقيم الحالية كقيم افتراضية.
@@ -50,7 +53,10 @@ export default async function AuditsPage() {
     { name: "standard", label: t("auditsMod.fStandard"), placeholder: t("auditsMod.fStandardPlaceholder"), defaultValue: r?.standard ?? "" },
     { name: "auditor", label: t("auditsMod.fAuditor"), defaultValue: r?.auditor ?? "" },
     { name: "score", label: t("auditsMod.fScorePct"), type: "number", min: 0, max: 100, defaultValue: r?.score ?? 0 },
-    { name: "status", label: t("auditsMod.fStatus"), type: "select", options: statusOptions, defaultValue: r?.status ?? "scheduled" },
+    // الحالة تُدار من AuditStatusControl؛ تظهر هنا لمن يملك تغييرها فقط.
+    ...(canChangeStatus
+      ? [{ name: "status", label: t("auditsMod.fStatus"), type: "select" as const, options: statusOptions, defaultValue: r?.status ?? "scheduled" }]
+      : []),
     { name: "auditDate", label: t("auditsMod.fDate"), type: "date", defaultValue: r?.auditDate ?? "" },
   ]
   const fields = auditFields()
@@ -104,6 +110,15 @@ export default async function AuditsPage() {
               { label: t("auditsMod.fStatus"), value: r.status ? statusLabel(t, r.status) : "-" },
               { label: t("auditsMod.fDate"), value: r.auditDate ?? "-" },
             ]}
+            extraSection={
+              <AuditStatusControl
+                auditId={r.id}
+                status={r.status ?? "scheduled"}
+                statusChangedBy={r.statusChangedBy}
+                statusChangedAt={r.statusChangedAt}
+                canChange={canChangeStatus}
+              />
+            }
             initialAttachments={[]}
           />
           <RecordDialog
