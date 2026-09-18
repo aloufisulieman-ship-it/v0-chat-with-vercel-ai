@@ -2,7 +2,7 @@
 
 import { db } from "@/lib/db"
 import { equipment, safetyRule, violation, incident, inspection } from "@/lib/db/schema"
-import { and, eq, desc } from "drizzle-orm"
+import { and, eq, desc, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { requireScope, assertWritable } from "@/lib/session"
 
@@ -171,14 +171,31 @@ export async function getEquipmentById(id: number) {
 
 /* ---------------- قواعد السلامة حسب الموقع ---------------- */
 
+// ترتيب المواقع الثابت المطلوب. المواقع غير المذكورة تأتي بعدها حسب تاريخ الإضافة.
+const SAFETY_RULE_LOCATION_ORDER = [
+  "الساحة — التحميل والتفريغ (العمال)",
+  "الساحة — مسارات الرافعات الشوكية",
+  "الساحة — مواقف الشاحنات (الزوار)",
+  "الورشة — منطقة الإصلاح",
+  "الورشة — منطقة الشحن الكهربائي (الرافعات والتوكتوك)",
+  "الورشة — فنيو الورشة",
+  "مخزن قطع الغيار ومكتب الورشة",
+  "مكتب السلامة والعمليات ومكاتب الإدارة التنفيذية (مبنى الورشة)",
+  "المكتب الرئيسي",
+] as const
+
 export async function getSafetyRules() {
   const { userId, organizationId } = await requireScope()
+  const locationRank = sql`case ${safetyRule.location} ${sql.join(
+  SAFETY_RULE_LOCATION_ORDER.map((loc, i) => sql`when ${loc} then ${i}`),
+  sql` `,
+  )} else ${SAFETY_RULE_LOCATION_ORDER.length} end`
   return db
-    .select()
-    .from(safetyRule)
-    .where(and(eq(safetyRule.organizationId, organizationId), eq(safetyRule.userId, userId)))
-    .orderBy(safetyRule.location)
-}
+  .select()
+  .from(safetyRule)
+  .where(and(eq(safetyRule.organizationId, organizationId), eq(safetyRule.userId, userId)))
+  .orderBy(locationRank, safetyRule.createdAt)
+  }
 
 function safetyRuleValues(formData: FormData) {
   const location = str(formData.get("location")).trim()
