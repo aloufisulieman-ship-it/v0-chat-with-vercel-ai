@@ -14,25 +14,51 @@
 //     المستودع (مثل scripts/backfill-corrective-actions.sql) — فقد تكون بعض
 //     الحسابات محفوظة بهذا الشكل من مسار كتابة سابق أو تعديل مباشر لقاعدة البيانات.
 // إضافة/تحديث فقط — لا حذف ولا فقدان بيانات، وقابل لإعادة التشغيل بأمان.
+//
+// الاستخدام:
+//   node scripts/016-hse-department-migration.mjs --dry   يعرض فقط قائمة الحسابات
+//                                                          المرشّحة للنقل (الاسم،
+//                                                          الدور، القسم الحالي) —
+//                                                          لا معاملة (transaction)
+//                                                          كتابية تُفتح إطلاقاً في
+//                                                          وضع dry-run، ولا تعديل.
+//   node scripts/016-hse-department-migration.mjs         ينفّذ النقل فعلياً.
 import { Pool } from "pg"
 
+const DRY = process.argv.includes("--dry")
 const pool = new Pool({ connectionString: process.env.DATABASE_URL })
+
+// نفس شرط الترشّح تماماً بين وضعَي العرض والتنفيذ — سطر واحد لا نسختان قد تنحرفان.
+const CANDIDATE_WHERE = `role = 'manager' and department in ('inspector', 'مفتش السلامة')`
 
 async function main() {
   const c = await pool.connect()
   try {
+    if (DRY) {
+      // قراءة فقط: استعلام SELECT وحده، بلا begin/update/commit — لا يمكن لهذا
+      // الفرع أن يعدّل صفاً واحداً مهما حدث.
+      const { rows } = await c.query(`
+        select name, role, department
+          from "user"
+         where ${CANDIDATE_WHERE}
+         order by "organizationId", name`)
+      console.log(`016 --dry — ${rows.length} حساباً مرشّحاً للنقل إلى القسم "hse" (لم يُعدَّل شيء):`)
+      console.table(
+        rows.map((r) => ({
+          الاسم: r.name,
+          الدور: r.role,
+          "القسم الحالي": r.department,
+        })),
+      )
+      return
+    }
+
     await c.query("begin")
-
-    const migrated = await c.query(`
-      update "user"
-         set department = 'hse'
-       where role = 'manager'
-         and department in ('inspector', 'مفتش السلامة')`)
-
+    const migrated = await c.query(`update "user" set department = 'hse' where ${CANDIDATE_WHERE}`)
     await c.query("commit")
     console.log(`016 done — migrated ${migrated.rowCount ?? 0} manager account(s) to the "hse" department`)
   } catch (e) {
-    await c.query("rollback")
+    if (!DRY) await c.query("rollback")
     throw e
   } finally {
     c.release()
