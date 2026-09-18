@@ -1787,7 +1787,7 @@ export const en: Dictionary = {
     statusSaving: "Saving...",
     statusSaved: "Audit status updated",
     statusSaveFailed: "Could not update the status",
-    statusManagersOnly: "Only administrators and the safety manager can change the status.",
+    statusManagersOnly: "Only administrators, the HSE manager and auditors can change the status.",
     statusChangedBy: "Last status change: {name} — {date}",
     editTitle: "Update audit",
     editDesc: "Update the audit status and score without deleting the record.",

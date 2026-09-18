@@ -1835,7 +1835,7 @@ export const ar = {
     statusSaving: "جارٍ الحفظ...",
     statusSaved: "تم تحديث حالة التدقيق",
     statusSaveFailed: "تعذّر تحديث الحالة",
-    statusManagersOnly: "تغيير الحالة متاح لمدير النظام ومدير السلامة فقط.",
+    statusManagersOnly: "تغيير الحالة متاح لمدير النظام ومدير السلامة والصحة المهنية والمدقق فقط.",
     statusChangedBy: "آخر تغيير للحالة: {name} — {date}",
     editTitle: "تحديث التدقيق",
     editDesc: "حدّث حالة التدقيق ونتيجته دون حذف السجل.",

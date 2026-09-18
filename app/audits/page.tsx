@@ -7,6 +7,7 @@ import { RecordDialog, type FieldDef } from "@/components/record-dialog"
 import { RecordDetailsDialog } from "@/components/record-details-dialog"
 import { DeleteButton } from "@/components/delete-button"
 import { requireModule } from "@/lib/session"
+import { isAuditor } from "@/lib/permissions"
 import {
   getAudits,
   createAudit,
@@ -43,8 +44,10 @@ export default async function AuditsPage() {
   const [audits, internalAudits] = await Promise.all([getAudits(), getInternalAudits()])
   const { t } = await getServerT()
   const isAdmin = user.role === "admin"
-  // تغيير حالة التدقيق: مدير النظام ومدير السلامة فقط (نفس الشرط المفروض على الخادم).
-  const canChangeStatus = user.role === "admin" || user.role === "manager"
+  // تغيير حالة التدقيق: نفس شرط الخادم بالضبط (canChangeAuditStatus في
+  // app/actions/hse.ts) — القسم لا الدور العام "manager"، لأن "manager" يُمنح
+  // لأي قسم وليس حصرياً لمدير السلامة.
+  const canChangeStatus = user.role === "admin" || user.department === "مفتش السلامة" || isAuditor(user.role)
   const statusOptions = inspectionStatusOptions.map((o) => ({ value: o.value, label: statusLabel(t, o.value) }))
 
   // نفس تعريف الحقول للإضافة والتعديل؛ التعديل يمرّرها بالقيم الحالية كقيم افتراضية.

@@ -1011,7 +1011,7 @@ export async function createAudit(formData: FormData) {
   // من لا يملك تغيير الحالة لا يُنشئ تدقيقاً بحالة جاهزة (وإلا صار الإنشاء طريقاً
   // لتجاوز القيد)؛ يبدأ تدقيقه "مجدولاً" ثم يعتمده المدير.
   const requestedStatus = str(formData.get("status"), "scheduled")
-  const status = canChangeAuditStatus(scope.role) ? requestedStatus : "scheduled"
+  const status = canChangeAuditStatus(scope) ? requestedStatus : "scheduled"
   const [inserted] = await db
     .insert(audit)
     .values({
@@ -1043,21 +1043,24 @@ export async function createAudit(formData: FormData) {
 }
 // تحديث تدقيق قائم دون حذفه: ينقل الحالة (مجدول → قيد المعالجة → مكتمل) ويصحّح
 // النتيجة والبيانات الوصفية، مع الحفاظ على السجل التاريخي ورقمه.
-// تغيير حالة التدقيق مقصور على مدير النظام (admin) ومدير السلامة (manager).
-// المدقق يكتب ملاحظاته ونتيجته لكنه لا ينقل الحالة — والفصل مقصود: من يسجّل
-// نتيجة التدقيق ليس من يعتمد انتقاله إلى "مغلق".
+// تغيير حالة التدقيق مقصور على: مدير النظام (admin)، ومدير السلامة والصحة المهنية
+// تحديداً (department === "مفتش السلامة" — القيمة الوحيدة لقسم السلامة في النظام؛
+// دور "manager" نفسه عام "مشرف" يُمنح لأي قسم كالموارد البشرية أو المالية فلا يكفي
+// وحده)، والمدقق (auditor) الذي نطاقه محصور أصلاً بتدقيق ISO 45001 ولا يرى بيانات
+// الموارد البشرية أو المالية (lib/audit-redaction.ts)، فلا خطر من منحه القرار هنا.
 const AUDIT_STATUSES = ["scheduled", "in_progress", "closed"] as const
-const AUDIT_STATUS_DENIED_MESSAGE = "تغيير حالة التدقيق مقصور على مدير النظام ومدير السلامة"
+const AUDIT_STATUS_DENIED_MESSAGE = "تغيير حالة التدقيق مقصور على مدير النظام ومدير السلامة والصحة المهنية والمدقق"
+const SAFETY_MANAGER_DEPARTMENT = "مفتش السلامة"
 
-function canChangeAuditStatus(role: string): boolean {
-  return role === "admin" || role === "manager"
+function canChangeAuditStatus(scope: { role: string; department: string; isAuditor: boolean }): boolean {
+  return scope.role === "admin" || scope.department === SAFETY_MANAGER_DEPARTMENT || scope.isAuditor
 }
 
 // تغيير الحالة وحدها (من نافذة التفاصيل)، مع تسجيل من غيّرها ومتى.
 export async function updateAuditStatus(formData: FormData) {
   await assertWritable()
   const scope = await requireModuleScope("audits")
-  if (!canChangeAuditStatus(scope.role)) throw new Error(AUDIT_STATUS_DENIED_MESSAGE)
+  if (!canChangeAuditStatus(scope)) throw new Error(AUDIT_STATUS_DENIED_MESSAGE)
 
   const id = Number(formData.get("id"))
   if (!Number.isFinite(id)) throw new Error("معرّف غير صالح")
@@ -1118,7 +1121,7 @@ export async function updateAudit(formData: FormData) {
   const currentStatus = current.status ?? "scheduled"
   const requestedStatus = str(formData.get("status"), currentStatus)
   const changingStatus = requestedStatus !== currentStatus
-  if (changingStatus && !canChangeAuditStatus(scope.role)) throw new Error(AUDIT_STATUS_DENIED_MESSAGE)
+  if (changingStatus && !canChangeAuditStatus(scope)) throw new Error(AUDIT_STATUS_DENIED_MESSAGE)
   const status = changingStatus ? requestedStatus : currentStatus
   const actor = changingStatus ? await requireUser() : null
 

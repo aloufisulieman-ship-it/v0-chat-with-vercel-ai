@@ -53,6 +53,11 @@ export type ModuleScope = {
   userId: string
   organizationId: string
   role: string
+  // قسم المستخدم كما هو مخزَّن على حسابه (قد يكون فارغاً). "manager" دور عام
+  // "مشرف" يُمنح لأي قسم (موارد بشرية، مالية، عمليات...) وليس حصرياً لمدير
+  // السلامة، فالقرارات التي يجب أن تقتصر فعلياً على مسؤول السلامة تتحقق من
+  // هذا الحقل (department === "مفتش السلامة") لا من role وحده.
+  department: string
   isManager: boolean
   // صحيح عندما يكون الطلب في وضع انتحال مسؤول المنصّة — تُمنع كل التعديلات.
   readOnly: boolean
@@ -136,6 +141,7 @@ function scopeFrom(u: AppUser): ModuleScope {
     userId: u.id,
     organizationId: u.organizationId,
     role: u.role,
+    department: u.department,
     isManager: u.isPlatformAdmin ? true : isOrgManager(u),
     readOnly: u.impersonating,
     isAuditor: isAuditor(u.role),
