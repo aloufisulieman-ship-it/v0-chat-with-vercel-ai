@@ -235,7 +235,16 @@ function safetyRuleValues(formData: FormData) {
 export async function createSafetyRule(formData: FormData) {
   await assertWritable()
   const { userId, organizationId } = await requireScope()
-  await db.insert(safetyRule).values({ userId, organizationId, ...safetyRuleValues(formData) })
+  // sort_order = أكبر قيمة حالية لنفس المؤسسة + 1، ليظهر الموقع الجديد في آخر
+  // القائمة افتراضياً؛ يُحرَّك لاحقاً بأسهم الترتيب (moveSafetyRule).
+  const [last] = await db
+    .select({ sortOrder: safetyRule.sortOrder })
+    .from(safetyRule)
+    .where(eq(safetyRule.organizationId, organizationId))
+    .orderBy(desc(safetyRule.sortOrder))
+    .limit(1)
+  const sortOrder = (last?.sortOrder ?? 0) + 1
+  await db.insert(safetyRule).values({ userId, organizationId, sortOrder, ...safetyRuleValues(formData) })
   revalidatePath("/safety-rules")
 }
 
