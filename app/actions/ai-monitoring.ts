@@ -248,7 +248,7 @@ function pickPrimary(
 }
 
 // دمج ملاحظات المخالفات (القديمة + الجديدة) في نص واحد يذكر كل المخالفات مرة واحدة،
-// مع إزالة التكرار حسب اسم المخالفة (الجزء قبل ":") حفاظاً على الو��ف الأول لكل نوع.
+// مع إزالة التكرار حسب اسم المخالفة (الجزء قبل ":") حفاظاً على الوصف الأول لكل نوع.
 function mergeNotes(existing: string, incoming: string): string {
   const parts = [...(existing || "").split(" • "), ...(incoming || "").split(" • ")]
     .map((s) => s.trim())
@@ -342,9 +342,9 @@ export async function saveFrameDetection(input: {
             ? existing.escalationTarget
             : (escalationTargetByType[primaryTypeUpd] ?? "none"),
         confidenceScore: Math.max(existing.confidenceScore, merged.primaryConfidence),
-        // نجمع كل المخ��لفات في نص ملاحظات واحد يذكرها جميعاً مرة واحدة.
+        // نجمع كل المخالفات في نص ملاحظات واحد يذكرها جميعاً مرة واحدة.
         notes: mergeNotes(existing.notes || "", merged.notes),
-        // نحدّث اللقطة لأحدث د��يل بصري إن توفّرت لقطة جديدة.
+        // نحدّث اللقطة لأحدث دليل بصري إن توفّرت لقطة جديدة.
         snapshotUrl: input.snapshotUrl || existing.snapshotUrl,
       })
       .where(eq(aiDetection.id, existing.id))

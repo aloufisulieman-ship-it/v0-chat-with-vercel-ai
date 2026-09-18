@@ -53,6 +53,11 @@ export type ModuleScope = {
   userId: string
   organizationId: string
   role: string
+  // قسم المستخدم كما هو مخزَّن على حسابه (قد يكون فارغاً). "manager" دور عام
+  // "مشرف" يُمنح لأي قسم (موارد بشرية، مالية، عمليات...) وليس حصرياً لمدير
+  // السلامة، فالقرارات التي يجب أن تقتصر فعلياً على مسؤول السلامة تتحقق من
+  // هذا الحقل (department === "مفتش السلامة") لا من role وحده.
+  department: string
   isManager: boolean
   // صحيح عندما يكون الطلب في وضع انتحال مسؤول المنصّة — تُمنع كل التعديلات.
   readOnly: boolean
@@ -136,6 +141,7 @@ function scopeFrom(u: AppUser): ModuleScope {
     userId: u.id,
     organizationId: u.organizationId,
     role: u.role,
+    department: u.department,
     isManager: u.isPlatformAdmin ? true : isOrgManager(u),
     readOnly: u.impersonating,
     isAuditor: isAuditor(u.role),
@@ -255,7 +261,7 @@ const AUDITOR_WRITE_INTENTS: readonly AuditorWriteIntent[] = ["sign", "ai_review
 export const AUDITOR_READ_ONLY_MESSAGE =
   "دور المدقق للقراءة والتوقيع فقط — لا يملك تعديل السجلات أو حذفها. المسموح: التوقيع، وتحويل رصد المراقبة الذكية إلى مخالفة، وتسجيل ملاحظات التدقيق."
 
-// حارس الكتابة الموحّد: يُستدعى في مط��ع كل server action يعدّل بيانات. يمنع أي تعديل
+// حارس الكتابة الموحّد: يُستدعى في مطلع كل server action يعدّل بيانات. يمنع أي تعديل
 // أثناء وضع انتحال مسؤول المنصّة (عرض المؤسسة = قراءة فقط)، ويمنع دور المدقق من أي
 // كتابة عدا العمليات المصرّح بها صراحةً عبر intent. مستقل عن ترتيب الاستدعاء
 // وعن أي helper نطاق استُخدم، فلا يمكن تفويته بتغيير مصدر النطاق.

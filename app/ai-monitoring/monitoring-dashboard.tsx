@@ -359,7 +359,7 @@ export function MonitoringDashboard({
   }, [kpiCounted])
 
   // عدّادات اليوم لكل نوع من الأنواع الستة — نحتسب كل نوع مرصود داخل اللقطة الواحدة
-  // (البند قد يضمّ أكثر من ��خالفة) حتى تعكس الأرقام الواقع.
+  // (البند قد يضمّ أكثر من مخالفة) حتى تعكس الأرقام الواقع.
   const todayCounts = useMemo(() => {
     const counts: Record<string, number> = {}
     for (const opt of detectionTypeOptions) counts[opt.value] = 0

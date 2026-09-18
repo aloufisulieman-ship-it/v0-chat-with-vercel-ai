@@ -448,12 +448,12 @@ export async function deletePermit(id: number) {
   revalidatePath("/permits")
 }
 
-// يحدد ما إذا كان المستخدم يملك صلاح��ة اعتماد/رفض التصاريح (مدير).
+// يحدد ما إذا كان المستخدم يملك صلاحية اعتماد/رفض التصاريح (مدير).
 function isPermitApprover(role: string, department: string): boolean {
   return role === "admin" || department === "المدير العام" || department === "مفتش السلامة"
 }
 
-// اعتماد أو رفض تصريح عمل من قِبل المدير، مع تسجيل اسم ال��عتمِد والتاريخ والسب��.
+// اعتماد أو رفض تصريح عمل من قِبل المدير، مع تسجيل اسم المعتمِد والتاريخ والسبب.
 // مقيّد بمؤسسة المعتمِد: لا يمكن اعتماد تصريح تابع لمؤسسة أخرى.
 export async function updatePermitStatus(
   permitId: number,
@@ -1002,12 +1002,16 @@ export async function getAudits() {
     .orderBy(desc(audit.createdAt))
 }
 export async function createAudit(formData: FormData) {
-  // سجل التدقيق هو دفتر ملاحظات المدقق نفسه، فيكتب فيه ويغلق تدقيقه.
+  // سجل التدقيق هو دفتر ملاحظات المدقق نفسه، فيكتب فيه ويسجّل نتيجته.
   await assertWritable("audit_log")
-  const { userId, organizationId } = await requireModuleScope("audits")
+  const scope = await requireModuleScope("audits")
+  const { userId, organizationId } = scope
   const title = str(formData.get("title"))
   const score = num(formData.get("score"))
-  const status = str(formData.get("status"), "scheduled")
+  // من لا يملك تغيير الحالة لا يُنشئ تدقيقاً بحالة جاهزة (وإلا صار الإنشاء طريقاً
+  // لتجاوز القيد)؛ يبدأ تدقيقه "مجدولاً" ثم يعتمده المدير.
+  const requestedStatus = str(formData.get("status"), "scheduled")
+  const status = canChangeAuditStatus(scope) ? requestedStatus : "scheduled"
   const [inserted] = await db
     .insert(audit)
     .values({
@@ -1039,6 +1043,65 @@ export async function createAudit(formData: FormData) {
 }
 // تحديث تدقيق قائم دون حذفه: ينقل الحالة (مجدول → قيد المعالجة → مكتمل) ويصحّح
 // النتيجة والبيانات الوصفية، مع الحفاظ على السجل التاريخي ورقمه.
+// تغيير حالة التدقيق مقصور على: مدير النظام (admin)، والمدقق (auditor — نطاقه
+// محصور أصلاً بتدقيق ISO 45001 ولا يرى بيانات الموارد البشرية أو المالية عبر
+// lib/audit-redaction.ts، فلا خطر من منحه القرار هنا)، ومدير السلامة والصحة
+// المهنية تحديداً: دوره "manager" وقسمه HSE_DEPARTMENT معاً — دور "manager" وحده
+// عام "مشرف" يُمنح لأي قسم (موارد بشرية، مالية...) فلا يكفي، والقسم قسم إداري
+// قائم بذاته لا مسمّى وظيفي كـ"مفتش السلامة" (ذاك مفتش ميداني: يرى التدقيق فقط
+// ولا يغيّره، سواء بقي "user" أو مُنح "manager" لغرض آخر).
+const AUDIT_STATUSES = ["scheduled", "in_progress", "closed"] as const
+const AUDIT_STATUS_DENIED_MESSAGE =
+  "تغيير حالة التدقيق مقصور على مدير النظام والمدقق ومدير السلامة والصحة المهنية"
+const HSE_DEPARTMENT = "hse"
+
+function canChangeAuditStatus(scope: { role: string; department: string; isAuditor: boolean }): boolean {
+  return scope.role === "admin" || scope.isAuditor || (scope.role === "manager" && scope.department === HSE_DEPARTMENT)
+}
+
+// تغيير الحالة وحدها (من نافذة التفاصيل)، مع تسجيل من غيّرها ومتى.
+export async function updateAuditStatus(formData: FormData) {
+  await assertWritable()
+  const scope = await requireModuleScope("audits")
+  if (!canChangeAuditStatus(scope)) throw new Error(AUDIT_STATUS_DENIED_MESSAGE)
+
+  const id = Number(formData.get("id"))
+  if (!Number.isFinite(id)) throw new Error("معرّف غير صالح")
+  const status = str(formData.get("status"))
+  if (!(AUDIT_STATUSES as readonly string[]).includes(status)) throw new Error("حالة غير صالحة")
+
+  const [current] = await db
+    .select({ title: audit.title, score: audit.score, status: audit.status })
+    .from(audit)
+    .where(scopeWhere({ organizationId: audit.organizationId, userId: audit.userId }, scope, eq(audit.id, id)))
+    .limit(1)
+  if (!current) throw new Error("التدقيق غير موجود")
+  if ((current.status ?? "scheduled") === status) return
+
+  const actor = await requireUser()
+  await db
+    .update(audit)
+    .set({ status, statusChangedBy: actor.name, statusChangedAt: new Date() })
+    .where(scopeWhere({ organizationId: audit.organizationId, userId: audit.userId }, scope, eq(audit.id, id)))
+
+  // نفس قاعدة الإنشاء (ISO 45001 §10.2): إغلاق تدقيق بنتيجة دون العتبة يفتح إجراءً تصحيحياً.
+  const score = current.score ?? 0
+  if (status === "closed" && score < AUDIT_NONCONFORMITY_SCORE) {
+    await ensureCorrectiveAction({
+      organizationId: scope.organizationId,
+      userId: scope.userId,
+      sourceType: "audit",
+      sourceId: id,
+      title: `معالجة عدم مطابقة في تدقيق: ${current.title}`,
+      priority: score < 60 ? "high" : "medium",
+      sourceLabel: `تدقيق: ${current.title} (${score}%)`,
+    })
+    revalidatePath("/actions")
+  }
+  revalidatePath("/audits")
+  revalidatePath("/compliance")
+}
+
 export async function updateAudit(formData: FormData) {
   await assertWritable("audit_log")
   const scope = await requireModuleScope("audits")
@@ -1047,8 +1110,23 @@ export async function updateAudit(formData: FormData) {
 
   const title = str(formData.get("title"))
   if (!title.trim()) throw new Error("عنوان التدقيق مطلوب")
-  const status = str(formData.get("status"), "scheduled")
   const score = num(formData.get("score"))
+
+  // الحالة لا تتغيّر من نموذج التعديل إلا لمن يملك صلاحيتها؛ غيره يحتفظ بالحالة
+  // القائمة بدل تجاوز القيد عبر النموذج الكامل.
+  const [current] = await db
+    .select({ status: audit.status })
+    .from(audit)
+    .where(scopeWhere({ organizationId: audit.organizationId, userId: audit.userId }, scope, eq(audit.id, id)))
+    .limit(1)
+  if (!current) throw new Error("التدقيق غير موجود أو لا تملك صلاحية تعديله")
+
+  const currentStatus = current.status ?? "scheduled"
+  const requestedStatus = str(formData.get("status"), currentStatus)
+  const changingStatus = requestedStatus !== currentStatus
+  if (changingStatus && !canChangeAuditStatus(scope)) throw new Error(AUDIT_STATUS_DENIED_MESSAGE)
+  const status = changingStatus ? requestedStatus : currentStatus
+  const actor = changingStatus ? await requireUser() : null
 
   const updated = await db
     .update(audit)
@@ -1059,6 +1137,7 @@ export async function updateAudit(formData: FormData) {
       score,
       status,
       auditDate: dateOrNull(formData.get("auditDate")),
+      ...(actor ? { statusChangedBy: actor.name, statusChangedAt: new Date() } : {}),
     })
     .where(scopeWhere({ organizationId: audit.organizationId, userId: audit.userId }, scope, eq(audit.id, id)))
     .returning({ id: audit.id })
@@ -2021,11 +2100,11 @@ export async function createViolationFull(formData: FormData) {
     ? (await db.select({ id: employee.id }).from(employee).where(and(eq(employee.id, requestedEmployeeRefId), eq(employee.organizationId, organizationId), eq(employee.userId, userId))).limit(1))[0]?.id ?? null
     : null
 
-  // مسار إحالة حصري حسب التصنيف: ا��داخلية → الموارد البشرية، الخارجية → المالية.
+  // مسار إحالة حصري حسب التصنيف: الداخلية → الموارد البشرية، الخارجية → المالية.
   // تُضبط حالة الجهة المعنية فقط، ويبقى الحقل المعاكس null دائماً.
   const category = str(formData.get("category"))
   if (category !== "internal" && category !== "external") {
-    throw new Error("يجب تحديد تصنيف المخ��لفة: داخلية أو خارجية")
+    throw new Error("يجب تحديد تصنيف المخالفة: داخلية أو خارجية")
   }
   const isExternal = category === "external"
 
@@ -2155,7 +2234,7 @@ export async function acceptDetectionAsViolation(
     .limit(1)
   if (!det) throw new Error("الاكتشاف غير موجود")
   if (det.status === "converted" && det.linkedViolationNo) {
-    // مُحوّل مسبقاً — أعد رق������ المخالف�� القائم دون إنشاء تكرار.
+    // مُحوّل مسبقاً — أعد رقم المخالفة القائم دون إنشاء تكرار.
     return { documentNo: det.linkedViolationNo }
   }
   // حماية إضافية من التحويل المزدوج: هل توجد مخالفة مرتبطة بهذا الاكتشاف أصلاً؟
@@ -2248,10 +2327,10 @@ export async function acceptDetectionAsViolation(
 
   // أرفق لقطة الإثبات كمرفق صورة للمخالفة — أفضل جهد لا يُفشل العملية.
   // اللقطات تُخزَّن في ai_detections.snapshotUrl كـ data URL بصيغة base64 (ناتج
-  // canvas.toDataURL من الك��ميرا)، لا كرابط http. لذا نمرّرها مباشرةً إلى
+  // canvas.toDataURL من الكاميرا)، لا كرابط http. لذا نمرّرها مباشرةً إلى
   // saveDataUrlAttachment التي ترفعها إلى Blob وتحفظ رابط URL فقط في جدول المرفقات
   // (لا يُخزَّن الـ base64 الضخم في قاعدة البيانات). ندعم أيضاً حالة رابط http
-  // القديمة كخيار احتياطي بجلبها وتحويلها إ��ى data URL.
+  // القديمة كخيار احتياطي بجلبها وتحويلها إلى data URL.
   try {
     const snap = det.snapshotUrl?.trim() || ""
     if (snap.startsWith("data:image")) {
@@ -2670,7 +2749,7 @@ export async function getObservations() {
 }
 
 // يحفظ ملاحظة (observation) أو ملاحظة إيجابية (positive) من الجولة، ويولّد رقم
-// وثيقة رسمي: OBS-YYYY-XXX ل��ملاحظات�� POS-YYYY-XXX للإيجابيات.
+// وثيقة رسمي: OBS-YYYY-XXX للملاحظات، POS-YYYY-XXX للإيجابيات.
 export async function createObservationFull(formData: FormData) {
   await assertWritable()
   const { userId, organizationId } = await requireModuleScope("violations")
@@ -2738,7 +2817,7 @@ export async function deleteObservation(id: number) {
     .limit(1)
   if (!rows[0]) throw new Error("الملاحظة غير موجودة")
   const canDelete = isManager || rows[0].userId === userId
-  if (!canDelete) throw new Error("غير مص��ح لك بالحذف")
+  if (!canDelete) throw new Error("غير مصرح لك بالحذف")
   await db.delete(observation).where(and(eq(observation.id, id), eq(observation.organizationId, organizationId)))
   revalidatePath("/")
   revalidatePath("/reports")
@@ -2908,7 +2987,7 @@ export async function getCriticalWithoutAction(): Promise<number> {
 
 export async function getDashboardData() {
   const scope = await requireScope()
-  // العزل بين المؤسس��ت صارم (organizationId دائماً)؛ وداخل المؤسسة يرى المديرُ كل
+  // العزل بين المؤسسات صارم (organizationId دائماً)؛ وداخل المؤسسة يرى المديرُ كل
   // السجلات والموظفُ سجلاته فقط عبر scopeWhere.
   const [inc, ins, per, rsk, act, obs, vio, trend, detectionTrend] = await Promise.all([
     db.select(incidentColumns(scope)).from(incident).where(scopeWhere({ organizationId: incident.organizationId, userId: incident.userId }, scope)),
@@ -3122,7 +3201,7 @@ export async function getReportData(
       key: "positives",
       title: "تقرير الملاحظات الإيجابية",
       columns: [
-        { key: "documentNo", label: "رقم الملاح��ة" },
+        { key: "documentNo", label: "رقم الملاحظة" },
         { key: "description", label: "الوصف" },
         { key: "location", label: "الموقع" },
         { key: "observationDate", label: "التاريخ" },

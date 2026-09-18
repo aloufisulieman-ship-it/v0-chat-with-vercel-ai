@@ -1782,6 +1782,13 @@ export const en: Dictionary = {
     fDate: "Audit Date",
     fDateCol: "Date",
     colAudit: "Audit",
+    statusSectionTitle: "Audit status",
+    statusSave: "Save status",
+    statusSaving: "Saving...",
+    statusSaved: "Audit status updated",
+    statusSaveFailed: "Could not update the status",
+    statusManagersOnly: "Only administrators, auditors and the HSE manager can change the status.",
+    statusChangedBy: "Last status change: {name} — {date}",
     editTitle: "Update audit",
     editDesc: "Update the audit status and score without deleting the record.",
     editAria: "Edit audit",
@@ -2434,6 +2441,7 @@ export const en: Dictionary = {
     inspector: "Safety Inspector",
     gm: "General Manager",
     operations: "Operations",
+    hse: "Health, Safety & Environment (HSE)",
   },
 
   pageHeaders: {

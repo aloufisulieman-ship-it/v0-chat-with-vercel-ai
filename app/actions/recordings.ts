@@ -231,7 +231,7 @@ export async function saveScreenshot(input: {
   }
 }
 
-// حذف تسجيل بالكامل: الفيديو + كل لقطاته من Blob وقاع��ة البيانات.
+// حذف تسجيل بالكامل: الفيديو + كل لقطاته من Blob وقاعدة البيانات.
 // مقصور على المراجع صاحب الحساب.
 export async function deleteRecording(id: number): Promise<void> {
   await assertWritable()
