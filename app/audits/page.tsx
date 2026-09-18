@@ -45,9 +45,9 @@ export default async function AuditsPage() {
   const { t } = await getServerT()
   const isAdmin = user.role === "admin"
   // تغيير حالة التدقيق: نفس شرط الخادم بالضبط (canChangeAuditStatus في
-  // app/actions/hse.ts) — القسم لا الدور العام "manager"، لأن "manager" يُمنح
-  // لأي قسم وليس حصرياً لمدير السلامة.
-  const canChangeStatus = user.role === "admin" || user.department === "مفتش السلامة" || isAuditor(user.role)
+  // app/actions/hse.ts) — admin، أو auditor، أو (manager + قسم HSE تحديداً).
+  // مفتش السلامة الميداني (department = "inspector") يرى التدقيق فقط ولا يغيّره.
+  const canChangeStatus = user.role === "admin" || isAuditor(user.role) || (user.role === "manager" && user.department === "hse")
   const statusOptions = inspectionStatusOptions.map((o) => ({ value: o.value, label: statusLabel(t, o.value) }))
 
   // نفس تعريف الحقول للإضافة والتعديل؛ التعديل يمرّرها بالقيم الحالية كقيم افتراضية.

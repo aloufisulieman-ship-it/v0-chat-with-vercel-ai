@@ -148,6 +148,10 @@ export const departmentOptions = [
   { value: "inspector", label: "مفتش السلامة" },
   { value: "gm", label: "المدير العام" },
   { value: "operations", label: "العمليات" },
+  // قسم إداري بذاته (لا مسمّى وظيفي كـ"مفتش السلامة"). "manager" هذا القسم هو
+  // مدير السلامة والصحة المهنية فعلياً — يُستخدم في قرارات مقصورة عليه تحديداً
+  // (مثل تغيير حالة التدقيق في app/actions/hse.ts).
+  { value: "hse", label: "السلامة والصحة المهنية" },
 ]
 export const departmentLabels: Record<string, string> = Object.fromEntries(
   departmentOptions.map((d) => [d.value, d.label]),

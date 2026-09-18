@@ -1043,17 +1043,20 @@ export async function createAudit(formData: FormData) {
 }
 // تحديث تدقيق قائم دون حذفه: ينقل الحالة (مجدول → قيد المعالجة → مكتمل) ويصحّح
 // النتيجة والبيانات الوصفية، مع الحفاظ على السجل التاريخي ورقمه.
-// تغيير حالة التدقيق مقصور على: مدير النظام (admin)، ومدير السلامة والصحة المهنية
-// تحديداً (department === "مفتش السلامة" — القيمة الوحيدة لقسم السلامة في النظام؛
-// دور "manager" نفسه عام "مشرف" يُمنح لأي قسم كالموارد البشرية أو المالية فلا يكفي
-// وحده)، والمدقق (auditor) الذي نطاقه محصور أصلاً بتدقيق ISO 45001 ولا يرى بيانات
-// الموارد البشرية أو المالية (lib/audit-redaction.ts)، فلا خطر من منحه القرار هنا.
+// تغيير حالة التدقيق مقصور على: مدير النظام (admin)، والمدقق (auditor — نطاقه
+// محصور أصلاً بتدقيق ISO 45001 ولا يرى بيانات الموارد البشرية أو المالية عبر
+// lib/audit-redaction.ts، فلا خطر من منحه القرار هنا)، ومدير السلامة والصحة
+// المهنية تحديداً: دوره "manager" وقسمه HSE_DEPARTMENT معاً — دور "manager" وحده
+// عام "مشرف" يُمنح لأي قسم (موارد بشرية، مالية...) فلا يكفي، والقسم قسم إداري
+// قائم بذاته لا مسمّى وظيفي كـ"مفتش السلامة" (ذاك مفتش ميداني: يرى التدقيق فقط
+// ولا يغيّره، سواء بقي "user" أو مُنح "manager" لغرض آخر).
 const AUDIT_STATUSES = ["scheduled", "in_progress", "closed"] as const
-const AUDIT_STATUS_DENIED_MESSAGE = "تغيير حالة التدقيق مقصور على مدير النظام ومدير السلامة والصحة المهنية والمدقق"
-const SAFETY_MANAGER_DEPARTMENT = "مفتش السلامة"
+const AUDIT_STATUS_DENIED_MESSAGE =
+  "تغيير حالة التدقيق مقصور على مدير النظام والمدقق ومدير السلامة والصحة المهنية"
+const HSE_DEPARTMENT = "hse"
 
 function canChangeAuditStatus(scope: { role: string; department: string; isAuditor: boolean }): boolean {
-  return scope.role === "admin" || scope.department === SAFETY_MANAGER_DEPARTMENT || scope.isAuditor
+  return scope.role === "admin" || scope.isAuditor || (scope.role === "manager" && scope.department === HSE_DEPARTMENT)
 }
 
 // تغيير الحالة وحدها (من نافذة التفاصيل)، مع تسجيل من غيّرها ومتى.

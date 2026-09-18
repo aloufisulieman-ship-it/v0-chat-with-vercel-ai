@@ -1835,7 +1835,7 @@ export const ar = {
     statusSaving: "جارٍ الحفظ...",
     statusSaved: "تم تحديث حالة التدقيق",
     statusSaveFailed: "تعذّر تحديث الحالة",
-    statusManagersOnly: "تغيير الحالة متاح لمدير النظام ومدير السلامة والصحة المهنية والمدقق فقط.",
+    statusManagersOnly: "تغيير الحالة متاح لمدير النظام والمدقق ومدير السلامة والصحة المهنية فقط.",
     statusChangedBy: "آخر تغيير للحالة: {name} — {date}",
     editTitle: "تحديث التدقيق",
     editDesc: "حدّث حالة التدقيق ونتيجته دون حذف السجل.",
@@ -2517,6 +2517,7 @@ export const ar = {
     inspector: "مفتش السلامة",
     gm: "المدير العام",
     operations: "العمليات",
+    hse: "السلامة والصحة المهنية",
   },
 
   // عناوين وأوصاف الصفحات (تُمرَّر إلى AppShell عبر getServerT في كل صفحة).

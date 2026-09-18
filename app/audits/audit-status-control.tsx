@@ -13,10 +13,11 @@ import { inspectionStatusOptions } from "@/lib/labels"
 import { formatMuscatDateTime } from "@/lib/datetime"
 import { updateAuditStatus } from "@/app/actions/hse"
 
-// تغيير حالة التدقيق من نافذة التفاصيل. يظهر كقائمة منسدلة لمدير النظام، ومدير
-// السلامة والصحة المهنية تحديداً (بقسمه لا بدور "manager" العام)، والمدقق؛
-// وغيرهم يرى الحالة وأثر آخر تغيير للقراءة. القيد مفروض على الخادم في
-// updateAuditStatus أيضاً (canChangeAuditStatus)، فالإخفاء هنا للتجربة لا للحماية.
+// تغيير حالة التدقيق من نافذة التفاصيل. يظهر كقائمة منسدلة لمدير النظام، والمدقق،
+// ومدير السلامة والصحة المهنية تحديداً (manager + قسم HSE معاً، لا الدور وحده)؛
+// وغيرهم — بمن فيهم مفتش السلامة الميداني — يرى الحالة وأثر آخر تغيير للقراءة.
+// القيد مفروض على الخادم في updateAuditStatus أيضاً (canChangeAuditStatus)،
+// فالإخفاء هنا للتجربة لا للحماية.
 export function AuditStatusControl({
   auditId,
   status,
