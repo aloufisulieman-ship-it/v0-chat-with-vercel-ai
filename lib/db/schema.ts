@@ -1236,6 +1236,10 @@ export const safetyRule = pgTable(
     // لم تُصنَّف بعد؛ تُستخدم rules كاملاً كاحتياط عندئذٍ (توافق خلفي).
     cameraRules: text("camera_rules").notNull().default(""),
     active: boolean("active").notNull().default(true),
+    // ترتيب العرض في /safety-rules (تصاعدي) — يُحرَّك بأسهم الأعلى/الأسفل في
+    // الواجهة، ويُستخدم أولاً في الترتيب قبل createdAt. صفر افتراضياً لأي سجل
+    // لم يُرتَّب بعد.
+    sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
     updatedAt: timestamp("updatedAt").notNull().defaultNow(),
   },

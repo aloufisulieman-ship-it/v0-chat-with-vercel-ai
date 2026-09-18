@@ -180,7 +180,45 @@ export async function getSafetyRules() {
     .select()
     .from(safetyRule)
     .where(eq(safetyRule.organizationId, organizationId))
-    .orderBy(safetyRule.location)
+    .orderBy(safetyRule.sortOrder, safetyRule.createdAt)
+}
+
+// تحريك ترتيب موقع خطوة واحدة (أعلى/أسفل) — يُعاد ترقيم sort_order لكل مواقع
+// المؤسسة بالتسلسل الحالي المعروض (sortOrder ثم createdAt) بعد تبديل موضعي
+// الموقع المُحرَّك وجاره، فتبقى القيم متسلسلة ومتمايزة دوماً حتى لو تساوت قبل
+// التحريك (سجلات لم تُرتَّب بعد بقيمة sort_order الافتراضية صفر).
+export async function moveSafetyRule(formData: FormData) {
+  await assertWritable()
+  const { organizationId } = await requireScope()
+  const id = Number(formData.get("id"))
+  const direction = str(formData.get("direction"))
+  if (!Number.isFinite(id)) throw new Error("معرّف الموقع غير صالح")
+  if (direction !== "up" && direction !== "down") throw new Error("اتجاه غير صالح")
+
+  const rows = await db
+    .select({ id: safetyRule.id })
+    .from(safetyRule)
+    .where(eq(safetyRule.organizationId, organizationId))
+    .orderBy(safetyRule.sortOrder, safetyRule.createdAt)
+
+  const idx = rows.findIndex((r) => r.id === id)
+  if (idx === -1) throw new Error("الموقع غير موجود")
+  const swapIdx = direction === "up" ? idx - 1 : idx + 1
+  if (swapIdx < 0 || swapIdx >= rows.length) return
+
+  const order = rows.map((r) => r.id)
+  ;[order[idx], order[swapIdx]] = [order[swapIdx], order[idx]]
+
+  await db.transaction(async (tx) => {
+    for (let i = 0; i < order.length; i++) {
+      await tx
+        .update(safetyRule)
+        .set({ sortOrder: i + 1, updatedAt: new Date() })
+        .where(and(eq(safetyRule.id, order[i]), eq(safetyRule.organizationId, organizationId)))
+    }
+  })
+
+  revalidatePath("/safety-rules")
 }
 
 function safetyRuleValues(formData: FormData) {
