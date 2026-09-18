@@ -408,7 +408,7 @@ function SaveBadge({
   return <span className="text-xs text-gray-300">{t("patrol.badgeDraft")}</span>
 }
 
-// ── Entry Card ───────────────────────────────────────────────────────────────������
+// ── Entry Card ──────────────────────────────────────────────────────────────────
 
 function EntryCard({
   entry,

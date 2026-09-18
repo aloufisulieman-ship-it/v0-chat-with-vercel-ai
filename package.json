@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "check:encoding": "bash scripts/check-encoding.sh",
+    "lint": "npm run check:encoding && eslint ."
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

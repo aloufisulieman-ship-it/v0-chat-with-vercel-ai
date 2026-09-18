@@ -194,7 +194,7 @@ export function ViolationFormDialog({
   // نحوّلها لاحقاً إلى data URL عبر useEffect حتى تُضمّن ضمن حمولة الحفظ.
   const isDataUrl = (v?: string) => !!v && v.startsWith("data:")
   const [images, setImages] = useState<string[]>(isDataUrl(initialEvidence) ? [initialEvidence as string] : [])
-  // النماذج الو��قية الممسوحة للمخالفة اليدوية: { name, dataUrl }
+  // النماذج الورقية الممسوحة للمخالفة اليدوية: { name, dataUrl }
   const [manualDocs, setManualDocs] = useState<{ name: string; dataUrl: string }[]>([])
   const [editorSignature, setEditorSignature] = useState("")
   const [violatorSignature, setViolatorSignature] = useState("")
@@ -305,7 +305,7 @@ export function ViolationFormDialog({
       try {
         const fd = new FormData()
         Object.entries(form).forEach(([k, v]) => fd.append(k, v))
-        // ادمج ا��إجراء مع التفاصيل الإضافية (المبلغ أو النص الحر) في قيمة واحدة
+        // ادمج الإجراء مع التفاصيل الإضافية (المبلغ أو النص الحر) في قيمة واحدة
         let internalActionValue = form.internalAction
         if (form.internalAction === FINE_ACTION && form.actionDetail.trim()) {
           internalActionValue = `${FINE_ACTION}: ${form.actionDetail.trim()} ريال سعودي`

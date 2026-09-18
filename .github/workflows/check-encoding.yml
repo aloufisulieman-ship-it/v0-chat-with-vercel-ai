@@ -1,0 +1,16 @@
+name: Check encoding
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check-encoding:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for U+FFFD (replacement character)
+        run: bash scripts/check-encoding.sh

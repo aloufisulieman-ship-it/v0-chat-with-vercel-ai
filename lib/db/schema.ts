@@ -219,7 +219,7 @@ export const incident = pgTable("incident", {
   hrStatus: text("hr_status"),
   hrClosedBy: text("hr_closed_by").default(""),
   hrClosedAt: timestamp("hr_closed_at"),
-  // مرفقات قرا�� الموارد البشرية (JSON array من data URLs، بنفس آلية الصور/التواقيع).
+  // مرفقات قرار الموارد البشرية (JSON array من data URLs، بنفس آلية الصور/التواقيع).
   hrAttachmentUrl: text("hr_attachment_url").default(""),
   // مسار الإغلاق المالي للحوادث المحوّلة إلى المالية.
   financeStatus: text("finance_status"),
@@ -278,7 +278,7 @@ export const permit = pgTable("permit", {
   riskLevel: text("riskLevel").default("medium"),
   // إجابات قائمة الفحص الديناميكية حسب النوع { [itemId]: boolean }.
   checklistAnswers: jsonb("checklistAnswers").default({}),
-  // قيا��ات الغاز (للأماكن المحصورة/الحرارة): { o2, lel, h2s, co, ... }.
+  // قياسات الغاز (للأماكن المحصورة/الحرارة): { o2, lel, h2s, co, ... }.
   gasTestReadings: jsonb("gasTestReadings").default({}),
   // عزل الطاقة LOTO (للكهرباء/الميكانيكا): { points: [...], locksApplied, tagsApplied }.
   isolationLOTO: jsonb("isolationLOTO").default({}),
@@ -584,7 +584,7 @@ export const department = pgTable(
     organizationId: text("organizationId").notNull(),
     code: text("code").notNull(),
     nameAr: text("name_ar").notNull().default(""),
-    // مدير القسم (اختياري) — يُستخدم لاحقاً لتوجيه الإشعارات وا��صلاحيات.
+    // مدير القسم (اختياري) — يُستخدم لاحقاً لتوجيه الإشعارات والصلاحيات.
     managerUserId: text("manager_user_id"),
     email: text("email").notNull().default(""),
     // اتفاقية مستوى الخدمة بالساعات — تُشتق منها due_at للإحالة عند إنشائها.
@@ -724,7 +724,7 @@ export const aiDetection = pgTable("ai_detections", {
   notes: text("notes").default(""),
   // رقم المخالفة المرتبطة (VIO-YYYY-###) عند تحويل الاكتشاف إلى مخالفة رسمية.
   linkedViolationNo: text("linked_violation_no").default(""),
-  // روابط ��لتحويل الرقمية (مصدر الحقيقة لمنع العدّ المزدوج في الرسوم):
+  // روابط التحويل الرقمية (مصدر الحقيقة لمنع العدّ المزدوج في الرسوم):
   // الكشف المحوَّل يُحسب مرة واحدة في سجلّه الرسمي ولا يُعدّ بنداً مفتوحاً في رسم الكشوفات.
   convertedToIncidentId: integer("converted_to_incident_id"),
   convertedToViolationId: integer("converted_to_violation_id"),
@@ -941,7 +941,7 @@ export const legalRequirement = pgTable("legal_requirement", {
 
 // ========== وحدات مطابقة ISO 45001:2018 التشغيلية (المرحلة الثالثة) ==========
 
-// البند 5.4 — تشاور العم��ل ومشاركتهم: سجل أنشطة التشاور والمشاركة.
+// البند 5.4 — تشاور العمال ومشاركتهم: سجل أنشطة التشاور والمشاركة.
 // activityType: consultation (تشاور) | participation (مشاركة).
 // method: meeting (اجتماع) | survey (استبيان) | committee (لجنة سلامة) | suggestion (صندوق مقترحات).
 export const workerConsultation = pgTable("worker_consultation", {
@@ -1118,7 +1118,7 @@ export const internalAudit = pgTable("internal_audit", {
 
 // ذاكرة ترجمة البيانات المُدخلة (أوصاف/ملاحظات) عبر الذكاء الاصطناعي.
 // نُخزّن الترجمة مرة واحدة لكل (نص مصدر + لغة هدف) لتجنّب تكرار الاستدعاءات
-// وتث��يت النتيجة. sourceHash = بصمة النص المصدر لتسريع البحث وتفادي مفاتيح ضخمة.
+// وتثبيت النتيجة. sourceHash = بصمة النص المصدر لتسريع البحث وتفادي مفاتيح ضخمة.
 export const translationCache = pgTable(
   "translation_cache",
   {
@@ -1151,7 +1151,7 @@ export const plateRead = pgTable("plate_reads", {
   capturedAt: timestamp("captured_at").notNull().defaultNow(),
 })
 
-// قرا��ات الرقم الوظيفي من زيّ العامل (الوضع 3).
+// قراءات الرقم الوظيفي من زيّ العامل (الوضع 3).
 export const employeeIdRead = pgTable("employee_id_reads", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
@@ -1184,7 +1184,7 @@ export const equipment = pgTable(
     ownerCompany: text("owner_company").notNull().default(""),
     // اسم السائق/المستخدم المخوّل بتشغيل المعدة.
     driverName: text("driver_name").notNull().default(""),
-    // رقم داخلي/ك��د أصل اختياري (غير مستخدم في المطابقة، للعرض فقط).
+    // رقم داخلي/كود أصل اختياري (غير مستخدم في المطابقة، للعرض فقط).
     internalCode: text("internal_code").notNull().default(""),
     // ====== حقول سجل الأسطول الموسّعة (المرحلة 1) ======
     // رقم الأسطول: المُعرّف التشغيلي الرئيسي للمعدة داخل الأسطول (مثل FL-001).

@@ -448,12 +448,12 @@ export async function deletePermit(id: number) {
   revalidatePath("/permits")
 }
 
-// يحدد ما إذا كان المستخدم يملك صلاح��ة اعتماد/رفض التصاريح (مدير).
+// يحدد ما إذا كان المستخدم يملك صلاحية اعتماد/رفض التصاريح (مدير).
 function isPermitApprover(role: string, department: string): boolean {
   return role === "admin" || department === "المدير العام" || department === "مفتش السلامة"
 }
 
-// اعتماد أو رفض تصريح عمل من قِبل المدير، مع تسجيل اسم ال��عتمِد والتاريخ والسب��.
+// اعتماد أو رفض تصريح عمل من قِبل المدير، مع تسجيل اسم المعتمِد والتاريخ والسبب.
 // مقيّد بمؤسسة المعتمِد: لا يمكن اعتماد تصريح تابع لمؤسسة أخرى.
 export async function updatePermitStatus(
   permitId: number,
@@ -2021,11 +2021,11 @@ export async function createViolationFull(formData: FormData) {
     ? (await db.select({ id: employee.id }).from(employee).where(and(eq(employee.id, requestedEmployeeRefId), eq(employee.organizationId, organizationId), eq(employee.userId, userId))).limit(1))[0]?.id ?? null
     : null
 
-  // مسار إحالة حصري حسب التصنيف: ا��داخلية → الموارد البشرية، الخارجية → المالية.
+  // مسار إحالة حصري حسب التصنيف: الداخلية → الموارد البشرية، الخارجية → المالية.
   // تُضبط حالة الجهة المعنية فقط، ويبقى الحقل المعاكس null دائماً.
   const category = str(formData.get("category"))
   if (category !== "internal" && category !== "external") {
-    throw new Error("يجب تحديد تصنيف المخ��لفة: داخلية أو خارجية")
+    throw new Error("يجب تحديد تصنيف المخالفة: داخلية أو خارجية")
   }
   const isExternal = category === "external"
 
@@ -2155,7 +2155,7 @@ export async function acceptDetectionAsViolation(
     .limit(1)
   if (!det) throw new Error("الاكتشاف غير موجود")
   if (det.status === "converted" && det.linkedViolationNo) {
-    // مُحوّل مسبقاً — أعد رق������ المخالف�� القائم دون إنشاء تكرار.
+    // مُحوّل مسبقاً — أعد رقم المخالفة القائم دون إنشاء تكرار.
     return { documentNo: det.linkedViolationNo }
   }
   // حماية إضافية من التحويل المزدوج: هل توجد مخالفة مرتبطة بهذا الاكتشاف أصلاً؟
@@ -2248,10 +2248,10 @@ export async function acceptDetectionAsViolation(
 
   // أرفق لقطة الإثبات كمرفق صورة للمخالفة — أفضل جهد لا يُفشل العملية.
   // اللقطات تُخزَّن في ai_detections.snapshotUrl كـ data URL بصيغة base64 (ناتج
-  // canvas.toDataURL من الك��ميرا)، لا كرابط http. لذا نمرّرها مباشرةً إلى
+  // canvas.toDataURL من الكاميرا)، لا كرابط http. لذا نمرّرها مباشرةً إلى
   // saveDataUrlAttachment التي ترفعها إلى Blob وتحفظ رابط URL فقط في جدول المرفقات
   // (لا يُخزَّن الـ base64 الضخم في قاعدة البيانات). ندعم أيضاً حالة رابط http
-  // القديمة كخيار احتياطي بجلبها وتحويلها إ��ى data URL.
+  // القديمة كخيار احتياطي بجلبها وتحويلها إلى data URL.
   try {
     const snap = det.snapshotUrl?.trim() || ""
     if (snap.startsWith("data:image")) {
@@ -2670,7 +2670,7 @@ export async function getObservations() {
 }
 
 // يحفظ ملاحظة (observation) أو ملاحظة إيجابية (positive) من الجولة، ويولّد رقم
-// وثيقة رسمي: OBS-YYYY-XXX ل��ملاحظات�� POS-YYYY-XXX للإيجابيات.
+// وثيقة رسمي: OBS-YYYY-XXX للملاحظات، POS-YYYY-XXX للإيجابيات.
 export async function createObservationFull(formData: FormData) {
   await assertWritable()
   const { userId, organizationId } = await requireModuleScope("violations")
@@ -2738,7 +2738,7 @@ export async function deleteObservation(id: number) {
     .limit(1)
   if (!rows[0]) throw new Error("الملاحظة غير موجودة")
   const canDelete = isManager || rows[0].userId === userId
-  if (!canDelete) throw new Error("غير مص��ح لك بالحذف")
+  if (!canDelete) throw new Error("غير مصرّح لك بالحذف")
   await db.delete(observation).where(and(eq(observation.id, id), eq(observation.organizationId, organizationId)))
   revalidatePath("/")
   revalidatePath("/reports")
@@ -2908,7 +2908,7 @@ export async function getCriticalWithoutAction(): Promise<number> {
 
 export async function getDashboardData() {
   const scope = await requireScope()
-  // العزل بين المؤسس��ت صارم (organizationId دائماً)؛ وداخل المؤسسة يرى المديرُ كل
+  // العزل بين المؤسسات صارم (organizationId دائماً)؛ وداخل المؤسسة يرى المديرُ كل
   // السجلات والموظفُ سجلاته فقط عبر scopeWhere.
   const [inc, ins, per, rsk, act, obs, vio, trend, detectionTrend] = await Promise.all([
     db.select(incidentColumns(scope)).from(incident).where(scopeWhere({ organizationId: incident.organizationId, userId: incident.userId }, scope)),
@@ -3122,7 +3122,7 @@ export async function getReportData(
       key: "positives",
       title: "تقرير الملاحظات الإيجابية",
       columns: [
-        { key: "documentNo", label: "رقم الملاح��ة" },
+        { key: "documentNo", label: "رقم الملاحظة" },
         { key: "description", label: "الوصف" },
         { key: "location", label: "الموقع" },
         { key: "observationDate", label: "التاريخ" },

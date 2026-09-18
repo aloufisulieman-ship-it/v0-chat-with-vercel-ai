@@ -237,7 +237,7 @@ export function MobileCamera() {
     localStorage.setItem("aiCam.modes", JSON.stringify(modes))
   }, [modes])
 
-  // تبديل وضع تعرّف (لا يُسمح بإفراغ كل الأوضاع — يبقى ��ضع واحد على الأقل).
+  // تبديل وضع تعرّف (لا يُسمح بإفراغ كل الأوضاع — يبقى وضع واحد على الأقل).
   const toggleMode = useCallback((mode: RecognitionMode) => {
     setModes((prev) => {
       if (prev.includes(mode)) {
@@ -259,7 +259,7 @@ export function MobileCamera() {
     setSessionStarted(true)
   }, [bothFilled])
 
-  // تحديث الحالة المعر��ضة لاتجاه الكاميرا (أمامي/خلفي) مع مرجع متزامن للاستخدام داخل
+  // تحديث الحالة المعروضة لاتجاه الكاميرا (أمامي/خلفي) مع مرجع متزامن للاستخدام داخل
   // ردود النداء دون تبعيات.
   const applyFacing = useCallback((facing: string) => {
     currentFacingRef.current = facing
@@ -369,7 +369,7 @@ export function MobileCamera() {
         const idx = Math.max(0, ids.indexOf(currentDeviceIdRef.current))
         videoConstraints.deviceId = { exact: ids[(idx + 1) % ids.length] }
       } else {
-        // جهاز واحد معروف: بدّل الاتجاه (��مامي/خلفي) كحل بديل.
+        // جهاز واحد معروف: بدّل الاتجاه (أمامي/خلفي) كحل بديل.
         videoConstraints.facingMode = {
           ideal: currentFacingRef.current === "user" ? "environment" : "user",
         }
@@ -439,7 +439,7 @@ export function MobileCamera() {
     return canvas.toDataURL("image/jpeg", JPEG_QUALITY)
   }, [])
 
-  // الحلقة ا��سريعة: رفع الإطار إلى Blob للبث شبه الحي.
+  // الحلقة السريعة: رفع الإطار إلى Blob للبث شبه الحي.
   const uploadFrame = useCallback(async () => {
     if (uploadingRef.current) return
     const image = captureJpeg()
@@ -684,7 +684,7 @@ export function MobileCamera() {
       recordMimeRef.current = mime
 
       // نُسجّل من قناة canvas تُحاكي عنصر الفيديو الحالي (بدل التسجيل المباشر من مسار
-      // الكامي��ا)، حت�� يستمر التسجيل بسلاسة عبر تبديل الكاميرا دون تجميد الفيديو.
+      // الكاميرا)، حتى يستمر التسجيل بسلاسة عبر تبديل الكاميرا دون تجميد الفيديو.
       // نضيف مسار الصوت نفسه (كائن المسار ذاته) فيتبع حالة كتم/تفعيل الميكروفون.
       const recCanvas = recCanvasRef.current ?? document.createElement("canvas")
       recCanvasRef.current = recCanvas
@@ -747,11 +747,11 @@ export function MobileCamera() {
         const blob = new Blob(chunksRef.current, { type: baseMime })
         chunksRef.current = []
         recorderRef.current = null
-        // التقط المعاينة من الفيديو ��لحي قبل تحرير الكاميرا.
+        // التقط المعاينة من الفيديو الحي قبل تحرير الكاميرا.
         const poster = capturePosterDataUrl()
         if (blob.size > 0) void uploadRecording(blob, durationSeconds, poster)
         else setRecordError(t("aiMonitoring.cam.recordEmpty"))
-        // حرّر الكام��را إن لم يكن البث الحي شغّالاً.
+        // حرّر الكاميرا إن لم يكن البث الحي شغّالاً.
         releaseStreamIfIdle(uploadIntervalRef.current !== null, false)
       }
       recorder.start(1000) // تجميع البيانات كل ثانية
@@ -920,7 +920,7 @@ export function MobileCamera() {
         </p>
       </Card>
 
-      {/* نموذج بدء الجلسة: اسم المفتش وال��وقع إلزاميان قبل تفعيل البث/التسجيل */}
+      {/* نموذج بدء الجلسة: اسم المفتش والموقع إلزاميان قبل تفعيل البث/التسجيل */}
       <Card className="flex flex-col gap-3 p-4">
         <div className="flex items-center justify-between gap-2">
           <span className="text-sm font-semibold text-foreground">{t("aiMonitoring.cam.sessionData")}</span>
@@ -1267,7 +1267,7 @@ export function MobileCamera() {
         </Card>
       </div>
 
-      {/* آخر نتيجة ��حليل */}
+      {/* آخر نتيجة تحليل */}
       <Card className="flex flex-col gap-3 p-4">
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-foreground">{t("aiMonitoring.cam.lastAnalysis")}</span>
