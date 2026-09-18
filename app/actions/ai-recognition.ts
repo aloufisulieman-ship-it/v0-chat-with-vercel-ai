@@ -112,12 +112,15 @@ export async function lookupEquipmentByPlate(organizationId: string, plateRaw: s
 
 /* ---------------- قواعد السلامة الخاصة بموقع الكاميرا ---------------- */
 // تُرجع نص القواعد الفعّالة المطابقة لاسم الموقع (تطابق جزئي غير حسّاس لحالة الأحرف)
-// لتُمرَّر إلى نموذج الرؤية الحاسوبية عند تحكيم السلوك في الإطار.
+// لتُمرَّر إلى نموذج الرؤية الحاسوبية عند تحكيم السلوك في الإطار. تُفضَّل cameraRules
+// (القواعد القابلة للرصد بالكاميرا فقط) على rules الكامل؛ فلا يُطلَب من النموذج
+// الحكم على قواعد إدارية غير مرئية في الصورة (حضور تدريب، تسجيل صيانة...). لسجل
+// لم يُصنَّف بعد (cameraRules فارغ) يُستخدم rules كاملاً احتياطاً (توافق خلفي).
 export async function getSafetyRulesForLocation(organizationId: string, locationRaw: string): Promise<string> {
   const loc = (locationRaw || "").trim().toLowerCase()
   if (!loc) return ""
   const rows = await db
-    .select({ location: safetyRule.location, rules: safetyRule.rules, active: safetyRule.active })
+    .select({ location: safetyRule.location, rules: safetyRule.rules, cameraRules: safetyRule.cameraRules, active: safetyRule.active })
     .from(safetyRule)
     .where(and(eq(safetyRule.organizationId, organizationId), eq(safetyRule.active, true)))
   const matches = rows.filter((r) => {
@@ -125,7 +128,7 @@ export async function getSafetyRulesForLocation(organizationId: string, location
     return rl && (rl === loc || loc.includes(rl) || rl.includes(loc))
   })
   return matches
-    .map((r) => (r.rules || "").trim())
+    .map((r) => (r.cameraRules || "").trim() || (r.rules || "").trim())
     .filter(Boolean)
     .join("\n")
 }

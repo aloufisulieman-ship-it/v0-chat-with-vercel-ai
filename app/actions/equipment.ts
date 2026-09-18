@@ -172,11 +172,14 @@ export async function getEquipmentById(id: number) {
 /* ---------------- قواعد السلامة حسب الموقع ---------------- */
 
 export async function getSafetyRules() {
-  const { userId, organizationId } = await requireScope()
+  // قواعد السلامة أصل مشترك على مستوى المؤسسة (تحكم سلوك المراقبة الذكية لكل
+  // كاميرات الموقع)، لا سجلاً خاصاً بمن أدخلها — نفس منطق getEquipment أعلاه.
+  // العزل على organizationId فقط دون تقييد بالمستخدم المنشئ.
+  const { organizationId } = await requireScope()
   return db
     .select()
     .from(safetyRule)
-    .where(and(eq(safetyRule.organizationId, organizationId), eq(safetyRule.userId, userId)))
+    .where(eq(safetyRule.organizationId, organizationId))
     .orderBy(safetyRule.location)
 }
 
@@ -200,23 +203,25 @@ export async function createSafetyRule(formData: FormData) {
 
 export async function updateSafetyRule(formData: FormData) {
   await assertWritable()
-  const { userId, organizationId } = await requireScope()
+  // أصل مشترك على مستوى المؤسسة (راجع getSafetyRules أعلاه) — أي عضو يملك وصول
+  // الوحدة يعدّله، لا صاحبه الأصلي حصراً؛ نفس منطق updateEquipment.
+  const { organizationId } = await requireScope()
   const id = Number(formData.get("id"))
   if (!Number.isFinite(id)) throw new Error("معرّف القاعدة غير صالح")
   await db
     .update(safetyRule)
     .set(safetyRuleValues(formData))
-    .where(and(eq(safetyRule.id, id), eq(safetyRule.organizationId, organizationId), eq(safetyRule.userId, userId)))
+    .where(and(eq(safetyRule.id, id), eq(safetyRule.organizationId, organizationId)))
   revalidatePath("/safety-rules")
 }
 
 export async function deleteSafetyRule(formData: FormData) {
   await assertWritable()
-  const { userId, organizationId } = await requireScope()
+  const { organizationId } = await requireScope()
   const id = Number(formData.get("id"))
   if (!Number.isFinite(id)) throw new Error("معرّف القاعدة غير صالح")
   await db
     .delete(safetyRule)
-    .where(and(eq(safetyRule.id, id), eq(safetyRule.organizationId, organizationId), eq(safetyRule.userId, userId)))
+    .where(and(eq(safetyRule.id, id), eq(safetyRule.organizationId, organizationId)))
   revalidatePath("/safety-rules")
 }
