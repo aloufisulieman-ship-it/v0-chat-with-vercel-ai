@@ -454,7 +454,7 @@ export async function getTrackingOverview(): Promise<TrackingOverview> {
 // يُستدعى من مسار التعرّف (/api/ai-monitoring/recognize) عند قراءة لوحة مركبة داخل
 // السوق. المؤسسة تُمرَّر مباشرةً (المسار موثّق مسبقاً). المنطق: إن لم يوجد دخول مفتوح
 // للمركبة نفتح واحداً تلقائياً (تُعتبر داخل السوق)، ثم نسجّل مشاهدة مربوطة بالدخول
-// الحالي، وإذا رافق القراءةَ رصدُ مخالفة نحوّل حالة المر��بة إلى blocked. لا يرمي أخطاء
+// الحالي، وإذا رافق القراءةَ رصدُ مخالفة نحوّل حالة المركبة إلى blocked. لا يرمي أخطاء
 // حتى لا يُفشل استجابة التعرّف.
 export async function autoTrackVehicleDetection(input: {
   organizationId: string

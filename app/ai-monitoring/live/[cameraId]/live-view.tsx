@@ -139,7 +139,7 @@ export function LiveView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [talkError])
 
-  // كتم الصوت افتراضاً (شرط التشغيل التلقائي)؛ الم��ير يفعّله بنقرة (إيماءة المستخدم).
+  // كتم الصوت افتراضاً (شرط التشغيل التلقائي)؛ المدير يفعّله بنقرة (إيماءة المستخدم).
   const [audioOn, setAudioOn] = useState(false)
   const toggleAudio = () => {
     const v = videoRef.current
@@ -466,7 +466,7 @@ export function LiveView({
         </div>
       </div>
 
-      {/* شريط خطأ البث ��لمباشر: يعرض رسالة 401/403 الكاملة بدل رمز غامض */}
+      {/* شريط خطأ البث المباشر: يعرض رسالة 401/403 الكاملة بدل رمز غامض */}
       {webrtcError && (
         <div
           role="alert"

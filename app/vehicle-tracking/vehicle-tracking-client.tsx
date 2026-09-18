@@ -504,7 +504,7 @@ function DeviceCameraGate({ gate }: { gate: number }) {
   return (
     <div className="flex flex-col gap-4">
       <p className="rounded-lg border border-border bg-muted/40 p-2.5 text-xs text-muted-foreground">
-        الوضع الافتراضي: وجّه كاميرا البوابة نحو لوحة المركبة، ويتولّى النظام قر��ءتها وتسجيل الدخول/المشاهدة تلقائياً عند
+        الوضع الافتراضي: وجّه كاميرا البوابة نحو لوحة المركبة، ويتولّى النظام قراءتها وتسجيل الدخول/المشاهدة تلقائياً عند
         البوابة {gate}.
       </p>
 
@@ -811,7 +811,7 @@ function VehicleDetail({ vehicle }: { vehicle: VehicleDetailDto }) {
       </div>
 
       <div className="flex flex-col gap-2">
-        <h3 className="text-sm font-semibold text-foreground">سجل ��لدخولات ({vehicle.entries.length})</h3>
+        <h3 className="text-sm font-semibold text-foreground">سجل الدخولات ({vehicle.entries.length})</h3>
         {vehicle.entries.length === 0 && (
           <p className="text-sm text-muted-foreground">لا توجد دخولات مسجّلة لهذه المركبة.</p>
         )}
@@ -932,7 +932,7 @@ function InsideList({ inside }: { inside: PresentVehicleDto[] }) {
 
       {inside.length === 0 ? (
         <p className="rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
-          لا توجد مركبات ��اخل السوق حالياً.
+          لا توجد مركبات داخل السوق حالياً.
         </p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
