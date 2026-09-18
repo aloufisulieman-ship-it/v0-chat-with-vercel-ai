@@ -172,12 +172,53 @@ export async function getEquipmentById(id: number) {
 /* ---------------- قواعد السلامة حسب الموقع ---------------- */
 
 export async function getSafetyRules() {
-  const { userId, organizationId } = await requireScope()
+  // قواعد السلامة أصل مشترك على مستوى المؤسسة (تحكم سلوك المراقبة الذكية لكل
+  // كاميرات الموقع)، لا سجلاً خاصاً بمن أدخلها — نفس منطق getEquipment أعلاه.
+  // العزل على organizationId فقط دون تقييد بالمستخدم المنشئ.
+  const { organizationId } = await requireScope()
   return db
     .select()
     .from(safetyRule)
-    .where(and(eq(safetyRule.organizationId, organizationId), eq(safetyRule.userId, userId)))
-    .orderBy(safetyRule.location)
+    .where(eq(safetyRule.organizationId, organizationId))
+    .orderBy(safetyRule.sortOrder, safetyRule.createdAt)
+}
+
+// تحريك ترتيب موقع خطوة واحدة (أعلى/أسفل) — يُعاد ترقيم sort_order لكل مواقع
+// المؤسسة بالتسلسل الحالي المعروض (sortOrder ثم createdAt) بعد تبديل موضعي
+// الموقع المُحرَّك وجاره، فتبقى القيم متسلسلة ومتمايزة دوماً حتى لو تساوت قبل
+// التحريك (سجلات لم تُرتَّب بعد بقيمة sort_order الافتراضية صفر).
+export async function moveSafetyRule(formData: FormData) {
+  await assertWritable()
+  const { organizationId } = await requireScope()
+  const id = Number(formData.get("id"))
+  const direction = str(formData.get("direction"))
+  if (!Number.isFinite(id)) throw new Error("معرّف الموقع غير صالح")
+  if (direction !== "up" && direction !== "down") throw new Error("اتجاه غير صالح")
+
+  const rows = await db
+    .select({ id: safetyRule.id })
+    .from(safetyRule)
+    .where(eq(safetyRule.organizationId, organizationId))
+    .orderBy(safetyRule.sortOrder, safetyRule.createdAt)
+
+  const idx = rows.findIndex((r) => r.id === id)
+  if (idx === -1) throw new Error("الموقع غير موجود")
+  const swapIdx = direction === "up" ? idx - 1 : idx + 1
+  if (swapIdx < 0 || swapIdx >= rows.length) return
+
+  const order = rows.map((r) => r.id)
+  ;[order[idx], order[swapIdx]] = [order[swapIdx], order[idx]]
+
+  await db.transaction(async (tx) => {
+    for (let i = 0; i < order.length; i++) {
+      await tx
+        .update(safetyRule)
+        .set({ sortOrder: i + 1, updatedAt: new Date() })
+        .where(and(eq(safetyRule.id, order[i]), eq(safetyRule.organizationId, organizationId)))
+    }
+  })
+
+  revalidatePath("/safety-rules")
 }
 
 function safetyRuleValues(formData: FormData) {
@@ -194,29 +235,40 @@ function safetyRuleValues(formData: FormData) {
 export async function createSafetyRule(formData: FormData) {
   await assertWritable()
   const { userId, organizationId } = await requireScope()
-  await db.insert(safetyRule).values({ userId, organizationId, ...safetyRuleValues(formData) })
+  // sort_order = أكبر قيمة حالية لنفس المؤسسة + 1، ليظهر الموقع الجديد في آخر
+  // القائمة افتراضياً؛ يُحرَّك لاحقاً بأسهم الترتيب (moveSafetyRule).
+  const [last] = await db
+    .select({ sortOrder: safetyRule.sortOrder })
+    .from(safetyRule)
+    .where(eq(safetyRule.organizationId, organizationId))
+    .orderBy(desc(safetyRule.sortOrder))
+    .limit(1)
+  const sortOrder = (last?.sortOrder ?? 0) + 1
+  await db.insert(safetyRule).values({ userId, organizationId, sortOrder, ...safetyRuleValues(formData) })
   revalidatePath("/safety-rules")
 }
 
 export async function updateSafetyRule(formData: FormData) {
   await assertWritable()
-  const { userId, organizationId } = await requireScope()
+  // أصل مشترك على مستوى المؤسسة (راجع getSafetyRules أعلاه) — أي عضو يملك وصول
+  // الوحدة يعدّله، لا صاحبه الأصلي حصراً؛ نفس منطق updateEquipment.
+  const { organizationId } = await requireScope()
   const id = Number(formData.get("id"))
   if (!Number.isFinite(id)) throw new Error("معرّف القاعدة غير صالح")
   await db
     .update(safetyRule)
     .set(safetyRuleValues(formData))
-    .where(and(eq(safetyRule.id, id), eq(safetyRule.organizationId, organizationId), eq(safetyRule.userId, userId)))
+    .where(and(eq(safetyRule.id, id), eq(safetyRule.organizationId, organizationId)))
   revalidatePath("/safety-rules")
 }
 
 export async function deleteSafetyRule(formData: FormData) {
   await assertWritable()
-  const { userId, organizationId } = await requireScope()
+  const { organizationId } = await requireScope()
   const id = Number(formData.get("id"))
   if (!Number.isFinite(id)) throw new Error("معرّف القاعدة غير صالح")
   await db
     .delete(safetyRule)
-    .where(and(eq(safetyRule.id, id), eq(safetyRule.organizationId, organizationId), eq(safetyRule.userId, userId)))
+    .where(and(eq(safetyRule.id, id), eq(safetyRule.organizationId, organizationId)))
   revalidatePath("/safety-rules")
 }

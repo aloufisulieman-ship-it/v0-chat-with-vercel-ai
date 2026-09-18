@@ -1226,9 +1226,20 @@ export const safetyRule = pgTable(
     organizationId: text("organizationId").notNull(),
     // اسم الموقع/المنطقة كما يظهر في cameraLocation عند بدء جلسة الكاميرا.
     location: text("location").notNull().default(""),
-    // نص القواعد (سطر لكل قاعدة) الخاص بهذا الموقع.
+    // نص القواعد الكامل (سطر لكل قاعدة) — للعرض في صفحة /safety-rules فقط.
     rules: text("rules").notNull().default(""),
+    // نص فرعي (سطر لكل قاعدة) يقتصر على القواعد القابلة للرصد بكاميرا مراقبة سلوك
+    // ظاهر في إطار واحد (PPE، مسافات، سرعة، وضعية معدة...)، ويستبعد القواعد الإدارية
+    // غير المرئية (حضور تدريب، تسجيل صيانة، صلاحية تصريح، شهادة كفاءة...). هذا ما
+    // يُمرَّر فعلياً لنموذج الرؤية الحاسوبية عبر getSafetyRulesForLocation، لا rules
+    // كاملاً، فلا يُطلَب من الذكاء الاصطناعي الحكم على ما لا يظهر في الصورة. فارغ =
+    // لم تُصنَّف بعد؛ تُستخدم rules كاملاً كاحتياط عندئذٍ (توافق خلفي).
+    cameraRules: text("camera_rules").notNull().default(""),
     active: boolean("active").notNull().default(true),
+    // ترتيب العرض في /safety-rules (تصاعدي) — يُحرَّك بأسهم الأعلى/الأسفل في
+    // الواجهة، ويُستخدم أولاً في الترتيب قبل createdAt. صفر افتراضياً لأي سجل
+    // لم يُرتَّب بعد.
+    sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
     updatedAt: timestamp("updatedAt").notNull().defaultNow(),
   },
