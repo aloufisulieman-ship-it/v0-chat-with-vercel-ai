@@ -6,12 +6,20 @@ import {
   getEquipmentForCheck,
   getChecklistItemsForPower,
   listEquipmentForCheck,
-  shiftForNow,
   type CheckEquipmentInfo,
   type ChecklistItemRow,
 } from "@/app/actions/equipment-checks"
 import { CheckForm } from "./check-form"
 import { EquipmentPicker } from "./equipment-picker"
+
+// حدود الورديات الثلاث بتوقيت عُمان (Asia/Muscat, UTC+4):
+//   الوردية 1: 06:00–14:00 · الوردية 2: 14:00–22:00 · الوردية 3: 22:00–06:00
+function shiftForNow(nowUtcMs: number = Date.now()): "1" | "2" | "3" {
+  const muscatHour = new Date(nowUtcMs + 4 * 60 * 60 * 1000).getUTCHours()
+  if (muscatHour >= 6 && muscatHour < 14) return "1"
+  if (muscatHour >= 14 && muscatHour < 22) return "2"
+  return "3"
+}
 
 // نقطة دخول الفحص اليومي قبل التشغيل. يُفتح عبر:
 //   - رمز QR على المعدة:  /equipment/check?token=eq_xxxxx

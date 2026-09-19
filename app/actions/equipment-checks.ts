@@ -28,7 +28,7 @@ import { revalidatePath } from "next/cache"
 
 // حدود الورديات الثلاث بتوقيت عُمان (Asia/Muscat, UTC+4):
 //   الوردية 1: 06:00–14:00 · الوردية 2: 14:00–22:00 · الوردية 3: 22:00–06:00
-export function shiftForNow(nowUtcMs: number = Date.now()): "1" | "2" | "3" {
+function shiftForNow(nowUtcMs: number = Date.now()): "1" | "2" | "3" {
   const muscatHour = new Date(nowUtcMs + 4 * 60 * 60 * 1000).getUTCHours()
   if (muscatHour >= 6 && muscatHour < 14) return "1"
   if (muscatHour >= 14 && muscatHour < 22) return "2"
@@ -411,7 +411,7 @@ export async function submitDailyCheck(input: SubmitCheckInput): Promise<SubmitC
       message:
         permitRes.status === "expired"
           ? "تصريح قيادة السائق منتهي الصلاحية — لا يمكن اعتماد الفحص."
-          : "لا يوجد تصريح قيادة رافعة شوكية ساري با��م السائق — لا يمكن اعتماد الفحص.",
+          : "لا يوجد تصريح قيادة رافعة شوكية ساري با����م السائق — لا يمكن اعتماد الفحص.",
     }
   }
 
