@@ -411,7 +411,7 @@ export async function submitDailyCheck(input: SubmitCheckInput): Promise<SubmitC
       message:
         permitRes.status === "expired"
           ? "تصريح قيادة السائق منتهي الصلاحية — لا يمكن اعتماد الفحص."
-          : "لا يوجد تصريح قيادة رافعة شوكية ساري باسم السائق — لا يمكن اعتماد الفحص.",
+          : "لا يوجد تصريح قيادة رافعة شوكية ساري با��م السائق — لا يمكن اعتماد الفحص.",
     }
   }
 
@@ -770,6 +770,97 @@ export async function getComplianceToday(): Promise<{
     currentShift,
     uninspectedThisShift,
   }
+}
+
+// سجل الفحوصات الأخيرة مُثرى ببيانات المعدة (للوحة متابعة المشرف).
+export type RecentCheckRow = {
+  id: number
+  code: string
+  equipmentId: number
+  fleetNo: string
+  plateNumber: string
+  equipmentType: string
+  operatorName: string
+  shift: string
+  checkDate: string
+  result: string
+  permitStatus: string
+  entryMethod: string
+  createdAt: Date
+}
+
+export async function getRecentChecksDetailed(limit = 200): Promise<RecentCheckRow[]> {
+  const { organizationId } = await requireScope()
+  const rows = await db
+    .select({
+      id: equipmentDailyCheck.id,
+      code: equipmentDailyCheck.code,
+      equipmentId: equipmentDailyCheck.equipmentId,
+      fleetNo: equipment.fleetNo,
+      plateNumber: equipment.plateNumber,
+      equipmentType: equipment.equipmentType,
+      operatorName: equipmentDailyCheck.operatorName,
+      shift: equipmentDailyCheck.shift,
+      checkDate: equipmentDailyCheck.checkDate,
+      result: equipmentDailyCheck.result,
+      permitStatus: equipmentDailyCheck.permitStatus,
+      entryMethod: equipmentDailyCheck.entryMethod,
+      createdAt: equipmentDailyCheck.createdAt,
+    })
+    .from(equipmentDailyCheck)
+    .leftJoin(equipment, eq(equipmentDailyCheck.equipmentId, equipment.id))
+    .where(eq(equipmentDailyCheck.organizationId, organizationId))
+    .orderBy(desc(equipmentDailyCheck.createdAt))
+    .limit(limit)
+  return rows.map((r) => ({
+    id: r.id,
+    code: r.code,
+    equipmentId: r.equipmentId,
+    fleetNo: r.fleetNo ?? "",
+    plateNumber: r.plateNumber ?? "",
+    equipmentType: r.equipmentType ?? "",
+    operatorName: r.operatorName,
+    shift: r.shift,
+    checkDate: String(r.checkDate),
+    result: r.result,
+    permitStatus: r.permitStatus,
+    entryMethod: r.entryMethod,
+    createdAt: r.createdAt,
+  }))
+}
+
+// بيانات ملصقات QR لكل المعدات الفعّالة (للطباعة واللصق على المعدات).
+export type QrLabelRow = {
+  id: number
+  fleetNo: string
+  plateNumber: string
+  equipmentType: string
+  powerType: string
+  qrToken: string
+}
+
+export async function getQrLabels(): Promise<QrLabelRow[]> {
+  const { organizationId } = await requireScope()
+  const rows = await db
+    .select({
+      id: equipment.id,
+      fleetNo: equipment.fleetNo,
+      plateNumber: equipment.plateNumber,
+      equipmentType: equipment.equipmentType,
+      powerType: equipment.powerType,
+      qrToken: equipment.qrToken,
+    })
+    .from(equipment)
+    .where(and(eq(equipment.organizationId, organizationId), eq(equipment.active, true)))
+    .orderBy(asc(equipment.fleetNo))
+  return rows.map((r) => ({
+    id: r.id,
+    fleetNo: r.fleetNo ?? "",
+    plateNumber: r.plateNumber ?? "",
+    equipmentType: r.equipmentType ?? "",
+    powerType: r.powerType ?? "diesel",
+    qrToken: r.qrToken ?? "",
+  }))
 }
 
 // العيوب المتكررة خلال آخر 30 يوماً (تجميع حسب بند الفحص).

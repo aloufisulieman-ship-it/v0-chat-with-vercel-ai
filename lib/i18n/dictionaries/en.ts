@@ -2388,7 +2388,7 @@ export const en: Dictionary = {
 
   internalAction: {
     "تحويل إلى الموارد البشرية": "Refer to HR",
-    "غرامة مالية": "Financial fine",
+    "غرامة ما��ية": "Financial fine",
     "أخرى": "Other",
     "إشعار الشركة": "Notify the company",
     "إيقاف العمل": "Stop work",
@@ -2455,6 +2455,14 @@ export const en: Dictionary = {
     employeesSubtitle: "Central source for employee data, attendance and violations",
     equipmentTitle: "Equipment Registry",
     equipmentSubtitle: "Reference registry of forklifts, tuk-tuks and vehicles matched by plate for smart monitoring",
+    equipChecks: {
+      title: "Daily Equipment Checks",
+      subtitle: "Track pre-operation checks and daily compliance by shift",
+    },
+    equipQr: {
+      title: "Equipment QR Labels",
+      subtitle: "Print a QR label per equipment; scanning it opens that equipment's daily check form directly",
+    },
     vehicleTrackingTitle: "Vehicle Tracking",
     vehicleTrackingSubtitle: "Gate entry/exit control across 7 gates — exit is blocked while a vehicle has open violations",
     safetyRulesTitle: "Per-Location Safety Rules",

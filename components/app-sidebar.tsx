@@ -27,6 +27,7 @@ import {
   Footprints,
   Cctv,
   Truck,
+  QrCode,
   ScrollText,
   CheckSquare,
   BarChart3,
@@ -99,6 +100,20 @@ type DeptNav = {
   departments: { code: string; nameAr: string; open: number }[]
 }
 
+// «المعدات» مجموعة فرعية تحت «الموارد»: سجل المعدات + الفحص اليومي + ملصقات QR.
+const equipmentSubGroup: NavSubGroup = {
+  kind: "subgroup",
+  id: "equipment",
+  labelKey: "nav.equipment",
+  icon: Truck,
+  module: "equipment",
+  children: [
+    { href: "/equipment", labelKey: "nav.equipment", icon: Truck, module: "equipment" },
+    { href: "/equipment/checks", labelKey: "equipChecks.title", icon: ClipboardCheck, module: "equipment" },
+    { href: "/equipment/qr-labels", labelKey: "equipQr.title", icon: QrCode, module: "equipment" },
+  ],
+}
+
 // «التدقيق» مجموعة فرعية (مستوى ثالث) تحت «الحوكمة»: نظرة عامة + كل بنود ISO 45001.
 const auditSubGroup: NavSubGroup = {
   kind: "subgroup",
@@ -155,7 +170,7 @@ const sections: Section[] = [
     icon: Users,
     children: [
       { href: "/employees", labelKey: "nav.employees", icon: Users, module: "employees" },
-      { href: "/equipment", labelKey: "nav.equipment", icon: Truck, module: "equipment" },
+      equipmentSubGroup,
       { href: "/training", labelKey: "modules.training", icon: GraduationCap, module: "training" },
       { href: "/documents", labelKey: "modules.documents", icon: FolderKanban, module: "documents" },
       { href: "/safety-rules", labelKey: "nav.safetyRules", icon: ScrollText, module: "safety_rules" },
