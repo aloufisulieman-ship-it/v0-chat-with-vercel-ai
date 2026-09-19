@@ -584,7 +584,7 @@ export const department = pgTable(
     organizationId: text("organizationId").notNull(),
     code: text("code").notNull(),
     nameAr: text("name_ar").notNull().default(""),
-    // مدير القسم (اختياري) — يُستخدم لاحقاً لتوجيه الإشعارات وا��صلاحيات.
+    // مدير القسم (اختياري) — يُستخدم لاحقاً لتوجيه الإشعارات وا����صلاحيات.
     managerUserId: text("manager_user_id"),
     email: text("email").notNull().default(""),
     // اتفاقية مستوى الخدمة بالساعات — تُشتق منها due_at للإحالة عند إنشائها.
@@ -1200,11 +1200,16 @@ export const equipment = pgTable(
     operationalStatus: text("operational_status").notNull().default("operational"),
     // الموقع الحالي للمعدة داخل المنشأة.
     location: text("location").notNull().default(""),
-    // تواريخ الاقتناء والفحص الدوري (السابق والقادم) لحساب الاستحقاق والتنبيهات.
-    purchaseDate: date("purchase_date"),
-    lastInspectionDate: date("last_inspection_date"),
-    nextInspectionDate: date("next_inspection_date"),
-    active: boolean("active").notNull().default(true),
+  // تواريخ الاقتناء والفحص الدوري (السابق والقادم) لحساب الاستحقاق والتنبيهات.
+  purchaseDate: date("purchase_date"),
+  lastInspectionDate: date("last_inspection_date"),
+  nextInspectionDate: date("next_inspection_date"),
+  // نوع مصدر الطاقة: electric (كهربائية/ليثيوم) | diesel | lpg — يحدّد بنود الفحص اليومي
+  // الظاهرة للسائق (بعض البنود خاصة بالكهربائية وأخرى بالديزل).
+  powerType: text("power_type").notNull().default("diesel"),
+  // رمز فريد يُطبع في ملصق QR على المعدة؛ يفتح نموذج الفحص اليومي مباشرة للسائق.
+  qrToken: text("qr_token").notNull().default(""),
+  active: boolean("active").notNull().default(true),
     notes: text("notes").notNull().default(""),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
     updatedAt: timestamp("updatedAt").notNull().defaultNow(),
@@ -1212,6 +1217,126 @@ export const equipment = pgTable(
   (t) => ({
     plateIdx: index("equipment_plate_idx").on(t.organizationId, t.plateNumber),
     fleetIdx: index("equipment_fleet_idx").on(t.organizationId, t.fleetNo),
+    qrTokenIdx: uniqueIndex("equipment_qr_token_idx").on(t.qrToken),
+  }),
+)
+
+// ---------- الفحص اليومي قبل التشغيل (المعدات) ----------
+// بنود قائمة الفحص القابلة للتهيئة لكل مؤسسة (تُبذَر افتراضياً). powerScope يحدّد نوع
+// الطاقة الذي يظهر فيه البند: common (لكل المعدات) | electric | diesel. البنود الحرجة
+// للسلامة (isSafetyCritical) إذا رُصد فيها عيب تُجبِر نتيجة الفحص على «غير صالحة».
+export const equipmentChecklistItem = pgTable(
+  "equipment_checklist_item",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: text("organizationId").notNull(),
+    itemCode: text("item_code").notNull(),
+    labelAr: text("label_ar").notNull().default(""),
+    labelEn: text("label_en").notNull().default(""),
+    powerScope: text("power_scope").notNull().default("common"),
+    isSafetyCritical: boolean("is_safety_critical").notNull().default(false),
+    sortOrder: integer("sort_order").notNull().default(0),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (t) => ({
+    orgIdx: index("equipment_checklist_item_org_idx").on(t.organizationId),
+    orgCodeIdx: uniqueIndex("equipment_checklist_item_org_code_idx").on(t.organizationId, t.itemCode),
+  }),
+)
+
+// سجل الفحص اليومي قبل التشغيل لكل معدة/وردية. code بصيغة DPC-YYYY-##### تسلسلي لكل
+// مؤسسة. result = unfit تُجبَر تلقائياً عند وجود عيب في أي بند حرج، فتُخرج المعدة من
+// الخدمة وتُفتح تذكرة صيانة. التوقيعات والصور روابط Blob فقط (لا base64 في جسم الطلب).
+export const equipmentDailyCheck = pgTable(
+  "equipment_daily_check",
+  {
+    id: serial("id").primaryKey(),
+    code: text("code").notNull().default(""),
+    userId: text("userId").notNull(),
+    organizationId: text("organizationId").notNull(),
+    equipmentId: integer("equipment_id").notNull(),
+    operatorEmployeeId: integer("operator_employee_id"),
+    operatorName: text("operator_name").notNull().default(""),
+    // الوردية: 1 | 2 | 3.
+    shift: text("shift").notNull().default("1"),
+    checkDate: date("check_date").notNull(),
+    hourMeter: integer("hour_meter"),
+    // منسوخ من المعدة وقت الفحص: electric | diesel | lpg.
+    powerType: text("power_type").notNull().default("diesel"),
+    // النتيجة: fit (صالحة للتشغيل) | unfit (غير صالحة).
+    result: text("result").notNull().default("fit"),
+    // طريقة الدخول للنموذج: qr (مسح الملصق) | manual (اختيار من القائمة).
+    entryMethod: text("entry_method").notNull().default("qr"),
+    // حالة تصريح قيادة السائق وقت الفحص: valid | expired | not_found.
+    permitStatus: text("permit_status").notNull().default("valid"),
+    matchedPermitId: integer("matched_permit_id"),
+    operatorSignatureUrl: text("operator_signature_url").notNull().default(""),
+    supervisorId: text("supervisor_id"),
+    supervisorName: text("supervisor_name").notNull().default(""),
+    supervisorSignatureUrl: text("supervisor_signature_url").notNull().default(""),
+    supervisorSignedAt: timestamp("supervisor_signed_at"),
+    // تذكرة الصيانة المُنشأة تلقائياً عند وجود عيب حرج (خارج الخدمة).
+    maintenanceTicketId: integer("maintenance_ticket_id"),
+    // الإجراء التصحيحي المُنشأ عند عيب غير حرج.
+    correctiveActionId: integer("corrective_action_id"),
+    location: text("location").notNull().default(""),
+    notes: text("notes").notNull().default(""),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (t) => ({
+    orgDateIdx: index("equipment_daily_check_org_date_idx").on(t.organizationId, t.checkDate),
+    eqIdx: index("equipment_daily_check_eq_idx").on(t.organizationId, t.equipmentId),
+  }),
+)
+
+// نتائج بنود الفحص الفردية لكل سجل فحص. label منسوخ وقت الفحص للحفاظ على النص التاريخي
+// حتى لو عُدّلت قائمة البنود لاحقاً. status: ok | defect | na. الصورة إلزامية عند العيب.
+export const equipmentDailyCheckItem = pgTable(
+  "equipment_daily_check_item",
+  {
+    id: serial("id").primaryKey(),
+    checkId: integer("check_id").notNull(),
+    organizationId: text("organizationId").notNull(),
+    itemCode: text("item_code").notNull(),
+    labelAr: text("label_ar").notNull().default(""),
+    status: text("status").notNull().default("ok"),
+    isSafetyCritical: boolean("is_safety_critical").notNull().default(false),
+    note: text("note").notNull().default(""),
+    photoUrl: text("photo_url").notNull().default(""),
+  },
+  (t) => ({
+    checkIdx: index("equipment_daily_check_item_check_idx").on(t.checkId),
+  }),
+)
+
+// تذاكر صيانة الورشة. تُفتح تلقائياً عند فحص يومي «غير صالح» (عيب حرج)، وتبقى المعدة
+// خارج الخدمة ولا تجتاز فحصاً جديداً حتى تُغلق التذكرة من الصيانة. code بصيغة MT-YYYY-####.
+export const maintenanceTicket = pgTable(
+  "maintenance_ticket",
+  {
+    id: serial("id").primaryKey(),
+    code: text("code").notNull().default(""),
+    userId: text("userId").notNull(),
+    organizationId: text("organizationId").notNull(),
+    equipmentId: integer("equipment_id").notNull(),
+    sourceCheckId: integer("source_check_id"),
+    title: text("title").notNull().default(""),
+    description: text("description").notNull().default(""),
+    priority: text("priority").notNull().default("high"),
+    // دورة الحياة: open | in_progress | closed.
+    status: text("status").notNull().default("open"),
+    openedBy: text("opened_by").notNull().default(""),
+    closedBy: text("closed_by").notNull().default(""),
+    closedAt: timestamp("closed_at"),
+    closureNote: text("closure_note").notNull().default(""),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (t) => ({
+    orgStatusIdx: index("maintenance_ticket_org_status_idx").on(t.organizationId, t.status),
+    eqIdx: index("maintenance_ticket_eq_idx").on(t.organizationId, t.equipmentId),
   }),
 )
 
